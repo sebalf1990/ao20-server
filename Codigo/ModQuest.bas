@@ -189,7 +189,7 @@ Public Sub FinishQuest(ByVal UserIndex As Integer, ByVal QuestIndex As Integer, 
         ' bitacora "Camino de las recetas por quest"). Pre-check extraido a
         ' FaltaEspacioParaRecompensas (plan 08.002).
         If FaltaEspacioParaRecompensas(UserIndex, QuestIndex) Then
-            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_ESPACIO_MAS_HECHIZOS_1317, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_ESPACIO_MAS_HECHIZOS_1317, e_TextChannel.TEXTCHANNEL_QUEST, e_FontTypeNames.FONTTYPE_INFO)
             Exit Sub
         End If
 
@@ -602,7 +602,7 @@ Public Sub EnviarQuest(ByVal UserIndex As Integer)
                 If QuestList(NpcList(NpcIndex).QuestNumber(q)).GlobalQuestIndex > 0 Then
                     ' Quest de evento global: FinishGlobalQuestCheck ya avisa con su propio mensaje.
                 ElseIf FaltaEspacioParaRecompensas(UserIndex, NpcList(NpcIndex).QuestNumber(q)) Then
-                    Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_ESPACIO_MAS_HECHIZOS_1317, e_FontTypeNames.FONTTYPE_INFO)
+                    Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_ESPACIO_MAS_HECHIZOS_1317, e_TextChannel.TEXTCHANNEL_QUEST, e_FontTypeNames.FONTTYPE_INFO)
                 Else
                     Call WriteLocaleChatOverHead(UserIndex, "1336", "", NpcList(NpcIndex).Char.charindex, vbYellow) ' Msg1336=No has conseguido todos los objetos que te he pedido.
                 End If

@@ -268,11 +268,11 @@ Public Function HandleLogLevelChatCommand(ByVal UserIndex As Integer, ByVal chat
     If UCase$(Trim$(partes(0))) <> "~LOGLEVEL" Then Exit Function
     HandleLogLevelChatCommand = True
     If UBound(partes) < 1 Then
-        Call WriteConsoleMsg(UserIndex, "LogLevel actual: " & Trim$(LevelTag(g_LogLevel)) & ". Uso: ~LOGLEVEL DEBUG|INFO|WARN|ERROR", e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteConsoleMsg(UserIndex, "LogLevel actual: " & Trim$(LevelTag(g_LogLevel)) & ". Uso: ~LOGLEVEL DEBUG|INFO|WARN|ERROR", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         Exit Function
     End If
     Call SetLogLevel(ParseLogLevel(partes(1)))
-    Call WriteConsoleMsg(UserIndex, "LogLevel = " & Trim$(LevelTag(g_LogLevel)), e_FontTypeNames.FONTTYPE_INFO)
+    Call WriteConsoleMsg(UserIndex, "LogLevel = " & Trim$(LevelTag(g_LogLevel)), e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
     Exit Function
 ErrHandler:
     Call TraceError(Err.Number, Err.Description, "Logging.HandleLogLevelChatCommand", Erl)

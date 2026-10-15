@@ -85,7 +85,7 @@ Public Function CanUserExtractMinerals(ByVal UserIndex As Integer, ByVal TargetX
         If ObjData(MapData(.pos.Map, TargetX, TargetY).ObjInfo.ObjIndex).Blodium > 0 Then
             If Not ObjData(.invent.EquippedWorkingToolObjIndex).Blodium > 0 Then
                 'Msg597=Para extraer minerales de Blodium necesitaras un piquete especial.
-                Call WriteLocaleMsg(UserIndex, MSG_BLODIUM_PICKAXE_REQUIRED, e_FontTypeNames.FONTTYPE_INFO)
+                Call WriteLocaleMsg(UserIndex, MSG_BLODIUM_PICKAXE_REQUIRED, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                 Exit Function
             End If
         End If
@@ -94,7 +94,7 @@ Public Function CanUserExtractMinerals(ByVal UserIndex As Integer, ByVal TargetX
         If ObjData(MapData(.pos.Map, TargetX, TargetY).ObjInfo.ObjIndex).Dorada > 0 Then
             If Not (ObjData(.invent.EquippedWorkingToolObjIndex).Dorada > 0 And ObjData(.invent.EquippedWorkingToolObjIndex).Subtipo = e_WorkingToolSubType.MinerPickaxe) Then
                 'Msg1022=Para minar oro necesitas un Piquete de Minero Dorado.
-                Call WriteLocaleMsg(UserIndex, MSG_GOLD_PICKAXE_REQUIRED, e_FontTypeNames.FONTTYPE_INFO)
+                Call WriteLocaleMsg(UserIndex, MSG_GOLD_PICKAXE_REQUIRED, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                 Exit Function
             End If
         End If

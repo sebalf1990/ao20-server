@@ -384,7 +384,7 @@ End Sub
 Private Sub HandleFishingDeliveryNpcInteraction(ByVal UserIndex As Integer, ByVal NpcIndex As Integer)
     If IsFeatureEnabled("professions_learnable") Then
         If Not TieneProfesionAprendida(UserIndex, e_Skill.Pescar) Then
-            Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             Exit Sub
         End If
     ElseIf UserList(UserIndex).clase <> Trabajador Then

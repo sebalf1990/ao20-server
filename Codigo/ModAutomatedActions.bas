@@ -43,7 +43,7 @@ Public Sub RunAutomatedActions()
                     ' loop cortaba el permiso pero la accion seguia corriendo y subiendo skill.
                     ' Smelting revalida adentro (modSmelting exige Mineria por su cuenta).
                     If (.AutomatedAction.skill = e_Skill.Talar Or .AutomatedAction.skill = e_Skill.Mineria Or .AutomatedAction.skill = e_Skill.Pescar) And Not TieneProfesionAprendida(UserIndex, CInt(.AutomatedAction.skill)) Then
-                        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_FontTypeNames.FONTTYPE_INFO)
+                        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                         Call ResetUserAutomatedActions(UserIndex)
                     Else
                         Select Case .AutomatedAction.skill

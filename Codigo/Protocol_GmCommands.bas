@@ -58,7 +58,7 @@ Public Sub HandleOnline(ByVal UserIndex As Integer)
             End If
         Next i
         'Msg1468=Número de usuarios: ¬1 conectados. (a cualquiera: plan 17.001 D69c)
-        Call WriteLocaleMsg(UserIndex, MSG_NUMERO_USUARIOS_CONECTADOS, e_FontTypeNames.FONTTYPE_INFOIAO, count)
+        Call WriteLocaleMsg(UserIndex, MSG_NUMERO_USUARIOS_CONECTADOS, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFOIAO, count)
         If EsGM(UserIndex) Then
             Call WriteLocaleMsg(UserIndex, MSG_RECORD_USUARIOS_SIMULTANEO, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO, RecordUsuarios) ' Msg1469=Record de usuarios en simultaneo: ¬1.
         End If
@@ -782,18 +782,18 @@ Public Sub HandleNpcRadarToggle(ByVal UserIndex As Integer)
     With UserList(UserIndex)
         If .flags.Privilegios And (e_PlayerType.User Or e_PlayerType.Consejero) Then Exit Sub
         If Not IsFeatureEnabled("npc_minimap_radar") Then
-            Call WriteConsoleMsg(UserIndex, "El radar de NPCs hostiles está deshabilitado.", e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteConsoleMsg(UserIndex, "El radar de NPCs hostiles está deshabilitado.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             Exit Sub
         End If
         If .flags.NpcRadarActive = 2 Then
             .flags.NpcRadarActive = 0
             .Counters.NpcRadarTick = 0
             Call SendRadarClearAll(UserIndex)
-            Call WriteConsoleMsg(UserIndex, "Radar de NPCs hostiles desactivado.", e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteConsoleMsg(UserIndex, "Radar de NPCs hostiles desactivado.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         Else
             .flags.NpcRadarActive = 2
             Call ForceNpcRadarUpdate(UserIndex)
-            Call WriteConsoleMsg(UserIndex, "Radar de NPCs hostiles activado.", e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteConsoleMsg(UserIndex, "Radar de NPCs hostiles activado.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         End If
     End With
     Exit Sub
@@ -1328,10 +1328,10 @@ Public Sub HandleEditChar(ByVal UserIndex As Integer)
                         ciudadNueva = e_City.cPenthar
                 End Select
                 If ciudadNueva = 0 Then
-                    Call WriteConsoleMsg(UserIndex, "Ciudad desconocida. Válidas: ULLATHORPE, NIX, BANDERBILL, LINDOS, ARGHAL, ARKHEIN, FORGAT, ELDORIA, PENTHAR.", e_FontTypeNames.FONTTYPE_INFO)
+                    Call WriteConsoleMsg(UserIndex, "Ciudad desconocida. Válidas: ULLATHORPE, NIX, BANDERBILL, LINDOS, ARGHAL, ARKHEIN, FORGAT, ELDORIA, PENTHAR.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                 Else
                     UserList(tUser.ArrayIndex).Hogar = ciudadNueva
-                    Call WriteConsoleMsg(UserIndex, "Hogar de " & UserList(tUser.ArrayIndex).name & " cambiado a " & Arg1 & ".", e_FontTypeNames.FONTTYPE_INFO)
+                    Call WriteConsoleMsg(UserIndex, "Hogar de " & UserList(tUser.ArrayIndex).name & " cambiado a " & Arg1 & ".", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                 End If
             Case e_EditOptions.eo_Alias
                 If Not IsUserAdmin(UserIndex) Then Exit Sub
@@ -1374,9 +1374,9 @@ Public Sub HandleEditChar(ByVal UserIndex As Integer)
                 If tmpLong >= 0 And tmpLong <= 5 Then
                     UserList(tUser.ArrayIndex).Faccion.Status = CByte(tmpLong)
                     Call RefreshCharStatus(tUser.ArrayIndex)
-                    Call WriteConsoleMsg(UserIndex, "Facción de " & UserList(tUser.ArrayIndex).name & " cambiada a " & Choose(tmpLong + 1, "Criminal", "Ciudadano", "Caos", "Armada", "Concilio", "Consejo") & " (" & tmpLong & ").", e_FontTypeNames.FONTTYPE_INFO)
+                    Call WriteConsoleMsg(UserIndex, "Facción de " & UserList(tUser.ArrayIndex).name & " cambiada a " & Choose(tmpLong + 1, "Criminal", "Ciudadano", "Caos", "Armada", "Concilio", "Consejo") & " (" & tmpLong & ").", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                 Else
-                    Call WriteConsoleMsg(UserIndex, "Facción inválida. Valores: 0 Criminal, 1 Ciudadano, 2 Caos, 3 Armada, 4 Concilio, 5 Consejo.", e_FontTypeNames.FONTTYPE_INFO)
+                    Call WriteConsoleMsg(UserIndex, "Facción inválida. Valores: 0 Criminal, 1 Ciudadano, 2 Caos, 3 Armada, 4 Concilio, 5 Consejo.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                 End If
             Case e_EditOptions.eo_ArmadaReal
                 If (.flags.Privilegios And (e_PlayerType.User Or e_PlayerType.Consejero Or e_PlayerType.SemiDios)) Then Exit Sub
@@ -3845,12 +3845,12 @@ Public Sub HandleCrearTorneo(ByVal UserIndex As Integer)
         reglas = reader.ReadString8
         ' TORNEO LEGACY ENTERRADO (2026-08-05): el payload se consume igual para
         ' no desincronizar el stream, pero no se crea nada. Ver ModTorneos.bas.
-        Call WriteConsoleMsg(UserIndex, "El sistema de torneos legacy fue retirado: nunca fue inscribible (/PARTICIPAR va al lobby). Usa el sistema de eventos/lobby.", e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteConsoleMsg(UserIndex, "El sistema de torneos legacy fue retirado: nunca fue inscribible (/PARTICIPAR va al lobby). Usa el sistema de eventos/lobby.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         Call LogGM(GetUserRealName(UserIndex), "Intento usar el torneo legacy (crear) - sistema retirado")
         Exit Sub
         If EsGM(UserIndex) And ((.flags.Privilegios And e_PlayerType.Consejero) = 0) Then
             If IsFeatureEnabled("professions_learnable") And Trabajador > 0 Then
-                Call WriteConsoleMsg(UserIndex, "No se puede crear un torneo de Trabajador con profesiones aprendibles activas.", e_FontTypeNames.FONTTYPE_INFO)
+                Call WriteConsoleMsg(UserIndex, "No se puede crear un torneo de Trabajador con profesiones aprendibles activas.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                 Exit Sub
             End If
             Torneo.NivelMinimo = NivelMinimo
@@ -3886,7 +3886,7 @@ Public Sub HandleComenzarTorneo(ByVal UserIndex As Integer)
     ' TORNEO LEGACY ENTERRADO (2026-08-05). Ver ModTorneos.bas.
     On Error GoTo ErrHandler
     With UserList(UserIndex)
-        Call WriteConsoleMsg(UserIndex, "El sistema de torneos legacy fue retirado. Usa el sistema de eventos/lobby.", e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteConsoleMsg(UserIndex, "El sistema de torneos legacy fue retirado. Usa el sistema de eventos/lobby.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
     End With
     Exit Sub
 ErrHandler:
@@ -3897,7 +3897,7 @@ Public Sub HandleCancelarTorneo(ByVal UserIndex As Integer)
     ' TORNEO LEGACY ENTERRADO (2026-08-05). Ver ModTorneos.bas.
     On Error GoTo ErrHandler
     With UserList(UserIndex)
-        Call WriteConsoleMsg(UserIndex, "El sistema de torneos legacy fue retirado. Para cancelar un evento usa /CANCELAREVENTO.", e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteConsoleMsg(UserIndex, "El sistema de torneos legacy fue retirado. Para cancelar un evento usa /CANCELAREVENTO.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
     End With
     Exit Sub
 ErrHandler:

@@ -2745,7 +2745,7 @@ Public Function verifyTimeStamp(ByVal ActualCount As Long, _
         ' El aviso a los GMs tiene que decir eso, o dan por sancionada una cuenta que
         ' en realidad sigue entrando sin problema.
         Call SendData(SendTarget.ToAdminsYDioses, UserIndex, PrepareMessageConsoleMsg("Paquete grabado: " & PacketName & " | Cuenta: " & UserList(UserIndex).Cuenta & " | Ip: " & _
-                UserList(UserIndex).ConnectionDetails.IP & " (Se le cerro la conexion, SIN ban)", e_FontTypeNames.FONTTYPE_INFOBOLD))
+                UserList(UserIndex).ConnectionDetails.IP & " (Se le cerro la conexion, SIN ban)", e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_INFOBOLD))
         Call LogEdicionPaquete("El usuario " & GetUserRealName(UserIndex) & " editó el paquete " & PacketName & ".")
         LastCount = ActualCount
         verifyTimeStamp = False
@@ -2870,7 +2870,7 @@ Private Sub HandleWork(ByVal UserIndex As Integer)
         If IsFeatureEnabled("professions_learnable") Then
             If Skill = e_Skill.Pescar Or Skill = e_Skill.Talar Or Skill = e_Skill.Mineria Or Skill = e_Skill.Carpinteria Or Skill = e_Skill.Herreria Or Skill = e_Skill.Sastreria Or Skill = e_Skill.Alquimia Then
                 If Not TieneProfesionAprendida(UserIndex, CInt(Skill)) Then
-                    Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_FontTypeNames.FONTTYPE_INFO)
+                    Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                     Exit Sub
                 End If
             End If
@@ -2894,7 +2894,7 @@ Private Sub HandleWork(ByVal UserIndex As Integer)
                 If .flags.Oculto = 1 Then
                     '[CDT 17-02-2004]
                     If Not .flags.UltimoMensaje = MSG_ALREADY_HIDDEN Then
-                        Call WriteLocaleMsg(UserIndex, MSG_ESCONDIDO_ENTRE_SOMBRAS, e_FontTypeNames.FONTTYPE_INFO)
+                        Call WriteLocaleMsg(UserIndex, MSG_ESCONDIDO_ENTRE_SOMBRAS, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                         'Msg1127= Ya estás oculto.
                         Call WriteLocaleMsg(UserIndex, MSG_ALREADY_HIDDEN, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                         .flags.UltimoMensaje = MSG_ALREADY_HIDDEN
@@ -3721,7 +3721,7 @@ Private Sub HandleModifySkills(ByVal UserIndex As Integer)
                 If points(i) > 0 And IsFeatureEnabled("professions_learnable") Then
                     If i >= 17 And i <= 23 Then
                         If Not TieneProfesionAprendida(UserIndex, CInt(i)) Then
-                            Call WriteLocaleMsg(UserIndex, MSG_PROF_SKILL_BLOQUEADA, e_FontTypeNames.FONTTYPE_INFO)
+                            Call WriteLocaleMsg(UserIndex, MSG_PROF_SKILL_BLOQUEADA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                             points(i) = 0
                             huboRechazo = True
                         End If
@@ -3731,7 +3731,7 @@ Private Sub HandleModifySkills(ByVal UserIndex As Integer)
                 ' skill (naves por oro+nivel, clan por oro); el guard rechaza y devuelve
                 ' cualquier punto puesto ahi, sin depender de ningun feature toggle.
                 If points(i) > 0 And (i = e_Skill.Navegacion Or i = e_Skill.liderazgo) Then
-                    Call WriteLocaleMsg(UserIndex, MSG_SKILL_YA_NO_SE_ASIGNA, e_FontTypeNames.FONTTYPE_INFO)
+                    Call WriteLocaleMsg(UserIndex, MSG_SKILL_YA_NO_SE_ASIGNA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                     points(i) = 0
                     huboRechazo = True
                 End If
@@ -5760,7 +5760,7 @@ Private Sub HandleAntiMacroMessage(ByVal UserIndex As Integer)
                 tUser = NameIndex(username)
                 If IsValidUserRef(tUser) Then
                     'Msg2172=Control anti-macro: ¬1
-                    Call WriteLocaleMsg(tUser.ArrayIndex, MSG_ANTI_MACRO_CONTROL, e_FontTypeNames.FONTTYPE_New_DONADOR, mensaje)
+                    Call WriteLocaleMsg(tUser.ArrayIndex, MSG_ANTI_MACRO_CONTROL, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_DONADOR, mensaje)
                     Call WriteShowMessageBox(tUser.ArrayIndex, MSG_ANTI_MACRO_CONTROL, mensaje)
                     Call LogGM(GetUserRealName(UserIndex), "Envió mensaje anti-macro a " & username & ": " & mensaje)
                 Else
@@ -6415,7 +6415,7 @@ Public Sub HandleParticipar(ByVal UserIndex As Integer)
         End If
         If RoomId < 0 Or RoomId > UBound(LobbyList) Then
             ' R2: sin evento activo (GlobalLobbyIndex=-1) o RoomId invalido -> evita LobbyList fuera de rango
-            Call WriteLocaleMsg(UserIndex, MSG_NO_EVENTOS_ACTUALMENTE_HAY_NINGUN_EVENTO_CURSO, e_FontTypeNames.FONTTYPE_New_Eventos)
+            Call WriteLocaleMsg(UserIndex, MSG_NO_EVENTOS_ACTUALMENTE_HAY_NINGUN_EVENTO_CURSO, e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos)
             Exit Sub
         End If
         If LobbyList(RoomId).State = AcceptingPlayers Then
@@ -7073,7 +7073,7 @@ Private Sub HandleComenzarTorneo(ByVal UserIndex As Integer)
     ' TORNEO LEGACY ENTERRADO (2026-08-05). Ver ModTorneos.bas.
     On Error GoTo ErrHandler
     With UserList(UserIndex)
-        Call WriteConsoleMsg(UserIndex, "El sistema de torneos legacy fue retirado. Usa el sistema de eventos/lobby.", e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteConsoleMsg(UserIndex, "El sistema de torneos legacy fue retirado. Usa el sistema de eventos/lobby.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
     End With
     Exit Sub
 ErrHandler:
@@ -8526,7 +8526,7 @@ Private Sub HandlePublicarPersonajeMAO(ByVal UserIndex As Integer)
     ' (para no desalinear el buffer del packet) y se redirige al jugador a la web.
     Dim Valor As Long
     Valor = reader.ReadInt32
-    Call WriteConsoleMsg(UserIndex, "El mercado de personajes se maneja desde la web. Publica tu personaje desde tu cuenta en el sitio oficial.", e_FontTypeNames.FONTTYPE_INFO)
+    Call WriteConsoleMsg(UserIndex, "El mercado de personajes se maneja desde la web. Publica tu personaje desde tu cuenta en el sitio oficial.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
     Exit Sub
 HandlePublicarPersonajeMAO_Err:
     Call TraceError(Err.Number, Err.Description, "Protocol.HandlePublicarPersonajeMAO", Erl)
@@ -8742,7 +8742,7 @@ Public Function HandleStartAutomatedAction(ByVal UserIndex As Integer)
     If IsFeatureEnabled("professions_learnable") Then
         If skill = e_Skill.Pescar Or skill = e_Skill.Talar Or skill = e_Skill.Mineria Then
             If Not TieneProfesionAprendida(UserIndex, CInt(skill)) Then
-                Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_FontTypeNames.FONTTYPE_INFO)
+                Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                 Exit Function
             End If
         End If

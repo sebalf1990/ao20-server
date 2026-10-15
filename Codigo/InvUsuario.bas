@@ -1862,20 +1862,20 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
                 ' encantar flechas y hay municion equipada, no rechazar aca -- cae a la
                 ' rama de flechas de abajo. Sin flechas equipadas, rechazo de siempre.
                 If obj.EnchantAmmoDurationMs = 0 Or .invent.EquippedMunitionObjIndex = 0 Then
-                    Call WriteConsoleMsg(UserIndex, ewMsg, e_FontTypeNames.FONTTYPE_INFO)
+                    Call WriteConsoleMsg(UserIndex, ewMsg, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                     Exit Sub
                 End If
             Else
                 ' CP1 fix (paridad veneno): rechazar re-encantar si el arma ya tiene encantamiento activo
                 If modElementalCombat.IsWeaponEnchantedActive(UserIndex, .invent.EquippedWeaponObjIndex) Then
-                    Call WriteConsoleMsg(UserIndex, "Tu arma ya esta encantada.", e_FontTypeNames.FONTTYPE_INFO)
+                    Call WriteConsoleMsg(UserIndex, "Tu arma ya esta encantada.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                     Exit Sub
                 End If
                 Call modElementalCombat.SetEnchantedWeapon(UserIndex, .invent.EquippedWeaponObjIndex, obj.Elemental, obj.CargasQueOtorga, obj.EnchantWeaponDurationMs, ObjIndex)
                 If obj.EnchantWeaponDurationMs < 0 Then
-                    Call WriteConsoleMsg(UserIndex, "Encantaste tu arma de forma permanente.", e_FontTypeNames.FONTTYPE_FIGHT)
+                    Call WriteConsoleMsg(UserIndex, "Encantaste tu arma de forma permanente.", e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
                 Else
-                    Call WriteConsoleMsg(UserIndex, "Encantaste tu arma (" & (obj.EnchantWeaponDurationMs \ 1000) & "s).", e_FontTypeNames.FONTTYPE_FIGHT)
+                    Call WriteConsoleMsg(UserIndex, "Encantaste tu arma (" & (obj.EnchantWeaponDurationMs \ 1000) & "s).", e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
                 End If
                 Call QuitarUserInvItem(UserIndex, Slot, 1)
                 Call UpdateUserInv(False, UserIndex, Slot)
@@ -1887,18 +1887,18 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
         If modElementalCombat.ElementalSystemEnabled() And obj.EnchantAmmoDurationMs <> 0 Then
             Dim eaMsg As String
             If Not modElementalCombat.CanEnchantAmmo(UserIndex, .invent.EquippedMunitionObjIndex, obj.Elemental, eaMsg) Then
-                Call WriteConsoleMsg(UserIndex, eaMsg, e_FontTypeNames.FONTTYPE_INFO)
+                Call WriteConsoleMsg(UserIndex, eaMsg, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                 Exit Sub
             End If
             If modElementalCombat.IsAmmoEnchantedActive(UserIndex, .invent.EquippedMunitionObjIndex) Then
-                Call WriteConsoleMsg(UserIndex, "Tus flechas ya estan encantadas.", e_FontTypeNames.FONTTYPE_INFO)
+                Call WriteConsoleMsg(UserIndex, "Tus flechas ya estan encantadas.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                 Exit Sub
             End If
             Call modElementalCombat.SetEnchantedAmmo(UserIndex, .invent.EquippedMunitionObjIndex, obj.Elemental, obj.CargasQueOtorga, obj.EnchantAmmoDurationMs, ObjIndex)
             If obj.EnchantAmmoDurationMs < 0 Then
-                Call WriteConsoleMsg(UserIndex, "Encantaste tus flechas de forma permanente.", e_FontTypeNames.FONTTYPE_FIGHT)
+                Call WriteConsoleMsg(UserIndex, "Encantaste tus flechas de forma permanente.", e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
             Else
-                Call WriteConsoleMsg(UserIndex, "Encantaste tus flechas (" & (obj.EnchantAmmoDurationMs \ 1000) & "s).", e_FontTypeNames.FONTTYPE_FIGHT)
+                Call WriteConsoleMsg(UserIndex, "Encantaste tus flechas (" & (obj.EnchantAmmoDurationMs \ 1000) & "s).", e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
             End If
             Call QuitarUserInvItem(UserIndex, Slot, 1)
             Call UpdateUserInv(False, UserIndex, Slot)
@@ -2332,18 +2332,18 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
                         If Not IsFeatureEnabled("new_poison_system") Then Exit Sub
                         ' CP3 (20.002 Step 7): el orbe elemental equipado anula/bloquea el untado de veneno
                         If modElementalCombat.HasElementalOrbEquipped(UserIndex) Then
-                            Call WriteConsoleMsg(UserIndex, "No podes untar veneno con un orbe equipado.", e_FontTypeNames.FONTTYPE_INFO)
+                            Call WriteConsoleMsg(UserIndex, "No podes untar veneno con un orbe equipado.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                             Exit Sub
                         End If
                         If obj.FamiliaVeneno < 1 Or obj.FamiliaVeneno > 3 Or obj.CargasQueOtorga <= 0 Then
-                            Call WriteConsoleMsg(UserIndex, "El vial de veneno no esta configurado correctamente.", e_FontTypeNames.FONTTYPE_INFO)
+                            Call WriteConsoleMsg(UserIndex, "El vial de veneno no esta configurado correctamente.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                             Exit Sub
                         End If
 
                         Dim equipWpn As Integer
                         equipWpn = .invent.EquippedWeaponObjIndex
                         If equipWpn <= 0 Then
-                            Call WriteConsoleMsg(UserIndex, "No tienes un arma equipada para envenenar.", e_FontTypeNames.FONTTYPE_INFO)
+                            Call WriteConsoleMsg(UserIndex, "No tienes un arma equipada para envenenar.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                             Exit Sub
                         End If
 
@@ -2358,24 +2358,24 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
                             Dim equipAmmo As Integer
                             equipAmmo = .invent.EquippedMunitionObjIndex
                             If equipAmmo <= 0 Or .invent.EquippedMunitionSlot <= 0 Then
-                                Call WriteConsoleMsg(UserIndex, "Equipa flechas para envenenar tu arco.", e_FontTypeNames.FONTTYPE_INFO)
+                                Call WriteConsoleMsg(UserIndex, "Equipa flechas para envenenar tu arco.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                                 Exit Sub
                             End If
                             If ObjData(equipAmmo).OBJType <> e_OBJType.otArrows Then
-                                Call WriteConsoleMsg(UserIndex, "Equipa flechas para envenenar tu arco.", e_FontTypeNames.FONTTYPE_INFO)
+                                Call WriteConsoleMsg(UserIndex, "Equipa flechas para envenenar tu arco.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                                 Exit Sub
                             End If
                             If ObjData(equipAmmo).FlechaVenenoFamilia > 0 Then
-                                Call WriteConsoleMsg(UserIndex, "Esta flecha ya esta envenenada.", e_FontTypeNames.FONTTYPE_INFO)
+                                Call WriteConsoleMsg(UserIndex, "Esta flecha ya esta envenenada.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                                 Exit Sub
                             End If
                             If .flags.PoisonedAmmoObjIndex > 0 And .flags.PoisonedAmmoCargas > 0 Then
-                                Call WriteConsoleMsg(UserIndex, "Tus flechas ya estan untadas con veneno.", e_FontTypeNames.FONTTYPE_INFO)
+                                Call WriteConsoleMsg(UserIndex, "Tus flechas ya estan untadas con veneno.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                                 Exit Sub
                             End If
 
                             If modElementalCombat.IsAmmoEnchantedActive(UserIndex, equipAmmo) Then
-                                Call WriteConsoleMsg(UserIndex, "Tus flechas ya estan encantadas.", e_FontTypeNames.FONTTYPE_INFO)
+                                Call WriteConsoleMsg(UserIndex, "Tus flechas ya estan encantadas.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                                 Exit Sub
                             End If
                             .flags.PoisonedAmmoObjIndex = equipAmmo
@@ -2408,14 +2408,14 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
                             .flags.PoisonedAmmoBloqueaRegenManaTotal = obj.BloqueaRegenManaTotal
 
                             Call QuitarUserInvItem(UserIndex, Slot, 1)
-                            Call WriteConsoleMsg(UserIndex, "Untaste tus flechas con " & poisonFamilyName & " (" & obj.CargasQueOtorga & " cargas).", e_FontTypeNames.FONTTYPE_INFO)
+                            Call WriteConsoleMsg(UserIndex, "Untaste tus flechas con " & poisonFamilyName & " (" & obj.CargasQueOtorga & " cargas).", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                             Call LogPoisonEvent("vial_use_ammo", .name, "", equipAmmo, obj.FamiliaVeneno, 0, obj.CargasQueOtorga, 0, 0)
                             Call WritePoisonedAmmoIcon(UserIndex)
                             Exit Sub
                         End If
 
                         If ObjData(equipWpn).Subtipo <> 11 Then
-                            Call WriteConsoleMsg(UserIndex, "Tu arma no es envenenable.", e_FontTypeNames.FONTTYPE_INFO)
+                            Call WriteConsoleMsg(UserIndex, "Tu arma no es envenenable.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                             Exit Sub
                         End If
                         ' Verificar familia compatible.
@@ -2425,17 +2425,17 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
                             Dim weaponFamCsv As String
                             weaponFamCsv = CStr(obj.FamiliaVeneno)
                             If InStr("," & ObjData(equipWpn).FamiliasCompatibles & ",", "," & weaponFamCsv & ",") = 0 Then
-                                Call WriteConsoleMsg(UserIndex, "Tu arma no acepta esta familia de veneno.", e_FontTypeNames.FONTTYPE_INFO)
+                                Call WriteConsoleMsg(UserIndex, "Tu arma no acepta esta familia de veneno.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                                 Exit Sub
                             End If
                         End If
                         ' Si el arma ya esta untada con MISMA familia, rechazar (no se superpone)
                         If .flags.PoisonedWeaponObjIndex = equipWpn And .flags.PoisonedWeaponCargas > 0 Then
-                            Call WriteConsoleMsg(UserIndex, "Tu arma ya esta untada con veneno.", e_FontTypeNames.FONTTYPE_INFO)
+                            Call WriteConsoleMsg(UserIndex, "Tu arma ya esta untada con veneno.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                             Exit Sub
                         End If
                         If modElementalCombat.IsWeaponEnchantedActive(UserIndex, equipWpn) Then
-                            Call WriteConsoleMsg(UserIndex, "Tu arma ya esta encantada.", e_FontTypeNames.FONTTYPE_INFO)
+                            Call WriteConsoleMsg(UserIndex, "Tu arma ya esta encantada.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                             Exit Sub
                         End If
                         ' Aplicar untado
@@ -2474,13 +2474,13 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
                             .flags.PoisonedWeaponBloqueaRegenManaTotal = obj.BloqueaRegenManaTotal
                         End If
                         Call QuitarUserInvItem(UserIndex, Slot, 1)
-                        Call WriteConsoleMsg(UserIndex, "Has untado tu arma con veneno.", e_FontTypeNames.FONTTYPE_INFO)
+                        Call WriteConsoleMsg(UserIndex, "Has untado tu arma con veneno.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                         Call LogPoisonEvent("vial_use", .name, "", 0, obj.FamiliaVeneno, 0, obj.CargasQueOtorga, 0, 0)
                         Call WritePoisonedWeaponIcon(UserIndex)
                     Case e_PotionType.CuresPoison
                         ' --- Sistema venenos nuevo (TOGGLE26): matriz CuraMenor/Hemo/Neuro ---
                         If Not IsFeatureEnabled("new_poison_system") Then
-                            Call WriteLocaleMsg(UserIndex, MSG_ENCUENTRAS_ENVENENADO, e_FontTypeNames.FONTTYPE_INFO)
+                            Call WriteLocaleMsg(UserIndex, MSG_ENCUENTRAS_ENVENENADO, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_INFO)
                             Exit Sub
                         End If
                         ' Cooldown global
@@ -2488,7 +2488,7 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
                         nowTick = GetTickCountRaw()
                         If obj.PoisonCooldownMs > 0 And .Counters.LastPoisonCurePotion > 0 Then
                             If (nowTick - .Counters.LastPoisonCurePotion) < obj.PoisonCooldownMs Then
-                                Call WriteConsoleMsg(UserIndex, "Aun no puedes usar otra pocion curativa.", e_FontTypeNames.FONTTYPE_INFO)
+                                Call WriteConsoleMsg(UserIndex, "Aun no puedes usar otra pocion curativa.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                                 Exit Sub
                             End If
                         End If
@@ -2513,7 +2513,7 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
                             ' Cooldown propio para parcial Hemo
                             If obj.PoisonCooldownMs > 0 And .Counters.LastPoisonHemoPartialPotion > 0 Then
                                 If (nowTick - .Counters.LastPoisonHemoPartialPotion) < obj.PoisonCooldownMs Then
-                                    Call WriteConsoleMsg(UserIndex, "Aun no puedes usar otra pocion curativa parcial de Hemo.", e_FontTypeNames.FONTTYPE_INFO)
+                                    Call WriteConsoleMsg(UserIndex, "Aun no puedes usar otra pocion curativa parcial de Hemo.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                                     Exit Sub
                                 End If
                             End If
@@ -2557,14 +2557,14 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
                                 ebAntidoteMask = IIf(ebCuredMinor, 1, 0) + IIf(ebCuredHemo, 2, 0) + IIf(ebCuredNeuro, 4, 0)
                                 Call modElementalBalanceLog.LogElementalBalance("antidote_use", modElementalBalanceLog.ElementalBalanceActorId(False, UserIndex), modElementalBalanceLog.ElementalBalanceActorClass(False, UserIndex), "0", "none", CLng(ebAntidoteObjIndex), modElementalBalanceLog.ElementalBalanceCatalogTier(ebAntidoteObjIndex), 0, 1, ebAntidoteMask, modElementalBalanceLog.ElementalBalanceMap(False, UserIndex), modElementalBalanceLog.ElementalBalanceCharId(False, UserIndex), modElementalBalanceLog.ElementalBalanceAccountId(False, UserIndex), 0, 0, 0)
                             End If
-                            Call WriteLocaleMsg(UserIndex, MSG_CURADO_ENVENENAMIENTO, e_FontTypeNames.FONTTYPE_INFO)
+                            Call WriteLocaleMsg(UserIndex, MSG_CURADO_ENVENENAMIENTO, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_INFO)
                             If obj.Snd1 <> 0 Then
                                 Call SendData(SendTarget.ToPCAliveArea, UserIndex, PrepareMessagePlayWave(obj.Snd1, .pos.x, .pos.y))
                             Else
                                 Call SendData(SendTarget.ToPCAliveArea, UserIndex, PrepareMessagePlayWave(SND_BEBER, .pos.x, .pos.y))
                             End If
                         Else
-                            Call WriteLocaleMsg(UserIndex, MSG_ENCUENTRAS_ENVENENADO, e_FontTypeNames.FONTTYPE_INFO)
+                            Call WriteLocaleMsg(UserIndex, MSG_ENCUENTRAS_ENVENENADO, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_INFO)
                         End If
                     Case e_PotionType.HealsAllStatusEffects
                         Call QuitarUserInvItem(UserIndex, Slot, 1)

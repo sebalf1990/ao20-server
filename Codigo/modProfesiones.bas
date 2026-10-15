@@ -146,7 +146,7 @@ Public Function PuedeAprenderProfesion(ByVal UserIndex As Integer, ByVal Profesi
     If Not IsFeatureEnabled("professions_learnable") Then Exit Function
     If ProfesionId < PROF_MIN_ID Or ProfesionId > PROF_MAX_ID Then Exit Function
     If TieneProfesionEnSlots(UserIndex, ProfesionId) Then
-        If Not EsAccionDeStaff Then Call WriteLocaleMsg(UserIndex, MSG_PROF_YA_APRENDIDA, e_FontTypeNames.FONTTYPE_INFO)
+        If Not EsAccionDeStaff Then Call WriteLocaleMsg(UserIndex, MSG_PROF_YA_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         Exit Function
     End If
     ' GMs y acciones de staff exentos de los limites de config (plan 04.001).
@@ -155,11 +155,11 @@ Public Function PuedeAprenderProfesion(ByVal UserIndex As Integer, ByVal Profesi
         ' El tope de olvidos frena el re-aprendizaje por si solo (antes exigia ademas
         ' slots llenos, condicion que la guarda siguiente ya cubria: nunca disparaba).
         If MaxOlvidosPorPersonaje > 0 And UserList(UserIndex).ProfessionForgotCount >= MaxOlvidosPorPersonaje Then
-            Call WriteLocaleMsg(UserIndex, MSG_PROF_SLOT_BLOQUEADO_POR_OLVIDOS, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_PROF_SLOT_BLOQUEADO_POR_OLVIDOS, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             Exit Function
         End If
         If SlotsOcupados(UserIndex) >= MaxProfesionesAprendidas Then
-            Call WriteLocaleMsg(UserIndex, MSG_PROF_YA_TIENE_2, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_PROF_YA_TIENE_2, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             Exit Function
         End If
     End If
@@ -175,12 +175,12 @@ Public Function PuedeOlvidarProfesion(ByVal UserIndex As Integer, ByVal Profesio
     If Not IsFeatureEnabled("professions_learnable") Then Exit Function
     If ProfesionId < PROF_MIN_ID Or ProfesionId > PROF_MAX_ID Then Exit Function
     If Not TieneProfesionEnSlots(UserIndex, ProfesionId) Then
-        If Not EsAccionDeStaff Then Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_FontTypeNames.FONTTYPE_INFO)
+        If Not EsAccionDeStaff Then Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         Exit Function
     End If
     If Not (EsGM(UserIndex) Or EsAccionDeStaff) Then
         If MaxOlvidosPorPersonaje > 0 And UserList(UserIndex).ProfessionForgotCount >= MaxOlvidosPorPersonaje Then
-            Call WriteLocaleMsg(UserIndex, MSG_PROF_MAX_OLVIDOS_PERSONAJE, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_PROF_MAX_OLVIDOS_PERSONAJE, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             Exit Function
         End If
     End If
@@ -207,13 +207,13 @@ Public Function AprenderProfesion(ByVal UserIndex As Integer, ByVal ProfesionId 
     Next i
     If Not almacenada Then
         ' Sin slot libre (limite real = PROF_MAX_SLOTS). No reportar exito ni consumir el item.
-        Call WriteLocaleMsg(UserIndex, MSG_PROF_YA_TIENE_2, e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteLocaleMsg(UserIndex, MSG_PROF_YA_TIENE_2, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         Exit Function
     End If
     Call Execute("INSERT OR REPLACE INTO user_professions (user_id, profession_id, learned_at) VALUES (?, ?, ?);", UserList(UserIndex).Id, CInt(ProfesionId), CLng(GetTickCountRaw() \ 1000))
     Call RefrescarHerramientasInventario(UserIndex, ProfesionId)
     Call WriteProfessionsUpdate(UserIndex)
-    Call WriteLocaleMsg(UserIndex, MSG_PROF_APRENDIDA_OK, e_FontTypeNames.FONTTYPE_INFO, NombreProfesion(ProfesionId))
+    Call WriteLocaleMsg(UserIndex, MSG_PROF_APRENDIDA_OK, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO, NombreProfesion(ProfesionId))
     AprenderProfesion = True
     Exit Function
 AprenderProfesion_Err:
@@ -244,7 +244,7 @@ Public Function OlvidarProfesion(ByVal UserIndex As Integer, ByVal ProfesionId A
     Call Execute("DELETE FROM user_professions WHERE user_id = ? AND profession_id = ?;", UserList(UserIndex).Id, CInt(ProfesionId))
     Call RefrescarHerramientasInventario(UserIndex, ProfesionId)
     Call WriteProfessionsUpdate(UserIndex)
-    Call WriteLocaleMsg(UserIndex, MSG_PROF_OLVIDADA_OK, e_FontTypeNames.FONTTYPE_INFO, NombreProfesion(ProfesionId))
+    Call WriteLocaleMsg(UserIndex, MSG_PROF_OLVIDADA_OK, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO, NombreProfesion(ProfesionId))
     OlvidarProfesion = True
     Exit Function
 OlvidarProfesion_Err:
@@ -347,7 +347,7 @@ End Function
 Public Sub UsarManualProfesion(ByVal UserIndex As Integer, ByVal Slot As Byte)
     On Error GoTo UsarManualProfesion_Err
     If Not IsFeatureEnabled("professions_learnable") Then
-        Call WriteLocaleMsg(UserIndex, MSG_PROF_ITEM_NO_USABLE, e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteLocaleMsg(UserIndex, MSG_PROF_ITEM_NO_USABLE, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         Exit Sub
     End If
     Dim ObjIndex    As Integer
@@ -368,7 +368,7 @@ End Sub
 Public Sub UsarPocionOlvidoProfesion(ByVal UserIndex As Integer, ByVal Slot As Byte)
     On Error GoTo UsarPocionOlvidoProfesion_Err
     If Not IsFeatureEnabled("professions_learnable") Then
-        Call WriteLocaleMsg(UserIndex, MSG_PROF_ITEM_NO_USABLE, e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteLocaleMsg(UserIndex, MSG_PROF_ITEM_NO_USABLE, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         Exit Sub
     End If
     Dim ObjIndex    As Integer
@@ -464,7 +464,7 @@ Public Function HandleProfesionChatCommand(ByVal UserIndex As Integer, ByVal cha
     profArg = parts(2)
     profId = ResolverProfesionId(profArg)
     If profId < PROF_MIN_ID Or profId > PROF_MAX_ID Then
-        Call WriteConsoleMsg(UserIndex, "Profesion invalida: " & profArg & ". Usa nombre (Carpinteria, Tala, ...) o id (17-23).", e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteConsoleMsg(UserIndex, "Profesion invalida: " & profArg & ". Usa nombre (Carpinteria, Tala, ...) o id (17-23).", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         Exit Function
     End If
     If UCase$(targetName) = "YO" Then
@@ -473,31 +473,31 @@ Public Function HandleProfesionChatCommand(ByVal UserIndex As Integer, ByVal cha
         tUserRef = NameIndex(targetName)
     End If
     If Not IsValidUserRef(tUserRef) Then
-        Call WriteConsoleMsg(UserIndex, "Usuario offline: " & targetName, e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteConsoleMsg(UserIndex, "Usuario offline: " & targetName, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         Exit Function
     End If
     ' Plan 04.001: operar sobre OTRO personaje exige Dios o Admin; sobre staff superior, solo Admin.
     If tUserRef.ArrayIndex <> UserIndex Then
         If (UserList(UserIndex).flags.Privilegios And (e_PlayerType.Dios Or e_PlayerType.Admin)) = 0 Then
-            Call WriteConsoleMsg(UserIndex, "Solo Dios o Admin pueden modificar profesiones de otro personaje.", e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteConsoleMsg(UserIndex, "Solo Dios o Admin pueden modificar profesiones de otro personaje.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             Exit Function
         End If
         If (UserList(tUserRef.ArrayIndex).flags.Privilegios And (e_PlayerType.Dios Or e_PlayerType.Admin)) <> 0 And (UserList(UserIndex).flags.Privilegios And e_PlayerType.Admin) = 0 Then
-            Call WriteConsoleMsg(UserIndex, "Solo un Admin puede modificar profesiones de un Dios o Admin.", e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteConsoleMsg(UserIndex, "Solo un Admin puede modificar profesiones de un Dios o Admin.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             Exit Function
         End If
     End If
     If cmd = "APRENDE" Then
         If AprenderProfesion(tUserRef.ArrayIndex, profId, True) Then
-            Call WriteConsoleMsg(UserIndex, "Aprendio " & NombreProfesion(profId) & " para " & targetName, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteConsoleMsg(UserIndex, "Aprendio " & NombreProfesion(profId) & " para " & targetName, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         Else
-            Call WriteConsoleMsg(UserIndex, "No se pudo aprender " & NombreProfesion(profId) & " para " & targetName & " (ya aprendida, slots llenos o limite de olvidos).", e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteConsoleMsg(UserIndex, "No se pudo aprender " & NombreProfesion(profId) & " para " & targetName & " (ya aprendida, slots llenos o limite de olvidos).", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         End If
     Else
         If OlvidarProfesion(tUserRef.ArrayIndex, profId, True) Then
-            Call WriteConsoleMsg(UserIndex, "Olvido " & NombreProfesion(profId) & " para " & targetName, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteConsoleMsg(UserIndex, "Olvido " & NombreProfesion(profId) & " para " & targetName, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         Else
-            Call WriteConsoleMsg(UserIndex, "No se pudo olvidar " & NombreProfesion(profId) & " para " & targetName & " (no la tiene o limite de olvidos).", e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteConsoleMsg(UserIndex, "No se pudo olvidar " & NombreProfesion(profId) & " para " & targetName & " (no la tiene o limite de olvidos).", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         End If
     End If
     Call LogGM(GetUserRealName(UserIndex), "/" & cmd & " " & targetName & " " & NombreProfesion(profId))

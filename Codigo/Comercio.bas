@@ -93,7 +93,7 @@ Public Sub Comercio(ByVal Modo As eModoComercio, ByVal UserIndex As Integer, ByV
         End If
     ElseIf Modo = eModoComercio.Venta Then
         If NpcList(NpcIndex).EsMaestroProfesion = 1 Then
-            Call WriteLocaleMsg(UserIndex, MSG_PROF_NPC_NO_COMPRA, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_PROF_NPC_NO_COMPRA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             Exit Sub
         End If
         If Slot > UserList(UserIndex).CurrentInventorySlots Then Exit Sub
@@ -113,7 +113,7 @@ Public Sub Comercio(ByVal Modo As eModoComercio, ByVal UserIndex As Integer, ByV
         ' Upstream 46e5445a: las skins son items de pago; venderlas a un NPC las convertia en oro.
         ElseIf EsSkinNoComprablePorComerciante(ObjData(Objeto.ObjIndex).OBJType) Then
             'Msg1084= Lo siento, no puedo comprarte ese item.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_SIENTO_PUEDO_COMPRARTE_ESE_ITEM, e_FontTypeNames.FONTTYPE_TALK)
+            Call WriteLocaleMsg(UserIndex, MSG_NO_SIENTO_PUEDO_COMPRARTE_ESE_ITEM, e_TextChannel.TEXTCHANNEL_ECONOMY, e_FontTypeNames.FONTTYPE_TALK)
             Exit Sub
         ElseIf ObjData(Objeto.ObjIndex).Destruye = 1 Then
             'Msg1084= Lo siento, no puedo comprarte ese item.
@@ -132,7 +132,7 @@ Public Sub Comercio(ByVal Modo As eModoComercio, ByVal UserIndex As Integer, ByV
         ' revender al Armador las mismas naves que el vende (Comercio.bas, mas abajo).
         ElseIf ObjData(Objeto.ObjIndex).OBJType = e_OBJType.otShips Then
             'Msg1084= Lo siento, no puedo comprarte ese item.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_SIENTO_PUEDO_COMPRARTE_ESE_ITEM, e_FontTypeNames.FONTTYPE_TALK)
+            Call WriteLocaleMsg(UserIndex, MSG_NO_SIENTO_PUEDO_COMPRARTE_ESE_ITEM, e_TextChannel.TEXTCHANNEL_ECONOMY, e_FontTypeNames.FONTTYPE_TALK)
             Exit Sub
         ElseIf ((NpcList(NpcIndex).TipoItems <> ObjData(Objeto.ObjIndex).OBJType And NpcList(NpcIndex).TipoItems <> e_OBJType.otElse) Or Objeto.ObjIndex = iORO) Then
             'Agrego que si vende el item, lo compre tambien.

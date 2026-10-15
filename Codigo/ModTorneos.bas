@@ -116,7 +116,7 @@ Public Sub ParticiparTorneo(ByVal UserIndex As Integer)
     IndexVacio = BuscarIndexFreeTorneo
     If IndexVacio = 0 Then
         ' R5: torneo lleno -> BuscarIndexFreeTorneo devuelve 0 (array base-1); evita IndexParticipantes(0)
-        Call WriteLocaleMsg(UserIndex, MSG_CUPOS_ESTAN_COMPLETOS, e_FontTypeNames.FONTTYPE_INFOIAO)
+        Call WriteLocaleMsg(UserIndex, MSG_CUPOS_ESTAN_COMPLETOS, e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_INFOIAO)
         Exit Sub
     End If
     Torneo.IndexParticipantes(IndexVacio) = UserIndex

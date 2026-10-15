@@ -3152,7 +3152,7 @@ Public Function DoDamageOrHeal(ByVal UserIndex As Integer, _
         ' directo (PvP y NPC->user). Ticks de DoT (UpdateHpOverTime.cls) no pasan DamageTypeId:
         ' quedan fuera de alcance de esta iteracion.
         If DamageTypeId > 0 And UserList(UserIndex).flags.UserLogged And UserList(UserIndex).ChatCombate = 1 Then
-            Call WriteLocaleMsg(UserIndex, MSG_RECEIVED_TYPED_DAMAGE, e_FontTypeNames.FONTTYPE_FIGHT, DamageStr & Chr(&HAC) & modElementalCombat.DamageTypeName(DamageTypeId))
+            Call WriteLocaleMsg(UserIndex, MSG_RECEIVED_TYPED_DAMAGE, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT, DamageStr & Chr(&HAC) & modElementalCombat.DamageTypeName(DamageTypeId))
         End If
         amount = EffectsOverTime.TargetApplyDamageReduction(UserList(UserIndex).EffectOverTime, amount, SourceIndex, SourceType, DamageSourceType)
         Call EffectsOverTime.TargetWasDamaged(UserList(UserIndex).EffectOverTime, SourceIndex, SourceType, DamageSourceType)
