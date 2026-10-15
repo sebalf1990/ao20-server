@@ -2618,29 +2618,13 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
                         Dim y       As Byte
                         Dim DeDonde As t_WorldPos
                         Call QuitarUserInvItem(UserIndex, Slot, 1)
-                        Select Case .Hogar
-                            Case e_City.cUllathorpe
-                                DeDonde = Ullathorpe
-                            Case e_City.cNix
-                                DeDonde = Nix
-                            Case e_City.cBanderbill
-                                DeDonde = Banderbill
-                            Case e_City.cLindos
-                                DeDonde = Lindos
-                            Case e_City.cArghal
-                                DeDonde = Arghal
-                            Case e_City.cArkhein
-                                DeDonde = Arkhein
-                            Case e_City.cForgat
-                                DeDonde = Forgat
-                            Case e_City.cEldoria
-                                DeDonde = Eldoria
-                            Case e_City.cPenthar
-                                DeDonde = Penthar
-                            Case Else
-                                DeDonde = Ullathorpe
-                                Call LogError("Hogar fuera de rango al usar la runa de hogar: " & .Hogar)
-                        End Select
+                        If IsValidCity(.Hogar) Then
+                            ' Cities() centralizes city Map/X/Y lookup; avoid duplicated enum mappings.
+                            DeDonde = Cities(.Hogar)
+                        Else
+                            Call LogError("Hogar fuera de rango al usar la runa de hogar: " & .Hogar)
+                            DeDonde = Cities(e_City.cUllathorpe)
+                        End If
                         Map = DeDonde.Map
                         x = DeDonde.x
                         y = DeDonde.y
