@@ -3,7 +3,7 @@
 ' el server lo crea desde este template al boot y lo loguea como WARNING.
 ' elemental_system viene APAGADO a proposito: encenderlo es un gate del dueno, no del deploy.
 [INIT]
-TOGGLECOUNT=33
+TOGGLECOUNT=41
 [TOGGLE1]
 name=bandit_unequip_bonus
 value=1
@@ -102,4 +102,28 @@ name=elemental_balance_log
 value=0
 [TOGGLE33]
 name=elemental_player_telemetry
+value=0
+[TOGGLE34]
+name=debug_disconnects
+value=0
+[TOGGLE35]
+name=underworld
+value=1
+[TOGGLE36]
+name=collectible_cards
+value=0
+[TOGGLE37]
+name=hoo-adjacent-characters-v1
+value=0
+[TOGGLE38]
+name=hoo-remort-v1
+value=0
+[TOGGLE39]
+name=npc-cross-map-pursuit
+value=0
+[TOGGLE40]
+name=hoo-targeted-spell-cast-v1
+value=0
+[TOGGLE41]
+name=hoo-house-door-actions-v1
 value=0

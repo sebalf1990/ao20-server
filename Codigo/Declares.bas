@@ -219,7 +219,6 @@ Public Enum e_SoundIndex
 End Enum
 
 Public SvrConfig            As ServerConfig
-Public Md5Cliente           As String
 Public PrivateKey           As String
 Public HoraActual           As Integer
 Public UltimoChar           As String
@@ -265,6 +264,7 @@ Public Const iGalera = 85
 Public Const iGaleraCiuda = 1267
 Public Const iGaleraCrimi = 1268
 Public Const iGaleon = 86
+Public Const iGaleonFantasmal = 4596
 Public Const iGaleonCiuda = 1269
 Public Const iGaleonCrimi = 1270
 Public Const iBarcaArmada = 1273
@@ -338,7 +338,7 @@ Public Enum e_Class
     Bandit      'Bandido
 End Enum
 
-Public Enum e_Ciudad
+Public Enum e_City
     cUllathorpe = 1
     cNix
     cBanderbill
@@ -348,6 +348,8 @@ Public Enum e_Ciudad
     cForgat
     cEldoria
     cPenthar
+    cMorgrim
+    cCiudadCount
 End Enum
 
 Public Enum e_Raza
@@ -641,7 +643,8 @@ Public Enum e_SoundEffects
     RuneArrival = 463
     'Libre = 464 to 480
     IAOPotionChug = 481
-    'Libre = 482 to 499
+    PhoenixRebirth = 482
+    'Libre = 483 to 499
     MenuSelect = 500
     MenuSelect2 = 501
     'Libre = 502 to 519
@@ -654,6 +657,7 @@ Public Enum e_SoundEffects
     NewLevelUp = 554
     FlareActivation = 555
     'Repetido = 1152
+    NewCastleRPGVoice = 1600
     SnowStorm = 2000
     'Imperium 2028 - 2186
     FailToExtractOre = 2185
@@ -1143,6 +1147,27 @@ Public Enum e_Trigger
     NADOCOMBINADO = 18
     CARCEL = 19
     ONLY_PATREON_TILE = 20
+    EMPEROR_CASTLE_ENTRY_1 = 21
+    EMPEROR_CASTLE_ENTRY_2 = 22
+    EMPEROR_CASTLE_ENTRY_3 = 23
+    EMPEROR_CASTLE_ENTRY_4 = 24
+    EMPEROR_CASTLE_ENTRY_5 = 25
+    EMPEROR_CASTLE_ENTRY_6 = 26
+    EMPEROR_CASTLE_ENTRY_7 = 27
+    EMPEROR_CASTLE_ENTRY_8 = 28
+    EMPEROR_CASTLE_ENTRY_9 = 29
+    EMPEROR_CASTLE_ENTRY_10 = 30
+    EMPEROR_CASTLE_ENTRY_11 = 31
+    EMPEROR_CASTLE_ENTRY_12 = 32
+    EMPEROR_CASTLE_ENTRY_13 = 33
+    EMPEROR_CASTLE_ENTRY_14 = 34
+    EMPEROR_CASTLE_ENTRY_15 = 35
+    EMPEROR_CASTLE_ENTRY_16 = 36
+    EMPEROR_CASTLE_ENTRY_17 = 37
+    EMPEROR_CASTLE_ENTRY_18 = 38
+    EMPEROR_CASTLE_ENTRY_19 = 39
+    EMPEROR_CASTLE_ENTRY_20 = 40
+    CASTLE_FOUNDATION_POSITION = 41
 End Enum
 
 Public Enum e_NpcInfoMask
@@ -1373,6 +1398,7 @@ Public Const MAXSKILLPOINTS As Byte = 100
 ' Cantidad maxima de mascotas
 Public Const MAXMASCOTAS    As Byte = 3
 
+Public Const MAXCOLLECTIBLECARDS As Integer = 1024
 
 ''
 'Direccion
@@ -1476,11 +1502,14 @@ Public Const SND_IMPACTO         As Byte = 10
 Public Const SND_IMPACTO_APU     As Integer = 2187
 Public Const SND_IMPACTO_CRITICO As Integer = 2186
 Public Const SND_IMPACTO2        As Byte = 12
-
+Public Const SND_FLECHA_IMPACTO  As Byte = 229
+Public Const SND_FLECHA_FALLO    As Byte = 228
+Public Const SND_RESURRECCION    As Byte = 117
 
 
 Public Const SND_SACARARMA           As Byte = 25
 Public Const SND_ESCUDO              As Byte = 37
+Public Const SND_ESCUDO_MADERA       As Integer = 2053
 Public Const MARTILLOHERRERO         As Byte = 41
 Public Const LABUROCARPINTERO        As Byte = 42
 Public Const SND_BEBER               As Byte = 135
@@ -1517,7 +1546,7 @@ Public Enum e_OBJType
     otBackpack = 7
     otSignBoards = 8
     otKeys = 9
-    'otLibre = 10
+    otCastleSpawner = 10
     otPotions = 11
     'otLibre = 12
     otDrinks = 13
@@ -1563,6 +1592,7 @@ Public Enum e_OBJType
     ' 54 = otPlants: tipo muerto eliminado (plan 02.001 Ola 11; sin uso en codigo)
     otElementalRune = 55
     otFactionForgiveness = 56
+    otCollectibleCard = 57
     otElse = 100
 End Enum
 
@@ -1890,9 +1920,7 @@ Public Type t_Hechizo
     StaRequerido As Integer
     Target As e_TargetType
     RequireTransform As Integer
-    NeedStaff As Integer
-    RequiereInstrumento As Integer
-    StaffAffected As Boolean
+    MagicPowerNeeded As Integer
     EotId As Integer
     SpellRequirementMask As Long
     RequireWeaponType As e_WeaponType
@@ -1957,6 +1985,8 @@ Public Type t_ActiveModifiers
     MagicDamageBonus As Single
     MagicHealingBonus As Single
     PhysicalDamageLinearBonus As Integer 'apply direct bonus like +10
+    PhysicalDamageBonusPve As Single
+    PhysicalDamageLinearBonusPve As Integer
     HitBonus As Integer
     EvasionBonus As Integer
 End Type
@@ -2002,6 +2032,7 @@ Public Type t_EffectOverTime
     SelfHealingBonus As Single
     MagicHealingBonus As Single
     PhysicalLinearBonus As Integer
+    PhysicalBonusPveOnly As Boolean
     DefenseBonus As Integer
     ClientEffectTypeId As Integer
     Area As Integer
@@ -2033,7 +2064,7 @@ Public Enum e_DamageResult
     eDead
 End Enum
 
-Public Const MAX_PACKET_COUNTERS As Long = 16
+Public Const MAX_PACKET_COUNTERS As Long = 17
 
 Public Enum PacketNames
     CastSpell = 1
@@ -2052,6 +2083,7 @@ Public Enum PacketNames
     QuestionGM
     ChangeHeading
     Hide
+    TargetedSpellCast
 End Enum
 
 Public Type t_UserOBJ
@@ -2152,6 +2184,22 @@ Public Type t_Transport
     CurrenDest As e_TripState
 End Type
 
+Public Type t_CityData
+    Map As Integer
+    X As Integer
+    Y As Integer
+
+    MapaViaje As Integer
+    ViajeX As Integer
+    ViajeY As Integer
+
+    MapaResu As Integer
+    ResuX As Integer
+    ResuY As Integer
+
+    NecesitaNave As Byte
+End Type
+
 Public Type t_CityWorldPos
     Map As Integer
     x As Integer
@@ -2210,6 +2258,7 @@ Public Type t_Obj
     ElementalTags As Long
     amount As Long
     data As Double
+    CastleSlot As Integer
 End Type
 
 Public Type t_QuestNpc
@@ -2333,6 +2382,8 @@ End Type
 Public Enum e_ObjFlags
     e_Bindable = 1
     e_UseOnSafeAreaOnly = 2
+    e_JailObject = 4
+    e_NoTradeableToNPC = 8
 End Enum
 
 
@@ -2389,7 +2440,6 @@ Public Type t_ObjData
     MaxLEV As Byte
     SkillIndex As Byte     ' El indice de Skill para equipar el item
     SkillRequerido As Byte ' El valor MINIMO requerido de skillIndex para equipar el item
-    InstrumentoRequerido As Integer
     CreaGRH As String
     SndAura As Integer
     Intirable As Byte
@@ -2460,6 +2510,7 @@ Public Type t_ObjData
     WeaponAnim As Integer ' Apunta a una anim de armas
     ShieldAnim As Integer ' Apunta a una anim de escudo
     CascoAnim As Integer
+    AssignedCastleIndex As Integer
     BackpackAnim As Integer
     Valor As Long     ' Precio
     Cerrada As Integer
@@ -2600,6 +2651,8 @@ Public Type t_ObjData
     ElementalResist As t_ElementalResistSet
     EnchantWeaponDurationMs As Long  ' >0 = al usar el item encanta el arma N ms; <0 = permanente (demo)
     EnchantAmmoDurationMs As Long    ' >0 = al usar el item encanta las flechas equipadas N ms; <0 = permanente (20.002 CP1)
+    CollectibleCardIndex As Integer
+    CollectibleCardRarity As Byte
 End Type
 
 '[Pablo ToxicWaste]
@@ -2646,12 +2699,16 @@ End Type
 Public Const patron_tier_aventurero As Long = 6057393
 Public Const patron_tier_heroe      As Long = 6057394
 Public Const patron_tier_leyenda    As Long = 6057395
+Public Const patron_tier_noble      As Long = 28929328
+Public Const patron_tier_emperador  As Long = 28929365
 
 Public Enum e_TipoUsuario
     tNormal = 0
-    tAventurero
-    tHeroe
-    tLeyenda
+    tAventurero = 1
+    tHeroe = 2
+    tLeyenda = 3
+    tNoble = 4
+    tEmperador = 5
 End Enum
 
 Public Const MaxRecentKillToStore = 5
@@ -2720,6 +2777,7 @@ Public Type t_UserStats
     NumObj_PezEspecial As Integer
     Creditos As Long
     JineteLevel As Byte
+    RemortCount As Long
 End Type
 
 'Sistema de Barras
@@ -2994,6 +3052,7 @@ Public Type t_UserFlags
     QuestNumber As Integer
     QuestItemSlot As Integer
     RespondiendoPregunta As Boolean
+    DirtyCollectibleCardCollection As Boolean
     CurrentTeam As Byte
     'Captura de bandera
     jugando_captura As Byte
@@ -3052,6 +3111,7 @@ Public Type t_UserCounters
     DisabledInvisibility As Integer
     TiempoOculto As Integer
     LastAttackTime As Long
+    LastGuildCallTime As Long
     PiqueteC As Long
     Pena As Long
     SendMapCounter As t_WorldPos
@@ -3259,6 +3319,61 @@ End Type
 
 Public Const HotKeyCount As Integer = 20
 
+Public Const HOO_CAP_PROTOCOL_VERSION As Byte = 1
+Public Const HOO_CAP_ADJACENT_CHARACTERS_V1 As Long = &H1&
+Public Const HOO_CAP_REMORT_V1 As Long = &H2&
+Public Const HOO_CAP_TARGETED_SPELL_CAST_V1 As Long = &H4&
+Public Const HOO_CAP_HOUSE_DOOR_ACTIONS_V1 As Long = &H8&
+Public Const HOO_FEATURE_ADJACENT_CHARACTERS_V1 As String = "hoo-adjacent-characters-v1"
+Public Const HOO_FEATURE_REMORT_V1 As String = "hoo-remort-v1"
+Public Const HOO_FEATURE_TARGETED_SPELL_CAST_V1 As String = "hoo-targeted-spell-cast-v1"
+Public Const HOO_FEATURE_HOUSE_DOOR_ACTIONS_V1 As String = "hoo-house-door-actions-v1"
+
+Public Enum e_HooHouseDoorAction
+    eHooHouseDoorAction_Open = 0
+    eHooHouseDoorAction_Close = 1
+    eHooHouseDoorAction_Lock = 2
+    eHooHouseDoorAction_Unlock = 3
+    eHooHouseDoorAction_UnlockAndOpen = 4
+End Enum
+
+Public Enum e_HooHouseDoorActionResult
+    eHooHouseDoorActionResult_Success = 0
+    eHooHouseDoorActionResult_InvalidAction = 1
+    eHooHouseDoorActionResult_InvalidTarget = 2
+    eHooHouseDoorActionResult_TooFarAway = 3
+    eHooHouseDoorActionResult_NotDoor = 4
+    eHooHouseDoorActionResult_InvalidTransition = 5
+    eHooHouseDoorActionResult_NoAccess = 6
+    eHooHouseDoorActionResult_Cooldown = 7
+    eHooHouseDoorActionResult_Unavailable = 8
+End Enum
+
+Public Enum e_HooTargetedSpellCastResult
+    eHooTargetedSpellCastResult_Success = 0
+    eHooTargetedSpellCastResult_RateLimited = 1
+    eHooTargetedSpellCastResult_OutOfRange = 2
+    eHooTargetedSpellCastResult_InvalidTarget = 3
+    eHooTargetedSpellCastResult_InvalidSpell = 4
+    eHooTargetedSpellCastResult_Rejected = 5
+End Enum
+
+Public Enum e_RemortEligibilityReason
+    eRemortEligibility_Eligible = 0
+    eRemortEligibility_BelowRequiredLevel = 1
+    eRemortEligibility_Dead = 2
+    eRemortEligibility_ActiveQuest = 3
+    eRemortEligibility_InParty = 4
+    eRemortEligibility_InvalidEquipment = 5
+    eRemortEligibility_RemortLimitReached = 6
+End Enum
+
+Public Type t_HooClientCapabilities
+    Negotiated As Boolean
+    ProtocolVersion As Byte
+    CapabilityMask As Long
+End Type
+
 'Tipo de los Usuarios
 Public Type t_User
     name As String
@@ -3271,6 +3386,8 @@ Public Type t_User
     InUse As Boolean 'Mark if the slot is un use, should be set when players connect and clear on dc, used for debug and error handling
     Id As Long
     Trabajo As t_UserTrabajo
+    AccountCollectibleCardBitArray(1 To 128) As Byte
+    AccountCollectibleCardQuantities(1 To 1024) As Byte
     AccountID As Long
     ' Mapa de personajes GM de esta cuenta, tal como lo mando la web en la
     ' respuesta del verify-login (plan 31.001, ola 5). Formato:
@@ -3294,14 +3411,15 @@ Public Type t_User
     raza As e_Raza
     genero As e_Genero
     Email As String
-    Hogar As e_Ciudad
-    PosibleHogar As e_Ciudad
+    Hogar As e_City
+    PosibleHogar As e_City
     MENSAJEINFORMACION As String
     invent As t_Inventario
     Invent_bk As t_Inventario
     Invent_Skins                As tSkinInventario
     pos As t_WorldPos
     ConnectionDetails As t_ConnectionInfo
+    HooCapabilities As t_HooClientCapabilities
     CurrentInventorySlots As Byte
     BancoInvent As t_BancoInventario
     Counters As t_UserCounters
@@ -3492,6 +3610,24 @@ Public Type t_NpcPathFindingInfo
     '  forcing the seek of a new path.
 End Type
 
+Public Enum e_NpcCrossMapRouteMode
+    eNpcCrossMapRouteNone = 0
+    eNpcCrossMapRouteChase = 1
+    eNpcCrossMapRouteReturnHome = 2
+End Enum
+
+Public Type t_NpcCrossMapRoute
+    Mode As e_NpcCrossMapRouteMode
+    TargetMap As Integer
+    NextMap As Integer
+    ExitX As Byte
+    ExitY As Byte
+    DestinationX As Byte
+    DestinationY As Byte
+    HopsCrossed As Byte
+    PathFailures As Byte
+End Type
+
 Public Type t_Caminata
     offset As t_Position
     Espera As Long
@@ -3643,6 +3779,8 @@ Public Type t_NpcInfoCache
     CityX()         As Integer
     CityY()         As Integer
     CityPrice()     As Long
+    TransporterLevel As Integer
+    CollectibleCardIndex As Integer
 End Type
 
 Public Enum e_TipoAI
@@ -3746,6 +3884,7 @@ Public Type t_Npc
     Mascotas As Integer
     ' New!! Needed for pathfindig
     pathFindingInfo As t_NpcPathFindingInfo
+    CrossMapRoute As t_NpcCrossMapRoute
     ' Esto es del Areas.bas
     AreasInfo As t_AreaInfo
     
@@ -3774,6 +3913,8 @@ Public Type t_Npc
     TransportCityX()     As Integer
     TransportCityY()     As Integer
     TransportCityPrice() As Long
+    TransporterLevel As Integer
+    CollectibleCardIndex As Integer
 End Type
 
 '**********************************************************
@@ -3792,9 +3933,11 @@ Public Type t_TransportNetworkExit
     TileY As Byte
 End Type
 
+Public Const MAP_LAYER_COUNT As Long = 5
+
 Public Type t_MapBlock
     Blocked As Byte
-    Graphic(1 To 4) As Long
+    Graphic(1 To MAP_LAYER_COUNT) As Long
     UserIndex As Integer
     NpcIndex As Integer
     Particula As Byte
@@ -3919,6 +4062,7 @@ Public UserList()                             As t_User 'USUARIOS
 Public NpcList(1 To MaxNPCs)                  As t_Npc 'NPCS
 Public NpcInfoCache()                          As t_NpcInfoCache
 Public NpcInfoCacheInitialized                As Boolean
+' X is the fastest dimension; each map owns a contiguous tile slab.
 Public MapData()                              As t_MapBlock
 Public MapInfo()                              As t_MapInfo
 Public Hechizos()                             As t_Hechizo
@@ -3945,31 +4089,18 @@ Public RangosFaccion()                        As t_RangoFaccion
 Public RecompensasFaccion()                   As t_RecompensaFaccion
 Public ModClase(1 To NUMCLASES)               As t_ModClase
 Public ModRaza(1 To NUMRAZAS)                 As t_ModRaza
+Public Const HOME_COST_TIER_COUNT              As Byte = 6
+Public HomeCostTierMinLevel(1 To HOME_COST_TIER_COUNT) As Byte
+Public HomeCostTierMaxLevel(1 To HOME_COST_TIER_COUNT) As Byte
+Public HomeCostTierFloorGLD(1 To HOME_COST_TIER_COUNT) As Long
+Public HomeCostTierCapGLD(1 To HOME_COST_TIER_COUNT) As Long
+Public HomeCostTiersValid                   As Boolean
 Public Crafteos                               As New Dictionary
 Public PoderCanas()                           As Integer
 Public UniqueMapFishIDs()                     As Long
 Public UniqueMapFishCount                     As Long
 
 '*********************************************************
-Public Nix                                    As t_WorldPos
-Public Ullathorpe                             As t_WorldPos
-Public Banderbill                             As t_WorldPos
-Public Lindos                                 As t_WorldPos
-Public Arghal                                 As t_WorldPos
-Public Forgat                                 As t_WorldPos
-Public Arkhein                                As t_WorldPos
-Public Eldoria                                As t_WorldPos
-Public Penthar                                As t_WorldPos
-Public CityNix                                As t_CityWorldPos
-Public CityUllathorpe                         As t_CityWorldPos
-Public CityBanderbill                         As t_CityWorldPos
-Public CityArghal                             As t_CityWorldPos
-Public CityForgat                             As t_CityWorldPos
-Public CityPenthar                            As t_CityWorldPos
-Public CityLindos                             As t_CityWorldPos
-Public CityEleusis                            As t_CityWorldPos
-Public CityArkhein                            As t_CityWorldPos
-Public CityEldoria                            As t_CityWorldPos
 Public Prision                                As t_WorldPos
 Public Libertad                               As t_WorldPos
 Public Renacimiento                           As t_WorldPos
@@ -4251,6 +4382,8 @@ Public Sub ClearModifiers(ByRef Modifiers As t_ActiveModifiers)
     Modifiers.MagicDamageBonus = 0
     Modifiers.MagicDamageReduction = 0
     Modifiers.PhysicalDamageBonus = 0
+    Modifiers.PhysicalDamageBonusPve = 0
+    Modifiers.PhysicalDamageLinearBonusPve = 0
     Modifiers.PhysicalDamageReduction = 0
     Modifiers.MovementSpeed = 0
     Modifiers.EvasionBonus = 0

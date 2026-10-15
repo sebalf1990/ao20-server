@@ -280,7 +280,7 @@ Private Function NpcImpacto(ByVal NpcIndex As Integer, ByVal UserIndex As Intege
                     Rechazo = (RandomNumber(1, 100) <= ProbRechazo)
                     If Rechazo = True Then
                         'Se rechazo el ataque con el escudo
-                        Call SendData(SendTarget.ToPCAliveArea, UserIndex, PrepareMessagePlayWave(SND_ESCUDO, UserList(UserIndex).pos.x, UserList(UserIndex).pos.y))
+                        Call SendData(SendTarget.ToPCAliveArea, UserIndex, PrepareMessagePlayWave(GetShieldBlockSound(UserList(UserIndex).invent.EquippedShieldObjIndex), UserList(UserIndex).pos.x, UserList(UserIndex).pos.y))
                         If UserList(UserIndex).ChatCombate = 1 Then
                             Call Write_BlockedWithShieldUser(UserIndex)
                         End If
@@ -298,7 +298,7 @@ End Function
 Private Function GetUserDamage(ByVal UserIndex As Integer, ByVal TargetType As e_ReferenceType) As Long
     On Error GoTo GetUserDamge_Err
     With UserList(UserIndex)
-        GetUserDamage = GetUserDamageWithItem(UserIndex, .invent.EquippedWeaponObjIndex, .invent.EquippedMunitionObjIndex, TargetType) + UserMod.GetLinearDamageBonus(UserIndex)
+        GetUserDamage = GetUserDamageWithItem(UserIndex, .invent.EquippedWeaponObjIndex, .invent.EquippedMunitionObjIndex, TargetType) + UserMod.GetLinearDamageBonus(UserIndex, TargetType)
     End With
     Exit Function
 GetUserDamge_Err:
@@ -370,7 +370,7 @@ Private Sub UserDamageNpc(ByVal UserIndex As Integer, ByVal NpcIndex As Integer,
     On Error GoTo UserDamageNpc_Err
     With UserList(UserIndex)
         Dim Damage As Long, DamageBase As Long, DamageExtra As Long, Color As Long, DamageStr As String
-        If .invent.EquippedWeaponObjIndex = EspadaMataDragonesIndex And NpcList(NpcIndex).npcType = DRAGON Then
+        If .invent.EquippedWeaponObjIndex = EspadaMataDragonesIndex And NpcList(NpcIndex).npcType = e_NPCType.Dragon Then
             ' Espada MataDragones
             DamageBase = NpcList(NpcIndex).Stats.MinHp + NpcList(NpcIndex).Stats.def
             ' La pierde una vez usada
@@ -393,16 +393,27 @@ Private Sub UserDamageNpc(ByVal UserIndex As Integer, ByVal NpcIndex As Integer,
         ArmorPen = GetArmorPenetration(UserIndex, NpcDef)
         If ArmorPen > 0 Then
             Call modSendData.SendData(ToPCAliveArea, UserIndex, PrepareMessagePlayWave(e_SoundEffects.SwordClash, .pos.x, .pos.y))
-            Call WriteLocaleMsg(UserIndex, MSG_PERFORATED_ARMOR, e_FontTypeNames.FONTTYPE_INFOBOLD, ArmorPen)
+            Call WriteLocaleMsg(UserIndex, MSG_PERFORATED_ARMOR, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT, ArmorPen)
         End If
         NpcDef = max(0, NpcDef - ArmorPen)
         ' Defensa del NPC
         Damage = DamageBase - NpcDef
-        Damage = Damage * UserMod.GetPhysicalDamageModifier(UserList(UserIndex))
+        Damage = Damage * UserMod.GetPhysicalDamageModifier(UserList(UserIndex), eNpc)
         Damage = Damage * NPCs.GetPhysicDamageReduction(NpcList(NpcIndex))
         If IsFeatureEnabled("elemental_tags") Then
             Call CalculateElementalTagsModifiers(UserIndex, NpcIndex, Damage)
         End If
+        
+        ' ===== APLICAR BONO DE DAÑO POR CARTA =====
+        If IsFeatureEnabled("collectible_cards") Then
+            Dim CardDamageBonus As Single
+            CardDamageBonus = GetCardDamageBonusForNpc(UserIndex, NpcIndex)
+            If CardDamageBonus > 1# Then
+                Damage = CLng(Damage * CardDamageBonus)
+            End If
+        End If
+        ' ===========================================
+        
         If Damage < 0 Then Damage = 0
         If IsFeatureEnabled("healers_and_tanks") And .clase = e_Class.Warrior Then
             Dim Calc As Integer
@@ -432,7 +443,7 @@ Private Sub UserDamageNpc(ByVal UserIndex As Integer, ByVal NpcIndex As Integer,
                 DamageExtra = Damage * (Rnd * (max_stab_npc - min_stab_npc) + min_stab_npc)
                 ' Mostramos en consola el daño
                 If .ChatCombate = 1 Then
-                    Call WriteLocaleMsg(UserIndex, MSG_HIT_AND_STABBED_CREATURE, e_FontTypeNames.FONTTYPE_INFOBOLD, PonerPuntos(Damage) & "¬" & PonerPuntos(DamageExtra))
+                    Call WriteLocaleMsg(UserIndex, MSG_HIT_AND_STABBED_CREATURE, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT, PonerPuntos(Damage) & "¬" & PonerPuntos(DamageExtra))
                 End If
                 ' Color amarillo
                 Color = vbYellow
@@ -448,10 +459,16 @@ Private Sub UserDamageNpc(ByVal UserIndex As Integer, ByVal NpcIndex As Integer,
                 If RandomNumber(1, 100) <= GetCriticalHitChanceBase(UserIndex) Then
                     ' Daño del golpe crítico (usamos el daño base)
                     DamageExtra = DamageBase * 0.33
-                    DamageExtra = DamageExtra * UserMod.GetPhysicalDamageModifier(UserList(UserIndex))
+                    DamageExtra = DamageExtra * UserMod.GetPhysicalDamageModifier(UserList(UserIndex), eNpc)
                     DamageExtra = DamageExtra * NPCs.GetPhysicDamageReduction(NpcList(NpcIndex))
+                    If IsFeatureEnabled("collectible_cards") Then
+                        ' Aplicar bono de carta tambien al dano critico extra
+                        If CardDamageBonus > 1# Then
+                            DamageExtra = CLng(DamageExtra * CardDamageBonus)
+                        End If
+                    End If
                     If .ChatCombate = 1 Then
-                        Call WriteLocaleMsg(UserIndex, MSG_HIT_AND_CRITICAL_ON_CREATURE, e_FontTypeNames.FONTTYPE_INFOBOLD, PonerPuntos(Damage) & "¬" & (DamageExtra))
+                        Call WriteLocaleMsg(UserIndex, MSG_HIT_AND_CRITICAL_ON_CREATURE, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT, PonerPuntos(Damage) & "¬" & (DamageExtra))
                     End If
                     ' Color naranja
                     Color = RGB(225, 165, 0)
@@ -464,7 +481,7 @@ Private Sub UserDamageNpc(ByVal UserIndex As Integer, ByVal NpcIndex As Integer,
                 If critBonus > 0 Then
                     DamageExtra = critBonus
                     Color = critCol
-                    If .ChatCombate = 1 Then Call WriteLocaleMsg(UserIndex, MSG_HIT_AND_CRITICAL_ON_CREATURE, e_FontTypeNames.FONTTYPE_INFOBOLD, PonerPuntos(Damage) & "¬" & PonerPuntos(critBonus))
+                    If .ChatCombate = 1 Then Call WriteLocaleMsg(UserIndex, MSG_HIT_AND_CRITICAL_ON_CREATURE, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT, PonerPuntos(Damage) & "¬" & PonerPuntos(critBonus))
                 End If
             End If
         End If
@@ -547,13 +564,13 @@ Public Function UserDamageToNpc(ByVal attackerIndex As Integer, _
                                 ByVal Damage As Long, _
                                 ByVal Source As e_DamageSourceType, _
                                 ByVal ObjIndex As Integer) As e_DamageResult
-    Damage = Damage * UserMod.GetPhysicalDamageModifier(UserList(attackerIndex))
+    Damage = Damage * UserMod.GetPhysicalDamageModifier(UserList(attackerIndex), eNpc)
     Damage = Damage * NPCs.GetPhysicDamageReduction(NpcList(TargetIndex))
     UserDamageToNpc = NPCs.DoDamageOrHeal(TargetIndex, attackerIndex, e_ReferenceType.eUser, -Damage, Source, ObjIndex)
 End Function
 
-Public Function GetNpcDamage(ByVal NpcIndex As Integer) As Long
-    GetNpcDamage = RandomNumber(NpcList(NpcIndex).Stats.MinHIT, NpcList(NpcIndex).Stats.MaxHit) + NPCs.GetLinearDamageBonus(NpcIndex)
+Public Function GetNpcDamage(ByVal NpcIndex As Integer, ByVal TargetType As e_ReferenceType) As Long
+    GetNpcDamage = RandomNumber(NpcList(NpcIndex).Stats.MinHIT, NpcList(NpcIndex).Stats.MaxHit) + NPCs.GetLinearDamageBonus(NpcIndex, TargetType)
 End Function
 
 Private Function NpcDamage(ByVal NpcIndex As Integer, ByVal UserIndex As Integer) As Long
@@ -565,7 +582,7 @@ Private Function NpcDamage(ByVal NpcIndex As Integer, ByVal UserIndex As Integer
     Dim Damage   As Long, Lugar As Integer, absorbido As Integer
     Dim defbarco As Integer
     Dim obj      As t_ObjData
-    Damage = GetNpcDamage(NpcIndex)
+    Damage = GetNpcDamage(NpcIndex, eUser)
     If UserList(UserIndex).flags.Navegando = 1 And UserList(UserIndex).invent.EquippedShipObjIndex > 0 Then
         obj = ObjData(UserList(UserIndex).invent.EquippedShipObjIndex)
         defbarco = RandomNumber(obj.MinDef, obj.MaxDef)
@@ -600,8 +617,19 @@ Private Function NpcDamage(ByVal NpcIndex As Integer, ByVal UserIndex As Integer
             End If
     End Select
     Damage = Damage - absorbido - defbarco - defMontura - UserMod.GetDefenseBonus(UserIndex)
-    Damage = Damage * NPCs.GetPhysicalDamageModifier(NpcList(NpcIndex))
+    Damage = Damage * NPCs.GetPhysicalDamageModifier(NpcList(NpcIndex), eUser)
     Damage = Damage * UserMod.GetPhysicDamageReduction(UserList(UserIndex))
+    
+    ' ===== APLICAR REDUCCIÓN DE DAÑO POR CARTA =====
+    If IsFeatureEnabled("collectible_cards") Then
+        Dim CardDamageReduction As Single
+        CardDamageReduction = GetCardDamageReductionForNpc(UserIndex, NpcIndex)
+        If CardDamageReduction < 1# Then
+            Damage = CInt(Damage * CardDamageReduction)
+        End If
+    End If
+    ' ===========================================
+    
     If Damage < 0 Then Damage = 0
     If UserList(UserIndex).ChatCombate = 1 Then
         Call WriteNPCHitUser(UserIndex, Lugar, Damage)
@@ -652,7 +680,9 @@ Public Function NpcDoDamageToUser(ByVal attackerIndex As Integer, _
                                   ByVal Damage As Long, _
                                   ByVal Source As e_DamageSourceType, _
                                   ByVal ObjIndex As Integer) As e_DamageResult
-    Damage = Damage * NPCs.GetPhysicalDamageModifier(NpcList(attackerIndex))
+    If NpcList(attackerIndex).pos.Map <> UserList(TargetIndex).pos.Map Then Exit Function
+
+    Damage = Damage * NPCs.GetPhysicalDamageModifier(NpcList(attackerIndex), eUser)
     Damage = Damage * UserMod.GetPhysicDamageReduction(UserList(TargetIndex))
     NpcDoDamageToUser = UserMod.DoDamageOrHeal(TargetIndex, attackerIndex, e_ReferenceType.eNpc, -Damage, Source, ObjIndex)
     If UserList(TargetIndex).ChatCombate = 1 Then
@@ -664,13 +694,14 @@ Public Function NpcAtacaUser(ByVal NpcIndex As Integer, ByVal UserIndex As Integ
     On Error GoTo NpcAtacaUser_Err
     If UserList(UserIndex).flags.AdminInvisible = 1 Then Exit Function
     If UserList(UserIndex).flags.Muerto = 1 Then Exit Function
+    If NpcList(NpcIndex).pos.Map <> UserList(UserIndex).pos.Map Then Exit Function
     If (Not UserList(UserIndex).flags.Privilegios And e_PlayerType.User) <> 0 And Not UserList(UserIndex).flags.AdminPerseguible Then Exit Function
     ' El npc puede atacar ???
     If Not IntervaloPermiteAtacarNPC(NpcIndex) Then
         NpcAtacaUser = False
         Exit Function
     End If
-    If ((MapData(UserList(UserIndex).pos.Map, UserList(UserIndex).pos.x, UserList(UserIndex).pos.y).Blocked And 2 ^ (Heading - 1)) <> 0) Then
+    If ((MapData(UserList(UserIndex).pos.x, UserList(UserIndex).pos.y, UserList(UserIndex).pos.Map).Blocked And 2 ^ (Heading - 1)) <> 0) Then
         NpcAtacaUser = False
         Exit Function
     End If
@@ -742,7 +773,7 @@ Public Function NpcDamageNpc(ByVal Atacante As Integer, ByVal Victima As Integer
 
     With NpcList(Atacante)
         Damage = RandomNumber(.Stats.MinHIT, .Stats.MaxHit) _
-                 + NPCs.GetLinearDamageBonus(Atacante) _
+                 + NPCs.GetLinearDamageBonus(Atacante, eNpc) _
                  - NPCs.GetDefenseBonus(Victima) _
                  - NpcList(Victima).Stats.def
     End With
@@ -767,9 +798,22 @@ Public Function NpcDamageToNpc(ByVal attackerIndex As Integer, _
         Dim finalDamage As Long
 
         finalDamage = Damage
-        finalDamage = finalDamage * NPCs.GetPhysicalDamageModifier(NpcList(attackerIndex))
+        
+        ' ===== APLICAR BONO DE DAÑO POR CARTA =====
+        If IsFeatureEnabled("collectible_cards") Then
+            If .MaestroUser.ArrayIndex > 0 Then
+                Dim CardDamageBonus As Single
+                CardDamageBonus = GetCardDamageBonusForNpc(.MaestroUser.ArrayIndex, TargetIndex)
+                If CardDamageBonus > 1# Then
+                    finalDamage = CLng(finalDamage * CardDamageBonus)
+                End If
+            End If
+        End If
+        ' ===========================================
+        
+        finalDamage = finalDamage * NPCs.GetPhysicalDamageModifier(NpcList(attackerIndex), eNpc)
         finalDamage = finalDamage * NPCs.GetPhysicDamageReduction(NpcList(TargetIndex))
-
+        
         NpcDamageToNpc = NPCs.DoDamageOrHeal(TargetIndex, attackerIndex, eNpc, -finalDamage, e_phisical, 0)
 
         If NpcDamageToNpc = eDead Then
@@ -867,7 +911,7 @@ Public Sub UsuarioAtacaNpc(ByVal UserIndex As Integer, ByVal NpcIndex As Integer
     'Si el npc es solo atacable para clanes y el usuario no tiene clan, le avisa y sale de la funcion
     If NpcList(NpcIndex).OnlyForGuilds = 1 And UserList(UserIndex).GuildIndex <= 0 Then
         'Msg2001=Debes pertenecer a un clan para atacar a este NPC
-        Call WriteLocaleMsg(UserIndex, MSG_DEBES_PERTENECER_CLAN_ATACAR_NPC, e_FontTypeNames.FONTTYPE_WARNING)
+        Call WriteLocaleMsg(UserIndex, MSG_DEBES_PERTENECER_CLAN_ATACAR_NPC, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_New_Naranja)
         Exit Sub
     End If
     Dim UserAttackInteractionResult As t_AttackInteractionResult
@@ -885,6 +929,8 @@ Public Sub UsuarioAtacaNpc(ByVal UserIndex As Integer, ByVal NpcIndex As Integer
         ' Suena el Golpe en el cliente.
         If NpcList(NpcIndex).flags.Snd2 > 0 Then
             Call SendData(SendTarget.ToNPCAliveArea, NpcIndex, PrepareMessagePlayWave(NpcList(NpcIndex).flags.Snd2, NpcList(NpcIndex).pos.x, NpcList(NpcIndex).pos.y))
+        ElseIf aType = Ranged Then
+            Call SendData(SendTarget.ToPCAliveArea, UserIndex, PrepareMessagePlayWave(SND_FLECHA_IMPACTO, NpcList(NpcIndex).pos.x, NpcList(NpcIndex).pos.y))
         Else
             Call SendData(SendTarget.ToPCAliveArea, UserIndex, PrepareMessagePlayWave(SND_IMPACTO2, NpcList(NpcIndex).pos.x, NpcList(NpcIndex).pos.y))
         End If
@@ -895,14 +941,14 @@ Public Sub UsuarioAtacaNpc(ByVal UserIndex As Integer, ByVal NpcIndex As Integer
                     NpcList(NpcIndex).flags.Paralizado = 1
                     NpcList(NpcIndex).Contadores.Paralisis = (IntervaloParalizado / 3) * 7
                     If UserList(UserIndex).ChatCombate = 1 Then
-                        Call WriteLocaleMsg(UserIndex, MSG_ATTACK_PARALYZED_CREATURE, e_FontTypeNames.FONTTYPE_FIGHT)
+                        Call WriteLocaleMsg(UserIndex, MSG_ATTACK_PARALYZED_CREATURE, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
                     End If
                     UserList(UserIndex).Counters.timeFx = 3
                     Call SendData(SendTarget.ToPCAliveArea, UserIndex, PrepareMessageCreateFX(NpcList(NpcIndex).Char.charindex, 8, 0, UserList(UserIndex).pos.x, UserList( _
                             UserIndex).pos.y))
                 Else
                     If UserList(UserIndex).ChatCombate = 1 Then
-                        Call WriteLocaleMsg(UserIndex, MSG_NPC_IMMUNE_TO_THIS_SPELL, e_FontTypeNames.FONTTYPE_INFO)
+                        Call WriteLocaleMsg(UserIndex, MSG_NPC_IMMUNE_TO_THIS_SPELL, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_New_Naranja)
                     End If
                 End If
             End If
@@ -941,6 +987,9 @@ Public Sub UsuarioAtacaNpc(ByVal UserIndex As Integer, ByVal NpcIndex As Integer
         Call EffectsOverTime.TargetDidHit(UserList(UserIndex).EffectOverTime, NpcIndex, eNpc, e_phisical)
     Else
         Call EffectsOverTime.TargetFailedAttack(UserList(UserIndex).EffectOverTime, NpcIndex, eNpc, e_phisical)
+        If aType = Ranged Then
+            Call SendData(SendTarget.ToPCAliveArea, UserIndex, PrepareMessagePlayWave(SND_FLECHA_FALLO, UserList(UserIndex).pos.x, UserList(UserIndex).pos.y))
+        End If
         Call SendData(SendTarget.ToPCAliveArea, UserIndex, PrepareMessageCharSwing(UserList(UserIndex).Char.charindex, , , IIf(UserList(UserIndex).flags.invisible + UserList( _
                 UserIndex).flags.Oculto > 0, False, True)))
     End If
@@ -952,28 +1001,28 @@ End Sub
 Public Sub UserAttackPosition(ByVal UserIndex As Integer, ByRef TargetPos As t_WorldPos, Optional ByVal IsExtraHit As Boolean = False)
     'Exit if not legal
     If TargetPos.x >= XMinMapSize And TargetPos.x <= XMaxMapSize And TargetPos.y >= YMinMapSize And TargetPos.y <= YMaxMapSize Then
-        If ((MapData(TargetPos.Map, TargetPos.x, TargetPos.y).Blocked And 2 ^ (UserList(UserIndex).Char.Heading - 1)) <> 0) Then
+        If ((MapData(TargetPos.x, TargetPos.y, TargetPos.Map).Blocked And 2 ^ (UserList(UserIndex).Char.Heading - 1)) <> 0) Then
             Call SendData(SendTarget.ToPCAliveArea, UserIndex, PrepareMessageCharSwing(UserList(UserIndex).Char.charindex, True, False))
             Exit Sub
         End If
         Dim Index As Integer
-        Index = MapData(TargetPos.Map, TargetPos.x, TargetPos.y).UserIndex
+        Index = MapData(TargetPos.x, TargetPos.y, TargetPos.Map).UserIndex
         'Look for user
         If Index > 0 Then
             Call UsuarioAtacaUsuario(UserIndex, Index, Melee)
             'Look for NPC
-        ElseIf MapData(TargetPos.Map, TargetPos.x, TargetPos.y).NpcIndex > 0 Then
-            Index = MapData(TargetPos.Map, TargetPos.x, TargetPos.y).NpcIndex
+        ElseIf MapData(TargetPos.x, TargetPos.y, TargetPos.Map).NpcIndex > 0 Then
+            Index = MapData(TargetPos.x, TargetPos.y, TargetPos.Map).NpcIndex
             If NpcList(Index).Attackable Then
                 If IsValidUserRef(NpcList(Index).MaestroUser) And MapInfo(NpcList(Index).pos.Map).Seguro = 1 Then
                     'Msg1041= No podés atacar mascotas en zonas seguras
-                    Call WriteLocaleMsg(UserIndex, MSG_NO_PODES_ATACAR_MASCOTAS_ZONAS_SEGURAS, e_FontTypeNames.FONTTYPE_FIGHT)
+                    Call WriteLocaleMsg(UserIndex, MSG_NO_PODES_ATACAR_MASCOTAS_ZONAS_SEGURAS, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_New_Naranja)
                     Exit Sub
                 End If
                 Call UsuarioAtacaNpc(UserIndex, Index, Melee)
             Else
                 'Msg1042= No podés atacar a este NPC
-                Call WriteLocaleMsg(UserIndex, MSG_NO_PODES_ATACAR_NPC, e_FontTypeNames.FONTTYPE_FIGHT)
+                Call WriteLocaleMsg(UserIndex, MSG_NO_PODES_ATACAR_NPC, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_New_Naranja)
             End If
             Exit Sub
         Else
@@ -1002,7 +1051,7 @@ Public Sub UsuarioAtaca(ByVal UserIndex As Integer)
         'Quitamos stamina
         If .Stats.MinSta < 10 Then
             'Msg93=Estás muy cansado
-            Call WriteLocaleMsg(UserIndex, MSG_MUY_CANSADO, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_MUY_CANSADO, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
             'Msg2129=¡No tengo energía!
             Call SendData(SendTarget.ToIndex, UserIndex, PrepareLocalizedChatOverHead(MSG_NO_ENERGY, UserList(UserIndex).Char.charindex, vbWhite))
             Exit Sub
@@ -1160,7 +1209,7 @@ Private Function UsuarioImpacto(ByVal AtacanteIndex As Integer, ByVal VictimaInd
             ' UsuarioImpacto solo devolvia hit/no-hit.
             wasBlocked = True
             'Se rechazo el ataque con el escudo
-            Call SendData(SendTarget.ToPCAliveArea, VictimaIndex, PrepareMessagePlayWave(SND_ESCUDO, UserList(VictimaIndex).pos.x, UserList(VictimaIndex).pos.y))
+            Call SendData(SendTarget.ToPCAliveArea, VictimaIndex, PrepareMessagePlayWave(GetShieldBlockSound(UserList(VictimaIndex).invent.EquippedShieldObjIndex), UserList(VictimaIndex).pos.x, UserList(VictimaIndex).pos.y))
             Call SendData(SendTarget.ToPCAliveArea, VictimaIndex, PrepareMessageEscudoMov(UserList(VictimaIndex).Char.charindex))
             If UserList(AtacanteIndex).ChatCombate = 1 Then
                 Call Write_BlockedWithShieldOther(AtacanteIndex)
@@ -1173,9 +1222,9 @@ Private Function UsuarioImpacto(ByVal AtacanteIndex As Integer, ByVal VictimaInd
                     VictimaIndex).pos.y))
             Call SubirSkill(VictimaIndex, e_Skill.Defensa)
         Else
-            Call WriteConsoleMsg(VictimaIndex, PrepareMessageLocaleMsg(MSG_ATACO_FALLO, UserList(AtacanteIndex).name, e_FontTypeNames.FONTTYPE_FIGHT)) ' Msg1930=¡¬1 te atacó y falló!
+            Call WriteLocaleMsg(VictimaIndex, MSG_ATACO_FALLO, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT, UserList(AtacanteIndex).name) ' Msg1930=¡¬1 te atacó y falló!
             'Msg1043= ¡Has fallado el golpe!
-            Call WriteLocaleMsg(AtacanteIndex, "1043", e_FontTypeNames.FONTTYPE_FIGHT)
+            Call WriteLocaleMsg(AtacanteIndex, MSG_HAS_FALLADO_EL_GOLPE, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
         End If
     End If
     Exit Function
@@ -1188,7 +1237,7 @@ Public Sub UsuarioAtacaUsuario(ByVal AtacanteIndex As Integer, ByVal VictimaInde
     Dim sendto As SendTarget
     If Not PuedeAtacar(AtacanteIndex, VictimaIndex) Then Exit Sub
     If Distancia(UserList(AtacanteIndex).pos, UserList(VictimaIndex).pos) > MAXDISTANCIAARCO Then
-        Call WriteLocaleMsg(AtacanteIndex, "8", e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteLocaleMsg(AtacanteIndex, MSG_SACERDOTE_PUEDE_CURARTE_DEBIDO_DEMASIADO_LEJOS, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
         Exit Sub
     End If
     Call UsuarioAtacadoPorUsuario(AtacanteIndex, VictimaIndex)
@@ -1256,6 +1305,9 @@ Public Sub UsuarioAtacaUsuario(ByVal AtacanteIndex As Integer, ByVal VictimaInde
         Else
             sendto = SendTarget.ToPCAliveArea
         End If
+        If aType = Ranged Then
+            Call SendData(sendto, AtacanteIndex, PrepareMessagePlayWave(SND_FLECHA_FALLO, UserList(AtacanteIndex).pos.x, UserList(AtacanteIndex).pos.y))
+        End If
         Call SendData(sendto, AtacanteIndex, PrepareMessageCharSwing(UserList(AtacanteIndex).Char.charindex, , , IIf(UserList(AtacanteIndex).flags.invisible + UserList( _
                 AtacanteIndex).flags.Oculto > 0, False, True)))
     End If
@@ -1316,12 +1368,12 @@ Private Sub UserDamageToUser(ByVal AtacanteIndex As Integer, ByVal VictimaIndex 
         ArmorPen = GetArmorPenetration(AtacanteIndex, Defensa)
         If ArmorPen > 0 Then
             Call modSendData.SendData(ToPCAliveArea, AtacanteIndex, PrepareMessagePlayWave(e_SoundEffects.SwordClash, .pos.x, .pos.y))
-            Call WriteLocaleMsg(AtacanteIndex, MSG_PERFORATED_ARMOR, e_FontTypeNames.FONTTYPE_INFOBOLD, ArmorPen)
+            Call WriteLocaleMsg(AtacanteIndex, MSG_PERFORATED_ARMOR, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT, ArmorPen)
         End If
         Defensa = max(0, Defensa - ArmorPen)
         ' Restamos la defensa
         Damage = BaseDamage - Defensa
-        Damage = Damage * UserMod.GetPhysicalDamageModifier(UserList(AtacanteIndex))
+        Damage = Damage * UserMod.GetPhysicalDamageModifier(UserList(AtacanteIndex), eUser)
         Damage = Damage * UserMod.GetPhysicDamageReduction(UserList(VictimaIndex))
         If Damage < 0 Then Damage = 0
         DamageStr = PonerPuntos(Damage)
@@ -1342,9 +1394,10 @@ Private Sub UserDamageToUser(ByVal AtacanteIndex As Integer, ByVal VictimaIndex 
                 BonusDamage = Damage * ModicadorApuñalarClase(UserList(AtacanteIndex).clase)
                 DamageStr = PonerPuntos(BonusDamage)
                 If UserList(AtacanteIndex).ChatCombate = 1 Then
-                    Call WriteLocaleMsg(AtacanteIndex, "210", e_FontTypeNames.FONTTYPE_INFOBOLD, .name & "¬" & DamageStr)
+                    Call WriteLocaleMsg(AtacanteIndex, MSG_HAS_APUNALADO_A_POR, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT, .name & "¬" & DamageStr)
                 End If
-                Call WriteLocaleMsg(VictimaIndex, "211", e_FontTypeNames.FONTTYPE_INFOBOLD, UserList(AtacanteIndex).name & "¬" & DamageStr)
+                ' Mostramos en consola el golpe a la victima independientemente de la configuración de chat
+                Call WriteLocaleMsg(VictimaIndex, MSG_TE_HA_APUNALADO_POR, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT, UserList(AtacanteIndex).name & "¬" & DamageStr)
                 'Fx de apuñalar
                 Call SendData(SendTarget.ToPCAliveArea, AtacanteIndex, PrepareMessageCreateFX(UserList(VictimaIndex).Char.charindex, FX_STABBING, 0, UserList( _
                         AtacanteIndex).pos.x, UserList(AtacanteIndex).pos.y))
@@ -1359,7 +1412,7 @@ Private Sub UserDamageToUser(ByVal AtacanteIndex As Integer, ByVal VictimaIndex 
                 ' Efecto en pantalla a ambos
                 Call WriteFlashScreen(VictimaIndex, &H3C3CFF, 200, True)
                 Call WriteFlashScreen(AtacanteIndex, &H3C3CFF, 150, True)
-                Call SendData(SendTarget.ToPCAliveArea, AtacanteIndex, PrepareMessagePlayWave(SND_IMPACTO, UserList(AtacanteIndex).pos.x, UserList(AtacanteIndex).pos.y))
+                Call SendData(SendTarget.ToPCAliveArea, AtacanteIndex, PrepareMessagePlayWave(IIf(aType = Ranged, SND_FLECHA_IMPACTO, SND_IMPACTO), UserList(AtacanteIndex).pos.x, UserList(AtacanteIndex).pos.y))
                 didStabU = True
             End If
             ' Sube skills en apuñalar
@@ -1374,10 +1427,10 @@ Private Sub UserDamageToUser(ByVal AtacanteIndex As Integer, ByVal VictimaIndex 
                     BonusDamage = Damage * CriticalHitDmgModifier
                     DamageStr = PonerPuntos(BonusDamage)
                     If UserList(AtacanteIndex).ChatCombate = 1 Then
-                        Call WriteLocaleMsg(AtacanteIndex, MSG_HIT_AND_CRITICAL_ON_CREATURE, e_FontTypeNames.FONTTYPE_INFOBOLD, Damage & "¬" & DamageStr)
+                        Call WriteLocaleMsg(AtacanteIndex, MSG_HIT_AND_CRITICAL_ON_CREATURE, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT, Damage & "¬" & DamageStr)
                     End If
                     If .ChatCombate = 1 Then
-                        Call WriteLocaleMsg(VictimaIndex, MSG_PLAYER_CRITICALLY_HIT_YOU, e_FontTypeNames.FONTTYPE_INFOBOLD, UserList(AtacanteIndex).name & "¬" & DamageStr)
+                        Call WriteLocaleMsg(VictimaIndex, MSG_PLAYER_CRITICALLY_HIT_YOU, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT, UserList(AtacanteIndex).name & "¬" & DamageStr)
                     End If
                     Call SendData(SendTarget.ToPCAliveArea, AtacanteIndex, PrepareMessagePlayWave(SND_IMPACTO_CRITICO, UserList(AtacanteIndex).pos.x, UserList(AtacanteIndex).pos.y))
                     ' Color naranja
@@ -1390,8 +1443,8 @@ Private Sub UserDamageToUser(ByVal AtacanteIndex As Integer, ByVal VictimaIndex 
                 If critBonusU > 0 Then
                     BonusDamage = critBonusU
                     Color = critColU
-                    If UserList(AtacanteIndex).ChatCombate = 1 Then Call WriteLocaleMsg(AtacanteIndex, MSG_HIT_AND_CRITICAL_ON_CREATURE, e_FontTypeNames.FONTTYPE_INFOBOLD, PonerPuntos(Damage) & "¬" & PonerPuntos(critBonusU))
-                    If .ChatCombate = 1 Then Call WriteLocaleMsg(VictimaIndex, MSG_PLAYER_CRITICALLY_HIT_YOU, e_FontTypeNames.FONTTYPE_INFOBOLD, UserList(AtacanteIndex).name & "¬" & PonerPuntos(critBonusU))
+                    If UserList(AtacanteIndex).ChatCombate = 1 Then Call WriteLocaleMsg(AtacanteIndex, MSG_HIT_AND_CRITICAL_ON_CREATURE, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT, PonerPuntos(Damage) & "¬" & PonerPuntos(critBonusU))
+                    If .ChatCombate = 1 Then Call WriteLocaleMsg(VictimaIndex, MSG_PLAYER_CRITICALLY_HIT_YOU, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT, UserList(AtacanteIndex).name & "¬" & PonerPuntos(critBonusU))
                 End If
             End If
         End If
@@ -1457,7 +1510,7 @@ Public Function UserDoDamageToUser(ByVal attackerIndex As Integer, _
                                    ByVal Damage As Long, _
                                    ByVal Source As e_DamageSourceType, _
                                    ByVal ObjIndex As Integer) As e_DamageResult
-    Damage = Damage * UserMod.GetPhysicalDamageModifier(UserList(attackerIndex))
+    Damage = Damage * UserMod.GetPhysicalDamageModifier(UserList(attackerIndex), eUser)
     Damage = Damage * UserMod.GetPhysicDamageReduction(UserList(TargetIndex))
     UserDoDamageToUser = UserMod.DoDamageOrHeal(TargetIndex, attackerIndex, e_ReferenceType.eUser, -Damage, Source, ObjIndex)
     Dim DamageStr As String
@@ -1565,14 +1618,14 @@ Public Function PuedeAtacar(ByVal attackerIndex As Integer, ByVal VictimIndex As
     'MUY importante el orden de estos "IF"...
     'Estas muerto no podes atacar
     If UserList(attackerIndex).flags.Muerto = 1 Then
-        Call WriteLocaleMsg(attackerIndex, MSG_MUERTO, e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteLocaleMsg(attackerIndex, MSG_MUERTO, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
         PuedeAtacar = False
         Exit Function
     End If
     If UserList(attackerIndex).flags.EnReto Then
         If Retos.Salas(UserList(attackerIndex).flags.SalaReto).TiempoItems > 0 Then
             'Msg1044= No podés atacar en este momento.
-            Call WriteLocaleMsg(attackerIndex, "1044", e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(attackerIndex, MSG_NO_PODES_ATACAR_EN_ESTE_MOMENTO, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
             PuedeAtacar = False
             Exit Function
         End If
@@ -1580,46 +1633,46 @@ Public Function PuedeAtacar(ByVal attackerIndex As Integer, ByVal VictimIndex As
     'No podes atacar a alguien muerto
     If UserList(VictimIndex).flags.Muerto = 1 Then
         'Msg1045= No podés atacar a un espiritu.
-        Call WriteLocaleMsg(attackerIndex, "1045", e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteLocaleMsg(attackerIndex, MSG_NO_PODES_ATACAR_A_UN_ESPIRITU, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
         PuedeAtacar = False
         Exit Function
     End If
     If UserList(attackerIndex).Grupo.Id > 0 And UserList(VictimIndex).Grupo.Id > 0 And UserList(attackerIndex).Grupo.Id = UserList(VictimIndex).Grupo.Id Then
         'Msg1046= No podés atacar a un miembro de tu grupo.
-        Call WriteLocaleMsg(attackerIndex, "1046", e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteLocaleMsg(attackerIndex, MSG_NO_PODES_ATACAR_A_UN_MIEMBRO_DE_TU_GRUPO, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
         PuedeAtacar = False
         Exit Function
     End If
     ' No podes atacar si estas en consulta
     If UserList(attackerIndex).flags.EnConsulta Then
         'Msg1047= No podés atacar usuarios mientras estás en consulta.
-        Call WriteLocaleMsg(attackerIndex, "1047", e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteLocaleMsg(attackerIndex, MSG_NO_PODES_ATACAR_USUARIOS_MIENTRAS_ESTAS_EN_CONSULTA, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
         PuedeAtacar = False
         Exit Function
     End If
     ' No podes atacar si esta en consulta
     If UserList(VictimIndex).flags.EnConsulta Then
         'Msg1048= No podés atacar usuarios mientras estan en consulta.
-        Call WriteLocaleMsg(attackerIndex, "1048", e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteLocaleMsg(attackerIndex, MSG_NO_PODES_ATACAR_USUARIOS_MIENTRAS_ESTAN_EN_CONSULTA, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
         PuedeAtacar = False
         Exit Function
     End If
     If UserList(attackerIndex).flags.Maldicion = 1 Then
         'Msg1049= ¡Estás maldito! No podes atacar.
-        Call WriteLocaleMsg(attackerIndex, "1049", e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteLocaleMsg(attackerIndex, MSG_ESTAS_MALDITO_NO_PODES_ATACAR, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
         PuedeAtacar = False
         Exit Function
     End If
     If UserList(attackerIndex).flags.Montado = 1 Then
         'Msg1050= No podés atacar usando una montura.
-        Call WriteLocaleMsg(attackerIndex, "1050", e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteLocaleMsg(attackerIndex, MSG_NO_PODES_ATACAR_USANDO_UNA_MONTURA, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
         PuedeAtacar = False
         Exit Function
     End If
     If Not MapInfo(UserList(VictimIndex).pos.Map).FriendlyFire And UserList(VictimIndex).flags.CurrentTeam > 0 And UserList(VictimIndex).flags.CurrentTeam = UserList( _
             attackerIndex).flags.CurrentTeam Then
         'Msg1051= No podes atacar un miembro de tu equipo.
-        Call WriteLocaleMsg(attackerIndex, "1051", e_FontTypeNames.FONTTYPE_WARNING)
+        Call WriteLocaleMsg(attackerIndex, MSG_NO_PODES_ATACAR_UN_MIEMBRO_DE_TU_EQUIPO, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
         PuedeAtacar = False
         Exit Function
     End If
@@ -1627,7 +1680,7 @@ Public Function PuedeAtacar(ByVal attackerIndex As Integer, ByVal VictimIndex As
     rank = e_PlayerType.Admin Or e_PlayerType.Dios Or e_PlayerType.SemiDios Or e_PlayerType.Consejero
     If (UserList(VictimIndex).flags.Privilegios And rank) > (UserList(attackerIndex).flags.Privilegios And rank) Then
         'Msg1053= El ser es demasiado poderoso
-        Call WriteLocaleMsg(attackerIndex, "1053", e_FontTypeNames.FONTTYPE_WARNING)
+        Call WriteLocaleMsg(attackerIndex, MSG_EL_SER_ES_DEMASIADO_PODEROSO, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
         PuedeAtacar = False
         Exit Function
     End If
@@ -1653,7 +1706,7 @@ Public Function PuedeAtacar(ByVal attackerIndex As Integer, ByVal VictimIndex As
         If UserList(attackerIndex).flags.SeguroClan And NivelDeClan(UserList(attackerIndex).GuildIndex) >= RequiredGuildLevelSafe Then
             If UserList(attackerIndex).GuildIndex = UserList(VictimIndex).GuildIndex Then
                 'Msg1054= No podes atacar a un miembro de tu clan.
-                Call WriteLocaleMsg(attackerIndex, "1054", e_FontTypeNames.FONTTYPE_INFOIAO)
+                Call WriteLocaleMsg(attackerIndex, MSG_NO_PODES_ATACAR_A_UN_MIEMBRO_DE_TU_CLAN, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
                 PuedeAtacar = False
                 Exit Function
             End If
@@ -1664,13 +1717,13 @@ Public Function PuedeAtacar(ByVal attackerIndex As Integer, ByVal VictimIndex As
         ' Si ataca otro armada
         If esArmada(VictimIndex) Then
             'Msg1055= Los miembros del Ejercito Real tienen prohibido atacarse entre sí.
-            Call WriteLocaleMsg(attackerIndex, "1055", e_FontTypeNames.FONTTYPE_WARNING)
+            Call WriteLocaleMsg(attackerIndex, MSG_LOS_MIEMBROS_DEL_EJERCITO_REAL_TIENEN_PROHIBIDO_ATACARSE_ENTRE_SI, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
             PuedeAtacar = False
             Exit Function
             ' Si ataca un ciudadano
         ElseIf esCiudadano(VictimIndex) Then
             'Msg1056= Los miembros del Ejercito Real tienen prohibido atacar ciudadanos.
-            Call WriteLocaleMsg(attackerIndex, "1056", e_FontTypeNames.FONTTYPE_WARNING)
+            Call WriteLocaleMsg(attackerIndex, MSG_LOS_MIEMBROS_DEL_EJERCITO_REAL_TIENEN_PROHIBIDO_ATACAR_CIUDADANOS, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
             PuedeAtacar = False
             Exit Function
         End If
@@ -1681,12 +1734,12 @@ Public Function PuedeAtacar(ByVal attackerIndex As Integer, ByVal VictimIndex As
             If (UserList(attackerIndex).flags.Seguro) Then
                 If esCiudadano(VictimIndex) Then
                     'Msg1057= No podés atacar ciudadanos, para hacerlo debes desactivar el seguro.
-                    Call WriteLocaleMsg(attackerIndex, "1057", e_FontTypeNames.FONTTYPE_WARNING)
+                    Call WriteLocaleMsg(attackerIndex, MSG_NO_PODES_ATACAR_CIUDADANOS_PARA_HACERLO_DEBES_DESACTIVAR_EL_SEGURO, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
                     PuedeAtacar = False
                     Exit Function
                 ElseIf esArmada(VictimIndex) Then
                     'Msg1058= No podés atacar miembros del Ejercito Real, para hacerlo debes desactivar el seguro.
-                    Call WriteLocaleMsg(attackerIndex, "1058", e_FontTypeNames.FONTTYPE_WARNING)
+                    Call WriteLocaleMsg(attackerIndex, MSG_NO_PODES_ATACAR_MIEMBROS_DEL_EJERCITO_REAL_PARA_HACERLO_DEBES_DESACTIVAR_EL_SEGURO, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
                     PuedeAtacar = False
                     Exit Function
                 End If
@@ -1696,7 +1749,7 @@ Public Function PuedeAtacar(ByVal attackerIndex As Integer, ByVal VictimIndex As
                 PuedeAtacar = True
             ElseIf MapInfo(UserList(VictimIndex).pos.Map).Seguro <> 1 Then
                 'Msg1059= Los miembros de las Fuerzas del Caos no se pueden atacar entre sí.
-                Call WriteLocaleMsg(attackerIndex, "1059", e_FontTypeNames.FONTTYPE_WARNING)
+                Call WriteLocaleMsg(attackerIndex, MSG_LOS_MIEMBROS_DE_LA_LEGION_OSCURA_NO_SE_PUEDEN_ATACAR_ENTRE_SI, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
                 PuedeAtacar = False
                 Exit Function
             End If
@@ -1708,7 +1761,7 @@ Public Function PuedeAtacar(ByVal attackerIndex As Integer, ByVal VictimIndex As
             If UserList(attackerIndex).Faccion.RecompensasReal >= 3 Then
                 If UserList(VictimIndex).pos.Map = 58 Or UserList(VictimIndex).pos.Map = 59 Or UserList(VictimIndex).pos.Map = 60 Then
                     'Msg1060= Huye de la ciudad! estas siendo atacado y no podrás defenderte.
-                    Call WriteLocaleMsg(VictimIndex, "1060", e_FontTypeNames.FONTTYPE_WARNING)
+                    Call WriteLocaleMsg(VictimIndex, MSG_HUYE_DE_LA_CIUDAD_UN_MIEMBRO_DE_LA_ARMADA_REAL_TE_ESTA_ATACANDO, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
                     PuedeAtacar = True 'Beneficio de Armadas que atacan en su ciudad.
                     Exit Function
                 End If
@@ -1718,22 +1771,22 @@ Public Function PuedeAtacar(ByVal attackerIndex As Integer, ByVal VictimIndex As
             If UserList(attackerIndex).Faccion.RecompensasCaos >= 3 Then
                 If UserList(VictimIndex).pos.Map = 195 Or UserList(VictimIndex).pos.Map = 196 Then
                     'Msg1061= Huye de la ciudad! estas siendo atacado y no podrás defenderte.
-                    Call WriteLocaleMsg(VictimIndex, "1061", e_FontTypeNames.FONTTYPE_WARNING)
+                    Call WriteLocaleMsg(VictimIndex, MSG_HUYE_DE_LA_CIUDAD_UN_MIEMBRO_DE_LA_LEGION_OSCURA_TE_ESTA_ATACANDO, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
                     PuedeAtacar = True 'Beneficio de Caos que atacan en su ciudad.
                     Exit Function
                 End If
             End If
         End If
         'Msg1062= Esta es una zona segura, aqui no podes atacar otros usuarios.
-        Call WriteLocaleMsg(attackerIndex, "1062", e_FontTypeNames.FONTTYPE_WARNING)
+        Call WriteLocaleMsg(attackerIndex, MSG_ESTA_ES_UNA_ZONA_SEGURA_NO_PODES_ATACAR_OTROS_USUARIOS_AQUI, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
         PuedeAtacar = False
         Exit Function
     End If
     'Estas atacando desde un trigger seguro? o tu victima esta en uno asi?
-    If MapData(UserList(VictimIndex).pos.Map, UserList(VictimIndex).pos.x, UserList(VictimIndex).pos.y).trigger = e_Trigger.ZonaSegura Or MapData(UserList( _
-            attackerIndex).pos.Map, UserList(attackerIndex).pos.x, UserList(attackerIndex).pos.y).trigger = e_Trigger.ZonaSegura Then
+    If MapData(UserList(VictimIndex).pos.x, UserList(VictimIndex).pos.y, UserList(VictimIndex).pos.Map).trigger = e_Trigger.ZonaSegura Or MapData(UserList(attackerIndex).pos.x, UserList(attackerIndex).pos.y, UserList( _
+            attackerIndex).pos.Map).trigger = e_Trigger.ZonaSegura Then
         'Msg1063= No podes pelear aqui.
-        Call WriteLocaleMsg(attackerIndex, "1063", e_FontTypeNames.FONTTYPE_WARNING)
+        Call WriteLocaleMsg(attackerIndex, MSG_NO_PODES_PELEAR_EN_ESTA_ZONA, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
         PuedeAtacar = False
         Exit Function
     End If
@@ -1794,10 +1847,21 @@ Private Sub GetExpForUser(ByVal UserIndex As Integer, ByVal NpcIndex As Integer,
                         Dim PorcentajeFinal As Integer
                         PorcentajeFinal = Penalty * 100
                         'Msg1467=Debido a tu nivel, obtienes el ¬1% de la experiencia.
-                        Call WriteLocaleMsg(UserIndex, MSG_DEBIDO_NIVEL_OBTIENES_EXPERIENCIA, e_FontTypeNames.FONTTYPE_WARNING, PorcentajeFinal)
+                        Call WriteLocaleMsg(UserIndex, MSG_DEBIDO_NIVEL_OBTIENES_EXPERIENCIA, e_TextChannel.TEXTCHANNEL_PROGRESSION, e_FontTypeNames.FONTTYPE_EXP, PorcentajeFinal)
                     End If
                 End If
             End If
+            
+            If IsFeatureEnabled("collectible_cards") Then
+                ' Apply card collection bonus for THIS specific NPC
+                Dim CardBonus As Single
+                CardBonus = GetCardExpBonusForNpc(UserIndex, NpcIndex)
+                
+                If CardBonus > 1# Then
+                    ExpaDar = ExpaDar * CardBonus
+                End If
+            End If
+            
             If .Stats.ELV < STAT_MAXELV Then
                 .Stats.Exp = .Stats.Exp + ExpaDar
                 If .Stats.Exp > MAXEXP Then .Stats.Exp = MAXEXP
@@ -1864,7 +1928,7 @@ Private Sub CalcularDarExpGrupal(ByVal UserIndex As Integer, ByVal NpcIndex As I
                     ' Enviar el mensaje solo si el miembro no está muerto y tiene el chat de combate activado
                     If UserList(Index).flags.Muerto = 0 And UserList(Index).ChatCombate = 1 Then
                         'Msg1437=El líder del grupo está demasiado lejos, su experiencia se pierde.
-                        Call WriteLocaleMsg(Index, "1437", e_FontTypeNames.FONTTYPE_EXP)
+                        Call WriteLocaleMsg(Index, MSG_EL_LIDER_DEL_GRUPO_ESTA_DEMASIADO_LEJOS_SU_EXPERIENCIA_SE_PIERDE, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
                     End If
                 End If
             Next i
@@ -1895,10 +1959,21 @@ Private Sub CalcularDarExpGrupal(ByVal UserIndex As Integer, ByVal NpcIndex As I
                                             Dim PorcentajeFinal As Integer
                                             PorcentajeFinal = Penalty * 100
                                             'Msg1467=Debido a tu nivel, obtienes el ¬1% de la experiencia.
-                                            Call WriteLocaleMsg(Index, "1467", e_FontTypeNames.FONTTYPE_WARNING, PorcentajeFinal)
+                                            Call WriteLocaleMsg(Index, MSG_DEBIDO_NIVEL_OBTIENES_EXPERIENCIA, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT, PorcentajeFinal)
                                         End If
                                     End If
                                 End If
+                                
+                                If IsFeatureEnabled("collectible_cards") Then
+                                    ' Apply card collection bonus for THIS specific NPC
+                                    Dim CardBonus As Single
+                                    CardBonus = GetCardExpBonusForNpc(Index, NpcIndex)
+                                    
+                                    If CardBonus > 1# Then
+                                        ExpUser = ExpUser * CardBonus
+                                    End If
+                                End If
+                                
                                 If (UserList(Index).Stats.UserSkills(e_Skill.liderazgo) >= (15 - UserList(Index).Stats.UserAtributos(e_Atributos.Carisma) / 2)) Then
                                     ExpBonusForUser = ExpUser * SvrConfig.GetValue("LeadershipExpPartyBonus")
                                     UserList(Index).Stats.Exp = UserList(Index).Stats.Exp + ExpBonusForUser
@@ -1907,20 +1982,20 @@ Private Sub CalcularDarExpGrupal(ByVal UserIndex As Integer, ByVal NpcIndex As I
                                 End If
                                 If UserList(Index).Stats.Exp > MAXEXP Then UserList(Index).Stats.Exp = MAXEXP
                                 If UserList(Index).ChatCombate = 1 Then
-                                    Call WriteLocaleMsg(Index, "141", e_FontTypeNames.FONTTYPE_EXP, ExpUser)
+                                    Call WriteLocaleMsg(Index, MSG_EL_GRUPO_HA_GANADO_PUNTOS_DE_EXPERIENCIA, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT, ExpUser)
                                 End If
                                 Call WriteUpdateExp(Index)
                                 Call CheckUserLevel(Index)
                             End If
                         Else
                             If UserList(Index).ChatCombate = 1 Then
-                                Call WriteLocaleMsg(Index, "69", e_FontTypeNames.FONTTYPE_New_GRUPO)
+                                Call WriteLocaleMsg(Index, MSG_ADVERTENCIA_TU_GRUPO_ESTA_DEMASIADO_LEJOS_NO_HAS_GANADO_EXPERIENCIA, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
                             End If
                         End If
                     Else
                         If UserList(Index).ChatCombate = 1 Then
                             'Msg1064= Estás muerto, no has ganado experencia del grupo.
-                            Call WriteLocaleMsg(Index, "1064", e_FontTypeNames.FONTTYPE_New_GRUPO)
+                            Call WriteLocaleMsg(Index, MSG_ESTAS_MUERTO_NO_HAS_GANADO_EXPERENCIA_DEL_GRUPO, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
                         End If
                     End If
                 End If
@@ -1977,7 +2052,7 @@ Private Sub CalcularDarOroGrupal(ByVal UserIndex As Integer, ByVal GiveGold As L
                     If OroDar > 0 Then
                         UserList(Index).Stats.GLD = UserList(Index).Stats.GLD + OroDar
                         If UserList(Index).ChatCombate = 1 Then
-                            Call WriteConsoleMsg(Index, PrepareMessageLocaleMsg(MSG_GROUP_GOLD_REWARD, PonerPuntos(OroDar), e_FontTypeNames.FONTTYPE_New_GRUPO)) ' Msg1780=¡El grupo ha ganado ¬1 monedas de oro!
+                            Call WriteLocaleMsg(Index, MSG_GROUP_GOLD_REWARD, e_TextChannel.TEXTCHANNEL_GROUP, e_FontTypeNames.FONTTYPE_New_GRUPO, PonerPuntos(OroDar)) ' Msg1780=¡El grupo ha ganado ¬1 monedas de oro!
                         End If
                         Call WriteUpdateGold(Index)
                     End If
@@ -1994,8 +2069,8 @@ Public Function TriggerZonaPelea(ByVal Origen As Integer, ByVal Destino As Integ
     On Error GoTo ErrHandler
     Dim tOrg As e_Trigger
     Dim tDst As e_Trigger
-    tOrg = MapData(UserList(Origen).pos.Map, UserList(Origen).pos.x, UserList(Origen).pos.y).trigger
-    tDst = MapData(UserList(Destino).pos.Map, UserList(Destino).pos.x, UserList(Destino).pos.y).trigger
+    tOrg = MapData(UserList(Origen).pos.x, UserList(Origen).pos.y, UserList(Origen).pos.Map).trigger
+    tDst = MapData(UserList(Destino).pos.x, UserList(Destino).pos.y, UserList(Destino).pos.Map).trigger
     If tOrg = e_Trigger.ZONAPELEA Or tDst = e_Trigger.ZONAPELEA Then
         If tOrg = tDst Then
             TriggerZonaPelea = TRIGGER6_PERMITE
@@ -2633,7 +2708,7 @@ End Function
 Private Sub WriteCombatConsoleMsg(ByVal UserIndex As Integer, ByVal Message As String)
     On Error GoTo WriteCombatConsoleMsg_Err
     If UserList(UserIndex).ChatCombate = 1 Then
-        Call WriteConsoleMsg(UserIndex, Message, e_FontTypeNames.FONTTYPE_FIGHT)
+        Call WriteConsoleMsg(UserIndex, Message, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
     End If
     Exit Sub
 WriteCombatConsoleMsg_Err:
@@ -2646,19 +2721,19 @@ Public Function MultiShot(ByVal UserIndex As Integer, ByRef TargetPos As t_World
         Dim ArrowSlot As Integer
         ArrowSlot = .invent.EquippedMunitionSlot
         If ArrowSlot = 0 Then
-            Call WriteLocaleMsg(UserIndex, MsgEquipedArrowRequired, FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MsgEquipedArrowRequired, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
             Exit Function
         End If
         If ArrowSlot = 0 Then
-            Call WriteLocaleMsg(UserIndex, MsgEquipedArrowRequired, FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MsgEquipedArrowRequired, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
             Exit Function
         End If
         If ObjData(.invent.Object(ArrowSlot).ObjIndex).Subtipo <> ObjData(.invent.EquippedWeaponObjIndex).Municion Then
-            Call WriteLocaleMsg(UserIndex, MsgEquipedArrowRequired, FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MsgEquipedArrowRequired, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
             Exit Function
         End If
         If .invent.Object(ArrowSlot).amount < 5 Then
-            Call WriteLocaleMsg(UserIndex, MsgNotEnoughtAmunitions, FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MsgNotEnoughtAmunitions, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
             Exit Function
         End If
         Dim Direction  As t_Vector
@@ -2666,7 +2741,7 @@ Public Function MultiShot(ByVal UserIndex As Integer, ByRef TargetPos As t_World
         Direction.x = TargetPos.x - .pos.x
         Direction.y = TargetPos.y - .pos.y
         If Direction.x = 0 And Direction.y = 0 Then
-            Call WriteLocaleMsg(UserIndex, MsgCantAttackYourself, FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MsgCantAttackYourself, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
             Exit Function
         End If
         Direction = GetNormal(Direction)
@@ -2731,19 +2806,19 @@ End Sub
 Public Function ThrowArrowToTile(ByVal UserIndex As Integer, ByRef TargetPos As t_WorldPos) As Boolean
     On Error GoTo ThrowArrowToTile_Err
     ThrowArrowToTile = False
-    If MapData(TargetPos.Map, TargetPos.x, TargetPos.y).UserIndex > 0 Then
-        If UserMod.CanAttackUser(UserIndex, UserList(UserIndex).VersionId, MapData(TargetPos.Map, TargetPos.x, TargetPos.y).UserIndex, UserList(MapData(TargetPos.Map, _
-                TargetPos.x, TargetPos.y).UserIndex).VersionId) = eCanAttack Then
-            Call ThrowProjectileToTarget(UserIndex, MapData(TargetPos.Map, TargetPos.x, TargetPos.y).UserIndex, eUser)
+    If MapData(TargetPos.x, TargetPos.y, TargetPos.Map).UserIndex > 0 Then
+        If UserMod.CanAttackUser(UserIndex, UserList(UserIndex).VersionId, MapData(TargetPos.x, TargetPos.y, TargetPos.Map).UserIndex, UserList(MapData(TargetPos.x, _
+                TargetPos.y, TargetPos.Map).UserIndex).VersionId) = eCanAttack Then
+            Call ThrowProjectileToTarget(UserIndex, MapData(TargetPos.x, TargetPos.y, TargetPos.Map).UserIndex, eUser)
             ThrowArrowToTile = True
         End If
-    ElseIf MapData(TargetPos.Map, TargetPos.x, TargetPos.y).NpcIndex > 0 Then
+    ElseIf MapData(TargetPos.x, TargetPos.y, TargetPos.Map).NpcIndex > 0 Then
         Dim UserAttackInteractionResult As t_AttackInteractionResult
-        UserAttackInteractionResult = UserCanAttackNpc(UserIndex, MapData(TargetPos.Map, TargetPos.x, TargetPos.y).NpcIndex)
+        UserAttackInteractionResult = UserCanAttackNpc(UserIndex, MapData(TargetPos.x, TargetPos.y, TargetPos.Map).NpcIndex)
         Call SendAttackInteractionMessage(UserIndex, UserAttackInteractionResult.Result)
         If UserAttackInteractionResult.CanAttack Then
             If UserAttackInteractionResult.TurnPK Then Call VolverCriminal(UserIndex)
-            Call ThrowProjectileToTarget(UserIndex, MapData(TargetPos.Map, TargetPos.x, TargetPos.y).NpcIndex, eNpc)
+            Call ThrowProjectileToTarget(UserIndex, MapData(TargetPos.x, TargetPos.y, TargetPos.Map).NpcIndex, eNpc)
             ThrowArrowToTile = True
         Else
             Exit Function
@@ -2787,7 +2862,7 @@ Public Sub ThrowProjectileToTarget(ByVal UserIndex As Integer, ByVal TargetIndex
         If AmunitionState <> 0 Then
             If AmunitionState = 1 Then
                 ' Msg709=No tenés municiones.
-                Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_MUNICIONES, e_FontTypeNames.FONTTYPE_INFO)
+                Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_MUNICIONES, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_New_Naranja)
             End If
             Call Desequipar(UserIndex, .EquippedMunitionSlot)
             Call WriteWorkRequestTarget(UserIndex, 0)
@@ -3014,4 +3089,16 @@ Private Function NormalizeTargetType(ByVal TargetType As e_ReferenceType) As e_R
     Exit Function
 NormalizeTargetType_Err:
     Call TraceError(Err.Number, Err.Description, "SistemaCombate.NormalizeTargetType", Erl)
+End Function
+
+Private Function GetShieldBlockSound(ByVal ShieldObjIndex As Integer) As Long
+    If ShieldObjIndex <= 0 Then
+        GetShieldBlockSound = SND_ESCUDO
+        Exit Function
+    End If
+    If ObjData(ShieldObjIndex).SkCarpinteria > 0 Then
+        GetShieldBlockSound = SND_ESCUDO_MADERA
+    Else
+        GetShieldBlockSound = SND_ESCUDO
+    End If
 End Function
