@@ -82,7 +82,7 @@ End Sub
 Public Function CanUserExtractMinerals(ByVal UserIndex As Integer, ByVal TargetX As Byte, ByVal TargetY As Byte) As Boolean
     With UserList(UserIndex)
         If .invent.EquippedWorkingToolObjIndex <= 0 Then Exit Function
-        If ObjData(MapData(.pos.Map, TargetX, TargetY).ObjInfo.ObjIndex).Blodium > 0 Then
+        If ObjData(MapData(TargetX, TargetY, .pos.Map).ObjInfo.ObjIndex).Blodium > 0 Then
             If Not ObjData(.invent.EquippedWorkingToolObjIndex).Blodium > 0 Then
                 'Msg597=Para extraer minerales de Blodium necesitaras un piquete especial.
                 Call WriteLocaleMsg(UserIndex, MSG_BLODIUM_PICKAXE_REQUIRED, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
@@ -91,7 +91,7 @@ Public Function CanUserExtractMinerals(ByVal UserIndex As Integer, ByVal TargetX
         End If
         ' Plan 17.001 D58 (propio; la guia y el texto del item mandan): un yacimiento de oro (Dorada) solo con el
         ' Piquete de Minero Dorado. Se exige piquete de minero porque las Tijeras doradas tambien son Dorada.
-        If ObjData(MapData(.pos.Map, TargetX, TargetY).ObjInfo.ObjIndex).Dorada > 0 Then
+        If ObjData(MapData(TargetX, TargetY, .pos.Map).ObjInfo.ObjIndex).Dorada > 0 Then
             If Not (ObjData(.invent.EquippedWorkingToolObjIndex).Dorada > 0 And ObjData(.invent.EquippedWorkingToolObjIndex).Subtipo = e_WorkingToolSubType.MinerPickaxe) Then
                 'Msg1022=Para minar oro necesitas un Piquete de Minero Dorado.
                 Call WriteLocaleMsg(UserIndex, MSG_GOLD_PICKAXE_REQUIRED, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)

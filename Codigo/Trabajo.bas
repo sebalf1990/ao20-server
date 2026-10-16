@@ -876,7 +876,7 @@ Function HerreroTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex As I
         ' una espada al piso y clickearla pasaba este gate y dejaba craftear runas de
         ' Blodium sin yunque.
         Dim TargetObjIndex As Integer
-        TargetObjIndex = MapData(Target.Map, Target.x, Target.y).ObjInfo.ObjIndex
+        TargetObjIndex = MapData(Target.x, Target.y, Target.Map).ObjInfo.ObjIndex
         ' ObjData se dimensiona 1 To NumObjDatas: con el tile vacio (ObjIndex=0) el
         ' acceso tiraba error 9 y salia por el On Error. Rechazaba igual, pero por
         ' excepcion y dejando un TraceError por cada click en un tile sin objeto.
