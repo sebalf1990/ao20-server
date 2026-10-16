@@ -1399,7 +1399,7 @@ Function LanzarHechizo(ByVal Index As Integer, ByVal UserIndex As Integer) As Bo
                     ' Limpiar targets y salir antes del Select Case (no aplicamos el efecto)
                     Call ClearUserRef(UserList(UserIndex).flags.TargetUser)
                     Call ClearNpcRef(UserList(UserIndex).flags.TargetNPC)
-                    Exit Sub
+                    Exit Function
                 End If
             End If
         End If

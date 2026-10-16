@@ -7116,6 +7116,7 @@ Private Sub HandleBusquedaTesoro(ByVal UserIndex As Integer)
                 Case 2
                     If Not BusquedaNpcActiva And BusquedaTesoroActiva = False And BusquedaRegaloActiva = False Then
                         Dim pos As t_WorldPos
+                        Dim nX As Long, nY As Long
                         pos.Map = TesoroNPCMapa(RandomNumber(1, UBound(TesoroNPCMapa)))
                         pos.x = RandomNumber(20, 80)
                         pos.y = RandomNumber(20, 80)

@@ -537,6 +537,12 @@ Dim tStr                        As String
         .flags.Inmunidad = 1
         .Counters.TiempoDeInmunidad = IntervaloPuedeSerAtacado
         .Counters.TiempoDeInmunidadParalisisNoMagicas = 0
+        Dim HomeCityId As e_City
+        HomeCityId = .Hogar
+        If Not IsValidCity(HomeCityId) Then
+            Call LogError("Invalid home city. UserIndex=" & UserIndex & " Hogar=" & .Hogar)
+            HomeCityId = e_City.cUllathorpe
+        End If
   
         If Not MapaValido(.pos.Map) Then
             .pos.Map = Cities(HomeCityId).Map
