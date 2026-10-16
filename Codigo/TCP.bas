@@ -379,44 +379,17 @@ Function ConnectNewUser(ByVal UserIndex As Integer, _
         .Faccion.Status = 1
         .ChatCombate = 1
         .ChatGlobal = 1
-        Select Case .Hogar
-            Case e_City.cUllathorpe
-                .pos.Map = 1
-                .pos.x = 56
-                .pos.y = 44
-            Case e_City.cArghal
-                .pos.Map = 151
-                .pos.x = 52
-                .pos.y = 36
-            Case e_City.cForgat
-                .pos.Map = 517
-                .pos.x = 48
-                .pos.y = 64
-            Case e_City.cNix
-                .pos.Map = 34
-                .pos.x = 40
-                .pos.y = 86
-            Case e_City.cLindos
-                .pos.Map = 408
-                .pos.x = 63
-                .pos.y = 39
-            Case e_City.cBanderbill
-                .pos.Map = 59
-                .pos.x = 47
-                .pos.y = 41
-            Case e_City.cArkhein
-                .pos.Map = 196
-                .pos.x = 43
-                .pos.y = 58
-            Case e_City.cEldoria
-                .pos.Map = 440
-                .pos.x = 50
-                .pos.y = 88
-            Case e_City.cPenthar
-                .pos.Map = 560
-                .pos.x = 40
-                .pos.y = 69
-        End Select
+        If IsValidCity(.Hogar) Then
+            ' Cities() centralizes city Map/X/Y lookup; avoid duplicated enum mappings.
+            .pos.Map = Cities(.Hogar).Map
+            .pos.x = Cities(.Hogar).x
+            .pos.y = Cities(.Hogar).y
+        Else
+            Call LogError("Invalid home city while creating user. UserIndex=" & UserIndex & " Hogar=" & .Hogar)
+            .pos.Map = Cities(e_City.cUllathorpe).Map
+            .pos.x = Cities(e_City.cUllathorpe).x
+            .pos.y = Cities(e_City.cUllathorpe).y
+        End If
         UltimoChar = UCase$(name)
         Call SaveNewUser(UserIndex)
         ConnectNewUser = True

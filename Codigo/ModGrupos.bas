@@ -107,7 +107,7 @@ End Sub
 
 Public Sub EcharMiembro(ByVal UserIndex As Integer, ByVal Indice As Byte)
     On Error GoTo EcharMiembro_Err
-    Dim i              As Long ' Iterar con long es MAS RAPIDO que otro tipo
+    Dim i              As Long
     Dim LoopC          As Long
     Dim indexviejo     As Byte
     Dim UserIndexEchar As Integer
@@ -127,6 +127,11 @@ Public Sub EcharMiembro(ByVal UserIndex As Integer, ByVal Indice As Byte)
             Call WriteLocaleMsg(UserIndex, MSG_PODES_EXPULSARTE_TI_MISMO, e_TextChannel.TEXTCHANNEL_GROUP, e_FontTypeNames.FONTTYPE_New_GRUPO)
             Exit Sub
         End If
+        
+        ' Guardar cantidad original antes de modificar
+        Dim OriginalCount As Integer
+        OriginalCount = .CantidadMiembros
+        
         For i = 1 To UBound(.Miembros)
             If UserIndexEchar = .Miembros(i).ArrayIndex Then
                 Call ClearUserRef(.Miembros(i))
@@ -140,11 +145,14 @@ Public Sub EcharMiembro(ByVal UserIndex As Integer, ByVal Indice As Byte)
             End If
         Next i
         .CantidadMiembros = .CantidadMiembros - 1
-        Dim a As Long
-        For a = 1 To .CantidadMiembros
-            Call WriteUbicacion(.Miembros(a).ArrayIndex, indexviejo, 0)
-        Next a
+        
+        ' Enviar x=0 para ocultar marcadores del miembro expulsado
+        Dim j As Integer
+        For j = 1 To OriginalCount
+            Call WriteUbicacion(UserIndexEchar, j, 0)
+        Next j
     End With
+    
     With UserList(UserIndexEchar)
         Call WriteLocaleMsg(UserIndex, MSG_FUE_EXPULSADO_GRUPO, e_TextChannel.TEXTCHANNEL_GROUP, e_FontTypeNames.FONTTYPE_New_GRUPO, .Name)
         Call WriteLocaleMsg(UserIndexEchar, MSG_REMOVED_FROM_GROUP, e_TextChannel.TEXTCHANNEL_GROUP, e_FontTypeNames.FONTTYPE_New_GRUPO)
@@ -160,7 +168,38 @@ Public Sub EcharMiembro(ByVal UserIndex As Integer, ByVal Indice As Byte)
             Call WarpUserChar(UserIndexEchar, MapInfo(.pos.Map).Salida.Map, MapInfo(.pos.Map).Salida.x, MapInfo(.pos.Map).Salida.y, True)
         End If
     End With
+    
     With UserList(UserIndex).Grupo
+        ' Enviar posiciones actualizadas a todos los miembros restantes
+        Dim a As Integer
+        Dim b As Integer
+        For a = 1 To .CantidadMiembros
+            Dim TargetMemberIndex As Integer
+            TargetMemberIndex = .Miembros(a).ArrayIndex
+            
+            ' PRIMERO: Limpiar todos los marcadores de este miembro (incluido el del que fue expulsado)
+            For b = 1 To OriginalCount
+                Call WriteUbicacion(TargetMemberIndex, b, 0)
+            Next b
+            
+            ' LUEGO: Enviar solo las posiciones de los miembros que quedan (excepto el suyo propio)
+            For b = 1 To .CantidadMiembros
+                Dim SourceMemberIndex As Integer
+                SourceMemberIndex = .Miembros(b).ArrayIndex
+                
+                ' NO enviar la posición de un miembro a sí mismo.
+                ' Solo compartir ubicación si ambos miembros están en el mismo mapa;
+                ' en caso contrario, mantener el marcador limpio.
+                If TargetMemberIndex <> SourceMemberIndex Then
+                    If UserList(TargetMemberIndex).Pos.Map = UserList(SourceMemberIndex).Pos.Map Then
+                        Call WriteUbicacion(TargetMemberIndex, b, SourceMemberIndex)
+                    Else
+                        Call WriteUbicacion(TargetMemberIndex, b, 0)
+                    End If
+                End If
+            Next b
+        Next a
+        
         If .CantidadMiembros = 1 Then
             Call WriteLocaleMsg(UserIndex, MSG_GROUP_DISBANDED_ALL_MEMBERS_LEFT, e_TextChannel.TEXTCHANNEL_GROUP, e_FontTypeNames.FONTTYPE_New_GRUPO)
             .EnGrupo = False
@@ -177,6 +216,7 @@ Public Sub EcharMiembro(ByVal UserIndex As Integer, ByVal Indice As Byte)
             End If
         End If
     End With
+    
     Call RefreshCharStatus(UserIndex)
     Call modSendData.SendData(ToGroup, GroupLider, PrepareUpdateGroupInfo(GroupLider))
     Call modSendData.SendData(ToIndex, UserIndexEchar, PrepareUpdateGroupInfo(UserIndexEchar))
@@ -195,6 +235,11 @@ Public Sub SalirDeGrupo(ByVal UserIndex As Integer)
             Call WriteLocaleMsg(UserIndex, MSG_NINGUN_GRUPO_2057, e_TextChannel.TEXTCHANNEL_GROUP, e_FontTypeNames.FONTTYPE_New_GRUPO)
             Exit Sub
         End If
+        
+        ' Guardar cantidad original antes de modificar
+        Dim OriginalCount As Integer
+        OriginalCount = UserList(.Grupo.Lider.ArrayIndex).Grupo.CantidadMiembros
+        
         .Grupo.EnGrupo = False
         .Grupo.Id = -1
         For i = 1 To UBound(.Grupo.Miembros)
@@ -210,9 +255,39 @@ Public Sub SalirDeGrupo(ByVal UserIndex As Integer)
             End If
         Next i
         UserList(.Grupo.Lider.ArrayIndex).Grupo.CantidadMiembros = UserList(.Grupo.Lider.ArrayIndex).Grupo.CantidadMiembros - 1
-        Dim a As Long
+        
+        ' Enviar x=0 para ocultar marcadores del usuario que sale
+        Dim j As Integer
+        For j = 1 To OriginalCount
+            Call WriteUbicacion(UserIndex, j, 0)
+        Next j
+        
+        ' Enviar posiciones actualizadas a todos los miembros restantes
+        Dim a As Integer
+        Dim b As Integer
         For a = 1 To UserList(.Grupo.Lider.ArrayIndex).Grupo.CantidadMiembros
-            Call WriteUbicacion(UserList(.Grupo.Lider.ArrayIndex).Grupo.Miembros(a).ArrayIndex, indexviejo, 0)
+            Dim TargetMemberIndex As Integer
+            TargetMemberIndex = UserList(.Grupo.Lider.ArrayIndex).Grupo.Miembros(a).ArrayIndex
+            
+            ' PRIMERO: Limpiar todos los marcadores de este miembro (incluido el del que se fue)
+            For b = 1 To OriginalCount
+                Call WriteUbicacion(TargetMemberIndex, b, 0)
+            Next b
+            
+            ' LUEGO: Enviar solo las posiciones de los miembros que quedan (excepto el suyo propio)
+            For b = 1 To UserList(.Grupo.Lider.ArrayIndex).Grupo.CantidadMiembros
+                Dim SourceMemberIndex As Integer
+                SourceMemberIndex = UserList(.Grupo.Lider.ArrayIndex).Grupo.Miembros(b).ArrayIndex
+                
+                ' NO enviar la posición de un miembro a sí mismo
+                If TargetMemberIndex <> SourceMemberIndex Then
+                    ' Solo compartir ubicación entre miembros que estén en el mismo mapa.
+                    ' Si están en mapas distintos, el marcador ya quedó limpio en el paso anterior.
+                    If UserList(TargetMemberIndex).pos.Map = UserList(SourceMemberIndex).pos.Map Then
+                        Call WriteUbicacion(TargetMemberIndex, b, SourceMemberIndex)
+                    End If
+                End If
+            Next b
         Next a
         
         Call WriteLocaleMsg(UserIndex, MSG_REMOVED_FROM_GROUP, e_TextChannel.TEXTCHANNEL_GROUP, e_FontTypeNames.FONTTYPE_New_GRUPO)
@@ -305,23 +380,35 @@ End Sub
 Public Sub FinalizarGrupo(ByVal LiderIndex As Integer)
     On Error GoTo FinalizarGrupo_Err
     Dim i As Integer
-    For i = 1 To UserList(LiderIndex).Grupo.CantidadMiembros
+    Dim OriginalMemberCount As Integer
+    
+    ' Guardar la cantidad original de miembros antes de modificar nada
+    OriginalMemberCount = UserList(LiderIndex).Grupo.CantidadMiembros
+    
+    ' Procesar a todos los miembros del grupo
+    For i = 1 To OriginalMemberCount
         Dim MemberIndex As Integer: MemberIndex = UserList(LiderIndex).Grupo.Miembros(i).ArrayIndex
         With UserList(MemberIndex)
             Dim j As Integer
-            For j = 1 To UserList(LiderIndex).Grupo.CantidadMiembros
+            For j = 1 To OriginalMemberCount
                 Call WriteUbicacion(MemberIndex, j, 0)
             Next j
+            
+            ' Enviar actualización del grupo a cada miembro
             Call modSendData.SendData(ToIndex, MemberIndex, PrepareUpdateGroupInfo(MemberIndex))
+            
+            ' Limpiar datos del grupo para este miembro
             .Grupo.EnGrupo = False
             .Grupo.Id = -1
             Call SetUserRef(.Grupo.Lider, 0)
             Call SetUserRef(.Grupo.PropuestaDe, 0)
+            
             If MemberIndex = LiderIndex Then
                 Call WriteLocaleMsg(LiderIndex, MSG_DISUELTO_GRUPO, e_TextChannel.TEXTCHANNEL_GROUP, e_FontTypeNames.FONTTYPE_New_GRUPO) ' Msg2063="Has disuelto el grupo."
             Else
                 Call WriteLocaleMsg(MemberIndex, MSG_LIDER_HA_ABANDONADO_GRUPO_GRUPO_DISUELVE, e_TextChannel.TEXTCHANNEL_GROUP, e_FontTypeNames.FONTTYPE_New_GRUPO) ' Msg2064="El líder ha abandonado el grupo. El grupo se disuelve."
             End If
+            
             If MapInfo(.pos.Map).OnlyGroups And MapInfo(.pos.Map).Salida.Map <> 0 Then
                 Call WriteLocaleMsg(MemberIndex, MSG_DEBES_ESTAR_GRUPO_PERMANECER_MAPA_2065, e_TextChannel.TEXTCHANNEL_GROUP, e_FontTypeNames.FONTTYPE_New_GRUPO) ' Msg2065="Debes estar en un grupo para permanecer en este mapa."
                 Call WarpUserChar(MemberIndex, MapInfo(.pos.Map).Salida.Map, MapInfo(.pos.Map).Salida.x, MapInfo(.pos.Map).Salida.y, True)
@@ -330,7 +417,17 @@ Public Sub FinalizarGrupo(ByVal LiderIndex As Integer)
             End If
         End With
     Next i
+    
+    ' Limpiar los datos del grupo del líder
+    UserList(LiderIndex).Grupo.EnGrupo = False
+    UserList(LiderIndex).Grupo.Id = -1
+    Call SetUserRef(UserList(LiderIndex).Grupo.Lider, 0)
+    Call SetUserRef(UserList(LiderIndex).Grupo.PropuestaDe, 0)
     UserList(LiderIndex).Grupo.CantidadMiembros = 0
+    
+    ' Enviar actualización final al líder (ahora recibirá GroupSize = 0)
+    Call modSendData.SendData(ToIndex, LiderIndex, PrepareUpdateGroupInfo(LiderIndex))
+    
     Exit Sub
 FinalizarGrupo_Err:
     Call TraceError(Err.Number, Err.Description, "ModGrupos.FinalizarGrupo", Erl)

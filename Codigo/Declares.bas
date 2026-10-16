@@ -1918,6 +1918,7 @@ Public Type t_Hechizo
     ManaRequerido As Integer
     'Barrin 29/9/03
     StaRequerido As Integer
+    StaPercentRequired As Single
     Target As e_TargetType
     RequireTransform As Integer
     MagicPowerNeeded As Integer
@@ -3653,6 +3654,7 @@ Public Type t_NpcInfoCache
     Exists As Boolean
     TestOnly As Integer
     DisabledInBattleServer As Integer
+    OnlyEnabledInBattleServer As Integer
     RequireToggle As String
     name As String
     SubName As String

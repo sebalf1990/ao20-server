@@ -416,15 +416,12 @@ Private Sub UserDamageNpc(ByVal UserIndex As Integer, ByVal NpcIndex As Integer,
         
         If Damage < 0 Then Damage = 0
         If IsFeatureEnabled("healers_and_tanks") And .clase = e_Class.Warrior Then
-            Dim Calc As Integer
+            Dim Calc As Long
             Calc = Damage * WarriorLifeStealOnHitMultiplier
-            .Stats.MinHp = .Stats.MinHp + Calc
-            If .Stats.MinHp > .Stats.MaxHp Then
-                .Stats.MinHp = .Stats.MaxHp
+            If Calc >= .Stats.MaxHp Then
+                Calc = .Stats.MaxHp
             End If
-            Call WriteUpdateHP(UserIndex)
-            'no wrapper senddata because of extra params
-            Call modSendData.SendData(ToIndex, UserIndex, PrepareMessageTextOverTile(Calc, .pos.x, .pos.y, vbGreen, 1300, -10, True))
+            Call UserMod.DoDamageOrHeal(UserIndex, UserIndex, eUser, Calc, e_phisical, UserIndex)
         End If
         ' Golpe crítico
         ' Apuñalar y critico CONVIVEN pero son EXCLUYENTES por golpe: apuñalar tiene precedencia.

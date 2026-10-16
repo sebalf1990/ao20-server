@@ -2715,8 +2715,11 @@ Private Function VerifyPacketSequence(ByVal ActualCount As Long, _
                                       ByVal UserIndex As Integer, _
                                       ByVal PacketName As String) As Boolean
     If ActualCount <= LastCount Then
+        ' Aca no se banea a nadie: lo unico que pasa es que se le cierra la conexion.
+        ' El aviso a los GMs tiene que decir eso, o dan por sancionada una cuenta que
+        ' en realidad sigue entrando sin problema.
         Call SendData(SendTarget.ToAdminsYDioses, UserIndex, PrepareMessageConsoleMsg("Paquete grabado: " & PacketName & " | Cuenta: " & UserList(UserIndex).Cuenta & " | Ip: " & _
-                UserList(UserIndex).ConnectionDetails.IP & " (Baneado automaticamente)", e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_WARNING))
+                UserList(UserIndex).ConnectionDetails.IP & " (Se le cerro la conexion, SIN ban)", e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_INFOBOLD))
         Call LogEdicionPaquete("El usuario " & GetUserRealName(UserIndex) & " editó el paquete " & PacketName & ".")
         LastCount = ActualCount
         Call CloseSocket(UserIndex)
@@ -2739,19 +2742,7 @@ Public Function verifyTimeStamp(ByVal ActualCount As Long, _
     Ticks = GetTickCountRaw()
     Delta = TicksElapsed(LastTick, Ticks)
     LastTick = Ticks
-    'Controlamos secuencia para ver que no haya paquetes duplicados.
-    If ActualCount <= LastCount Then
-        ' Aca no se banea a nadie: lo unico que pasa es que se le cierra la conexion.
-        ' El aviso a los GMs tiene que decir eso, o dan por sancionada una cuenta que
-        ' en realidad sigue entrando sin problema.
-        Call SendData(SendTarget.ToAdminsYDioses, UserIndex, PrepareMessageConsoleMsg("Paquete grabado: " & PacketName & " | Cuenta: " & UserList(UserIndex).Cuenta & " | Ip: " & _
-                UserList(UserIndex).ConnectionDetails.IP & " (Se le cerro la conexion, SIN ban)", e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_INFOBOLD))
-        Call LogEdicionPaquete("El usuario " & GetUserRealName(UserIndex) & " editó el paquete " & PacketName & ".")
-        LastCount = ActualCount
-        verifyTimeStamp = False
-        Call CloseSocket(UserIndex)
-        Exit Function
-    End If
+    If Not VerifyPacketSequence(ActualCount, LastCount, UserIndex, PacketName) Then Exit Function
     'controlamos speedhack/macro
     If Delta < DeltaThreshold Then
         Iterations = Iterations + 1
@@ -2810,6 +2801,7 @@ Private Sub HandleLeftClick(ByVal UserIndex As Integer)
         Packet_ID = PacketNames.LeftClick
         If Not verifyTimeStamp(PacketCounter, .PacketCounters(Packet_ID), .PacketTimers(Packet_ID), .MacroIterations(Packet_ID), UserIndex, "LeftClick", PacketTimerThreshold( _
                 Packet_ID), MacroIterations(Packet_ID)) Then Exit Sub
+        If Not InMapBounds(.pos.Map, x, y) Then Exit Sub
         Call LookatTile(UserIndex, .pos.Map, x, y)
         Dim ClickedUserIndex As Integer
         Dim ClickedNpcIndex As Integer
@@ -2950,6 +2942,18 @@ End Sub
 ' Handles the "UseItem" message.
 '
 ' @param    UserIndex The index of the user sending the message.
+Private Function IsProjectileTargetRequest(ByVal UserIndex As Integer, ByVal Slot As Byte) As Boolean
+    If Slot <= 0 Or Slot > UserList(UserIndex).CurrentInventorySlots Then Exit Function
+
+    With UserList(UserIndex).invent.Object(Slot)
+        If .ObjIndex <= 0 Then Exit Function
+        If .Equipped = 0 Then Exit Function
+        If ObjData(.ObjIndex).OBJType <> e_OBJType.otWeapon Then Exit Function
+
+        IsProjectileTargetRequest = (ObjData(.ObjIndex).Proyectil = 1)
+    End With
+End Function
+
 Private Sub HandleUseItem(ByVal UserIndex As Integer)
     On Error GoTo HandleUseItem_Err
     With UserList(UserIndex)
@@ -2966,8 +2970,12 @@ Private Sub HandleUseItem(ByVal UserIndex As Integer)
         PacketCounter = reader.ReadInt32
         Dim Packet_ID As Long
         Packet_ID = PacketNames.UseItem
-        If Not verifyTimeStamp(PacketCounter, .PacketCounters(Packet_ID), .PacketTimers(Packet_ID), .MacroIterations(Packet_ID), UserIndex, "UseItem", PacketTimerThreshold( _
-                Packet_ID), MacroIterations(Packet_ID)) Then Exit Sub
+        If IsProjectileTargetRequest(UserIndex, Slot) Then
+            If Not VerifyPacketSequence(PacketCounter, .PacketCounters(Packet_ID), UserIndex, "UseItem") Then Exit Sub
+        Else
+            If Not verifyTimeStamp(PacketCounter, .PacketCounters(Packet_ID), .PacketTimers(Packet_ID), .MacroIterations(Packet_ID), UserIndex, "UseItem", PacketTimerThreshold( _
+                    Packet_ID), MacroIterations(Packet_ID)) Then Exit Sub
+        End If
         '  Debug.Print "LLEGA PAQUETE"
         If Slot <= UserList(UserIndex).CurrentInventorySlots And Slot > 0 Then
             If .invent.Object(Slot).ObjIndex = 0 Then Exit Sub
@@ -2992,8 +3000,12 @@ Private Sub HandleUseItemU(ByVal UserIndex As Integer)
         PacketCounter = reader.ReadInt32
         Dim Packet_ID As Long
         Packet_ID = PacketNames.UseItemU
-        If Not verifyTimeStamp(PacketCounter, .PacketCounters(Packet_ID), .PacketTimers(Packet_ID), .MacroIterations(Packet_ID), UserIndex, "UseItemU", PacketTimerThreshold( _
-                Packet_ID), MacroIterations(Packet_ID)) Then Exit Sub
+        If IsProjectileTargetRequest(UserIndex, Slot) Then
+            If Not VerifyPacketSequence(PacketCounter, .PacketCounters(Packet_ID), UserIndex, "UseItemU") Then Exit Sub
+        Else
+            If Not verifyTimeStamp(PacketCounter, .PacketCounters(Packet_ID), .PacketTimers(Packet_ID), .MacroIterations(Packet_ID), UserIndex, "UseItemU", PacketTimerThreshold( _
+                    Packet_ID), MacroIterations(Packet_ID)) Then Exit Sub
+        End If
         If Slot <= UserList(UserIndex).CurrentInventorySlots And Slot > 0 Then
             If .invent.Object(Slot).ObjIndex = 0 Then Exit Sub
             Call UseInvItem(UserIndex, Slot, 0)
@@ -3678,8 +3690,13 @@ Private Sub HandleChange_Heading(ByVal UserIndex As Integer)
         'Validate heading (VB won't say invalid cast if not a valid index like .Net languages would do... *sigh*)
         If Heading > 0 And Heading < 5 Then
             .Char.Heading = Heading
-            Call SendData(SendTarget.ToPCArea, UserIndex, PrepareMessageCharacterChange(.Char.body, .Char.head, .Char.Heading, .Char.charindex, .Char.WeaponAnim, _
-                    .Char.ShieldAnim, .Char.CartAnim, .Char.BackpackAnim, .Char.FX, .Char.loops, .Char.CascoAnim, False, .flags.Navegando))
+            If .flags.AdminInvisible = 0 Then
+                Call SendData(SendTarget.ToPCArea, UserIndex, PrepareMessageCharacterChange(.Char.body, .Char.head, .Char.Heading, .Char.charindex, .Char.WeaponAnim, _
+                        .Char.ShieldAnim, .Char.CartAnim, .Char.BackpackAnim, .Char.FX, .Char.loops, .Char.CascoAnim, False, .flags.Navegando))
+            Else
+                Call SendData(SendTarget.ToAdminAreaButIndex, UserIndex, PrepareMessageCharacterChange(.Char.body, .Char.head, .Char.Heading, .Char.charindex, .Char.WeaponAnim, _
+                        .Char.ShieldAnim, .Char.CartAnim, .Char.BackpackAnim, .Char.FX, .Char.loops, .Char.CascoAnim, False, .flags.Navegando))
+            End If
         End If
     End With
     Exit Sub
@@ -5759,10 +5776,7 @@ Private Sub HandleAntiMacroMessage(ByVal UserIndex As Integer)
             Else
                 tUser = NameIndex(username)
                 If IsValidUserRef(tUser) Then
-                    'Msg2172=Control anti-macro: ¬1
-                    Call WriteLocaleMsg(tUser.ArrayIndex, MSG_ANTI_MACRO_CONTROL, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_DONADOR, mensaje)
-                    Call WriteShowMessageBox(tUser.ArrayIndex, MSG_ANTI_MACRO_CONTROL, mensaje)
-                    Call LogGM(GetUserRealName(UserIndex), "Envió mensaje anti-macro a " & username & ": " & mensaje)
+                    Call LogGM(GetUserRealName(UserIndex), "Registró control anti-macro a " & username & ": " & mensaje)
                 Else
                     Call LogGM(GetUserRealName(UserIndex), "Intentó enviar mensaje anti-macro a " & username & " pero el usuario no está conectado o no es válido. Mensaje: " & mensaje)
                 End If
@@ -7215,11 +7229,7 @@ Private Sub HandleMarcaDeClan(ByVal UserIndex As Integer)
     'Author: Pablo Mercavides
     On Error GoTo HandleMarcaDeClan_Err
     With UserList(UserIndex)
-        'Exit sub para anular marca de clan
-        Exit Sub
-        If UserList(UserIndex).GuildIndex = 0 Then
-            Exit Sub
-        End If
+        If .GuildIndex = 0 Then Exit Sub
         If .flags.Muerto = 1 Then
             Call WriteLocaleMsg(UserIndex, MSG_MUERTO, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             Exit Sub
@@ -7285,30 +7295,13 @@ Private Sub HandleResponderPregunta(ByVal UserIndex As Integer)
                 Case 3
                     Log = "Repuesta Afirmativa 3"
                     UserList(UserIndex).Hogar = SanitizeHogar(UserList(UserIndex).PosibleHogar, "gobernador -> Hogar")
-                    Select Case UserList(UserIndex).Hogar
-                        Case e_City.cUllathorpe
-                            DeDonde = "Ullathorpe"
-                        Case e_City.cNix
-                            DeDonde = "Nix"
-                        Case e_City.cBanderbill
-                            DeDonde = "Banderbill"
-                        Case e_City.cLindos 'Vamos a tener que ir por todo el desierto... uff!
-                            DeDonde = "Lindos"
-                        Case e_City.cArghal
-                            DeDonde = " Arghal"
-                        Case e_City.cForgat
-                            DeDonde = " Forgat"
-                        Case e_City.cArkhein
-                            DeDonde = " Arkhein"
-                        Case e_City.cEldoria
-                            DeDonde = " Eldoria"
-                        Case e_City.cPenthar
-                            DeDonde = " Penthar"
-                        Case Else
-                            ' No deberia entrar nunca: SanitizeHogar ya acoto el valor.
-                            DeDonde = "Ullathorpe"
-                            Call LogError("Hogar fuera de rango al confirmar ciudadania: " & UserList(UserIndex).Hogar)
-                    End Select
+                    If IsValidCity(UserList(UserIndex).Hogar) Then
+                        ' CityNames() avoids duplicated enum-to-name mappings.
+                        DeDonde = CityNames(UserList(UserIndex).Hogar)
+                    Else
+                        Call LogError("Invalid home city. UserIndex=" & UserIndex & " Hogar=" & UserList(UserIndex).Hogar)
+                        DeDonde = CityNames(e_City.cUllathorpe)
+                    End If
                     If IsValidNpcRef(UserList(UserIndex).flags.TargetNPC) Then
                         Call WriteLocaleChatOverHead(UserIndex, MSG_GRACIAS_AHORA_PERTENECES_A_LA_CIUDAD_DE, GetUserDisplayName(UserIndex) & "¬" & DeDonde, NpcList(UserList( _
                                 UserIndex).flags.TargetNPC.ArrayIndex).Char.charindex, vbWhite) ' Msg1421=¡Gracias ¬1! Ahora perteneces a la ciudad de ¬2.
@@ -7391,30 +7384,13 @@ Private Sub HandleResponderPregunta(ByVal UserIndex As Integer)
                     Call VolverCriminal(UserIndex)
                 Case 3
                     Log = "Repuesta negativa 3"
-                    Select Case UserList(UserIndex).PosibleHogar
-                        Case e_City.cUllathorpe
-                            DeDonde = "Ullathorpe"
-                        Case e_City.cNix
-                            DeDonde = "Nix"
-                        Case e_City.cBanderbill
-                            DeDonde = "Banderbill"
-                        Case e_City.cLindos 'Vamos a tener que ir por todo el desierto... uff!
-                            DeDonde = "Lindos"
-                        Case e_City.cArghal
-                            DeDonde = " Arghal"
-                        Case e_City.cForgat
-                            DeDonde = " Forgat"
-                        Case e_City.cArkhein
-                            DeDonde = " Arkhein"
-                        Case e_City.cEldoria
-                            DeDonde = " Eldoria"
-                        Case e_City.cPenthar
-                            DeDonde = " Penthar"
-                        Case Else
-                            ' No deberia entrar nunca: SanitizeHogar ya acoto el valor.
-                            DeDonde = "Ullathorpe"
-                            Call LogError("PosibleHogar fuera de rango al rechazar la ciudadania: " & UserList(UserIndex).PosibleHogar)
-                    End Select
+                    If IsValidCity(UserList(UserIndex).PosibleHogar) Then
+                        ' CityNames() avoids duplicated enum-to-name mappings.
+                        DeDonde = CityNames(UserList(UserIndex).PosibleHogar)
+                    Else
+                        Call LogError("Invalid possible home city. UserIndex=" & UserIndex & " PosibleHogar=" & UserList(UserIndex).PosibleHogar)
+                        DeDonde = CityNames(e_City.cUllathorpe)
+                    End If
                     If IsValidNpcRef(UserList(UserIndex).flags.TargetNPC) Then
                         Call WriteLocaleChatOverHead(UserIndex, MSG_NO_HAY_PROBLEMA_SOS_BIENVENIDO_EN_CUANDO_GUSTES, GetUserDisplayName(UserIndex) & "¬" & DeDonde, NpcList(UserList( _
                                 UserIndex).flags.TargetNPC.ArrayIndex).Char.charindex, vbWhite) ' Msg1423=¡No hay problema ¬1! Sos bienvenido en ¬2 cuando gustes.

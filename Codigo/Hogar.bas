@@ -142,9 +142,17 @@ Public Sub HomeArrival(ByVal UserIndex As Integer)
             Call WriteNadarToggle(UserIndex, False)
             'Le sacamos el navegando, pero no le mostramos a los demas porque va a ser sumoneado hasta ulla.
         End If
-        tX = Cities(.Hogar).x
-        tY = Cities(.Hogar).y
-        tMap = Cities(.Hogar).Map
+        If IsValidCity(.Hogar) Then
+            ' Cities() centralizes home Map/X/Y lookup.
+            tX = Cities(.Hogar).x
+            tY = Cities(.Hogar).y
+            tMap = Cities(.Hogar).Map
+        Else
+            Call LogError("Invalid home city. UserIndex=" & UserIndex & " Hogar=" & .Hogar)
+            tX = Cities(e_City.cUllathorpe).x
+            tY = Cities(e_City.cUllathorpe).y
+            tMap = Cities(e_City.cUllathorpe).Map
+        End If
         Call FindLegalPos(UserIndex, tMap, CByte(tX), CByte(tY))
         Call WarpUserChar(UserIndex, tMap, tX, tY, True)
         Call WriteLocaleMsg(UserIndex, MSG_HAS_REGRESADO_CIUDAD_ORIGEN, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_PROMEDIO_MAYOR, vbNullString) ' Msg1996=Has regresado a tu ciudad de origen.

@@ -1118,6 +1118,7 @@ Private Sub LoadNpcInfoIntoCache(ByVal NpcNumber As Integer)
         .TestOnly = Val(LeerNPCs.GetValue(SectionName, "TESTONLY"))
         .DisabledInBattleServer = val(LeerNPCs.GetValue(SectionName, "DISABLEDINBATTLESERVER"))
         .CollectibleCardIndex = val(LeerNPCs.GetValue(SectionName, "CollectibleCardIndex"))
+        .OnlyEnabledInBattleServer = val(LeerNPCs.GetValue(SectionName, "ONLYENABLEDINBATTLESERVER"))
         .RequireToggle = LeerNPCs.GetValue(SectionName, "REQUIRETOGGLE")
         .EsMaestroProfesion = CByte(val(LeerNPCs.GetValue(SectionName, "EsMaestroProfesion")))
         .ProfesionEnsenada = CInt(val(LeerNPCs.GetValue(SectionName, "ProfesionEnsenada")))
@@ -1457,6 +1458,13 @@ Function OpenNPC(ByVal NpcNumber As Integer, Optional ByVal Respawn As Boolean =
     End If
 #End If
 
+#If BATTLESERVER = 0 Then
+    If Info.OnlyEnabledInBattleServer > 0 Then
+        FailReason = "NPC only enabled in battle server: " & NpcNumber
+        GoTo fail
+    End If
+#End If
+
     If Info.RequireToggle <> "" Then
         If Not IsFeatureEnabled(Info.RequireToggle) Then
             FailReason = "Feature toggle disabled: " & Info.RequireToggle & " for NPC " & NpcNumber
@@ -1589,6 +1597,7 @@ Private Sub InitializeNpcFromInfo(ByVal NpcIndex As Integer, _
         .EsMaestroProfesion = Info.EsMaestroProfesion
         .ProfesionEnsenada = Info.ProfesionEnsenada
         .CollectibleCardIndex = Info.CollectibleCardIndex
+        .OnlyEnabledInBattleServer = Info.OnlyEnabledInBattleServer
         If .IntervaloMovimiento = 0 Then
             .IntervaloMovimiento = 380
             .Char.speeding = IntervaloNPCAI / 330
@@ -2024,16 +2033,32 @@ End Sub
 Sub MoveNpcToSide(ByVal NpcIndex As Integer, ByVal Heading As e_Heading)
     On Error GoTo Handler
     With NpcList(NpcIndex)
+        ' Validate heading parameter
+        If Heading < e_Heading.NORTH Or Heading > e_Heading.WEST Then
+            Call LogError("MoveNpcToSide: Invalid heading " & Heading & " for NPC " & NpcIndex)
+            Exit Sub
+        End If
+        
         ' Elegimos un lado al azar
         Dim r As Integer
         r = RandomNumber(0, 1) * 2 - 1 ' -1 o 1
+        
         ' Roto el heading original hacia ese lado
         Heading = Rotate_Heading(Heading, r)
+        
         ' Intento moverlo para ese lado
         If MoveNPCChar(NpcIndex, Heading) Then Exit Sub
+        
         ' Si falló, intento moverlo para el lado opuesto
         Heading = InvertHeading(Heading)
+        
+        ' Validate after invert
+        If Heading < e_Heading.NORTH Or Heading > e_Heading.WEST Then
+            Heading = e_Heading.NORTH ' Fallback to default
+        End If
+        
         If MoveNPCChar(NpcIndex, Heading) Then Exit Sub
+        
         ' Si ambos fallan, entonces lo dejo en la posición válida más cercana
         Dim NuevaPos As t_WorldPos
         Call ClosestLegalPos(.pos, NuevaPos, .flags.AguaValida, .flags.TierraInvalida = 0)
@@ -2041,7 +2066,7 @@ Sub MoveNpcToSide(ByVal NpcIndex As Integer, ByVal Heading As e_Heading)
     End With
     Exit Sub
 Handler:
-    Call TraceError(Err.Number, Err.Description, "NPCs.MoveNpcToSide", Erl)
+    Call TraceError(Err.Number, Err.Description, "NPCs.MoveNpcToSide [Heading=" & Heading & "]", Erl)
 End Sub
 
 Public Sub DummyTargetAttacked(ByVal NpcIndex As Integer)
@@ -2345,7 +2370,7 @@ UserCanAttackNpc_Err:
     Call TraceError(Err.Number, Err.Description, "Npcs.UserCanAttackNpc", Erl)
 End Function
 
-Public Function Inmovilize(ByVal SourceIndex As Integer, ByVal TargetIndex As Integer, ByVal Time As Integer, ByVal FX As Integer) As Boolean
+Public Function Inmovilize(ByVal SourceIndex As Integer, ByVal TargetIndex As Integer, ByVal Time As Long, ByVal FX As Integer) As Boolean
     With NpcList(TargetIndex)
         Call NPCAtacado(TargetIndex, SourceIndex)
         .flags.Inmovilizado = 1

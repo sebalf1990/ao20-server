@@ -718,7 +718,7 @@ Dim tStr                        As String
                     Then
                 Call WarpToLegalPos(UserIndex, .flags.ReturnPos.Map, .flags.ReturnPos.x, .flags.ReturnPos.y, True)
             Else ' Lo mando a su hogar
-                Call WarpToLegalPos(UserIndex, Cities(.Hogar).Map, Cities(.Hogar).x, Cities(.Hogar).y, True)
+                Call WarpToLegalPos(UserIndex, Cities(HomeCityId).Map, Cities(HomeCityId).x, Cities(HomeCityId).y, True)
             End If
         End If
         .flags.UserLogged = True
@@ -1036,7 +1036,11 @@ Sub ChangeUserChar(ByVal UserIndex As Integer, _
         .BackpackAnim = BackPack
     
         If .charindex > 0 Then
-            Call SendData(SendTarget.ToPCArea, UserIndex, PrepareMessageCharacterChange(body, head, Heading, .charindex, Arma, Escudo, Cart, BackPack, .FX, .loops, Casco, False, UserList(UserIndex).flags.Navegando))
+            If UserList(UserIndex).flags.AdminInvisible = 0 Then
+                Call SendData(SendTarget.ToPCArea, UserIndex, PrepareMessageCharacterChange(body, head, Heading, .charindex, Arma, Escudo, Cart, BackPack, .FX, .loops, Casco, False, UserList(UserIndex).flags.Navegando))
+            Else
+                Call SendData(SendTarget.ToAdminAreaButIndex, UserIndex, PrepareMessageCharacterChange(body, head, Heading, .charindex, Arma, Escudo, Cart, BackPack, .FX, .loops, Casco, False, UserList(UserIndex).flags.Navegando))
+            End If
         End If
     End With
     
@@ -1102,7 +1106,11 @@ Sub RefreshCharStatus(ByVal UserIndex As Integer)
             End If
         End If
     End If
-    Call SendData(SendTarget.ToPCArea, UserIndex, PrepareMessageUpdateTagAndStatus(UserIndex, UserList(UserIndex).Faccion.Status, name))
+    If UserList(UserIndex).flags.AdminInvisible = 0 Then
+        Call SendData(SendTarget.ToPCArea, UserIndex, PrepareMessageUpdateTagAndStatus(UserIndex, UserList(UserIndex).Faccion.Status, name))
+    Else
+        Call SendData(SendTarget.ToAdminAreaButIndex, UserIndex, PrepareMessageUpdateTagAndStatus(UserIndex, UserList(UserIndex).Faccion.Status, name))
+    End If
     Exit Sub
 RefreshCharStatus_Err:
     Call TraceError(Err.Number, Err.Description, "UsUaRiOs.RefreshCharStatus", Erl)
@@ -2105,6 +2113,7 @@ Private Function ShouldApplyCriminalTargetPenalty(ByVal attackerIndex As Integer
 End Function
 
 Sub HandleFactionScoreForKill(ByVal UserIndex As Integer, ByVal TargetIndex As Integer)
+    On Error GoTo HandleFactionScoreForKill_Err
     Dim Score As Integer
     With UserList(UserIndex)
         Score = CalculateBaseFactionScore(UserIndex, TargetIndex)
@@ -2137,9 +2146,13 @@ Sub HandleFactionScoreForKill(ByVal UserIndex As Integer, ByVal TargetIndex As I
             .Faccion.FactionScore = .Faccion.FactionScore + max(Score, 0)
         End If
     End With
+    Exit Sub
+HandleFactionScoreForKill_Err:
+    Call TraceError(Err.Number, Err.Description, "UsUaRiOs.HandleFactionScoreForKill", Erl)
 End Sub
 
 Sub HandleFactionScoreForAssist(ByVal UserIndex As Integer, ByVal TargetIndex As Integer)
+    On Error GoTo HandleFactionScoreForAssist_Err
     Dim Score As Integer
     With UserList(UserIndex)
         'Calcular el puntaje base de asistencia
@@ -2158,6 +2171,9 @@ Sub HandleFactionScoreForAssist(ByVal UserIndex As Integer, ByVal TargetIndex As
             .Faccion.FactionScore = .Faccion.FactionScore + max(Score, 0)
         End If
     End With
+    Exit Sub
+HandleFactionScoreForAssist_Err:
+    Call TraceError(Err.Number, Err.Description, "UsUaRiOs.HandleFactionScoreForAssist", Erl)
 End Sub
 
 Sub PenalizeFactionScoreLegionAndCouncil(ByVal Attacker As Integer, ByVal Target As Integer)
@@ -3268,7 +3284,7 @@ Public Sub RemoveInvisibility(ByVal UserIndex As Integer)
     End With
 End Sub
 
-Public Function Inmovilize(ByVal SourceIndex As Integer, ByVal TargetIndex As Integer, ByVal Time As Integer, ByVal FX As Integer) As Boolean
+Public Function Inmovilize(ByVal SourceIndex As Integer, ByVal TargetIndex As Integer, ByVal Time As Long, ByVal FX As Integer) As Boolean
     Call UsuarioAtacadoPorUsuario(SourceIndex, TargetIndex)
     If IsSet(UserList(TargetIndex).flags.StatusMask, eCCInmunity) Then
         Call WriteLocaleMsg(SourceIndex, MsgCCInunity, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)

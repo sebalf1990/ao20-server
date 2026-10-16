@@ -1326,9 +1326,11 @@ Public Sub HandleEditChar(ByVal UserIndex As Integer)
                         ciudadNueva = e_City.cEldoria
                     Case "PENT", "PENTHAR"
                         ciudadNueva = e_City.cPenthar
+                    Case "MORGRIM"
+                        ciudadNueva = e_City.cMorgrim
                 End Select
                 If ciudadNueva = 0 Then
-                    Call WriteConsoleMsg(UserIndex, "Ciudad desconocida. Válidas: ULLATHORPE, NIX, BANDERBILL, LINDOS, ARGHAL, ARKHEIN, FORGAT, ELDORIA, PENTHAR.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+                    Call WriteConsoleMsg(UserIndex, "Ciudad desconocida. Válidas: ULLATHORPE, NIX, BANDERBILL, LINDOS, ARGHAL, ARKHEIN, FORGAT, ELDORIA, PENTHAR, MORGRIM.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                 Else
                     UserList(tUser.ArrayIndex).Hogar = ciudadNueva
                     Call WriteConsoleMsg(UserIndex, "Hogar de " & UserList(tUser.ArrayIndex).name & " cambiado a " & Arg1 & ".", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)

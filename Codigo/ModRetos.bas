@@ -459,12 +459,12 @@ Public Sub FinalizarReto(ByVal Sala As Integer, Optional ByVal TiempoAgotado As 
         ' Decidimos el resultado del reto según el puntaje:
         Dim i                 As Integer, tUser As t_UserReference, Equipo1 As String, Equipo2 As String
         Dim eloTotalIzquierda As Long, eloTotalDerecha As Long, winsIzquierda As Long, winsDerecha As Long
-        Dim todosMayorA35     As Boolean
-        todosMayorA35 = True
+        Dim todosAptos     As Boolean
+        todosAptos = True
         For i = 0 To UBound(.Jugadores)
             tUser = .Jugadores(i)
             If tUser.ArrayIndex <> 0 Then
-                todosMayorA35 = todosMayorA35 And (UserList(tUser.ArrayIndex).Stats.ELV >= 35)
+                todosAptos = todosAptos And (UserList(tUser.ArrayIndex).Stats.ELV >= 33)
                 If i Mod 2 = 0 Then
                     eloTotalIzquierda = eloTotalIzquierda + UserList(tUser.ArrayIndex).Stats.ELO
                 Else
@@ -589,7 +589,7 @@ Public Sub FinalizarReto(ByVal Sala As Integer, Optional ByVal TiempoAgotado As 
         For i = 0 To UBound(.Jugadores)
             tUser = .Jugadores(i)
             If IsValidUserRef(tUser) Then
-                If todosMayorA35 Then
+                If todosAptos Then
                     If i Mod 2 = 0 Then ' Jugadores en el equipo Izquierdo
                         eloDiff = winsIzquierda * (eloTotalDerecha * 0.1)
                     Else
