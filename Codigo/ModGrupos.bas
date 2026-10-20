@@ -395,13 +395,16 @@ Public Sub FinalizarGrupo(ByVal LiderIndex As Integer)
             Next j
             
             ' Enviar actualización del grupo a cada miembro
-            Call modSendData.SendData(ToIndex, MemberIndex, PrepareUpdateGroupInfo(MemberIndex))
             
             ' Limpiar datos del grupo para este miembro
             .Grupo.EnGrupo = False
             .Grupo.Id = -1
             Call SetUserRef(.Grupo.Lider, 0)
             Call SetUserRef(.Grupo.PropuestaDe, 0)
+            
+            ' AO20 (15.001 D-finalizar-grupo): se envia DESPUES de limpiar, asi el miembro recibe el grupo
+            ' vacio. El oficial lo enviaba antes y el miembro se quedaba con la lista completa.
+            Call modSendData.SendData(ToIndex, MemberIndex, PrepareUpdateGroupInfo(MemberIndex))
             
             If MemberIndex = LiderIndex Then
                 Call WriteLocaleMsg(LiderIndex, MSG_DISUELTO_GRUPO, e_TextChannel.TEXTCHANNEL_GROUP, e_FontTypeNames.FONTTYPE_New_GRUPO) ' Msg2063="Has disuelto el grupo."
