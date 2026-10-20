@@ -47,7 +47,7 @@ Private mElapsedTime   As Long
 Private mTimeLimit     As Long
 
 Private Enum e_TrapTypes
-    eInmovilize = 1
+    eParalice = 1
     eExplosive
     ePoison
 End Enum
@@ -196,7 +196,7 @@ Private Sub SetPosition(ByVal Map As Integer, ByVal PosX As Integer, ByVal PosY 
     mWorldPosition.Map = Map
     mWorldPosition.x = PosX
     mWorldPosition.y = PosY
-    Set MapData(mWorldPosition.Map, mWorldPosition.x, mWorldPosition.y).Trap = Me
+    Set MapData(mWorldPosition.x, mWorldPosition.y, mWorldPosition.Map).Trap = Me
     Call modSendData.SendToAreaByPos(Map, PosX, PosY, PrepareTrapUpdate(1, PosX, PosY))
 End Sub
 
@@ -208,7 +208,7 @@ Public Sub IBaseEffectOverTime_TargetChangeTerrain()
 End Sub
 
 Private Sub RemoveFromMap()
-    Set MapData(mWorldPosition.Map, mWorldPosition.x, mWorldPosition.y).Trap = Nothing
+    Set MapData(mWorldPosition.x, mWorldPosition.y, mWorldPosition.Map).Trap = Nothing
     Call modSendData.SendToAreaByPos(mWorldPosition.Map, mWorldPosition.x, mWorldPosition.y, PrepareTrapUpdate(0, mWorldPosition.x, mWorldPosition.y))
 End Sub
 
@@ -229,16 +229,14 @@ End Function
 
 Public Function trigger(ByVal TargetIndex, ByVal TargetType As e_ReferenceType)
     trigger = False
-    ' Upstream #1755: un NPC marcado con AfectaParalisis (inmune a la paralisis) no activa la trampa de
-    ' inmovilizar; sale sin sonido y sin consumirla (RemoveEffect sigue en False).
     If TargetType = eNpc Then
-        If EffectOverTime(mDotInfo.EotId).SubType = e_TrapTypes.eInmovilize Then
+        If EffectOverTime(mDotInfo.EotId).SubType = e_TrapTypes.eParalice Then
             If NpcList(TargetIndex).flags.AfectaParalisis = 1 Then
                 Exit Function
             End If
         End If
     End If
-    Call modSendData.SendToAreaByPos(mWorldPosition.Map, mWorldPosition.x, mWorldPosition.y, PrepareMessagePlayWave(ACTIVATE_TRAP_WAW_FILE, mWorldPosition.x, mWorldPosition.y, _
+    Call modSendData.SendToAreaByPos(mWorldPosition.map, mWorldPosition.x, mWorldPosition.y, PrepareMessagePlayWave(ACTIVATE_TRAP_WAW_FILE, mWorldPosition.x, mWorldPosition.y, _
             False))
     If EffectOverTime(mDotInfo.EotId).OnHitWav > 0 Then Call modSendData.SendToAreaByPos(mWorldPosition.Map, mWorldPosition.x, mWorldPosition.y, PrepareMessagePlayWave( _
             EffectOverTime(mDotInfo.EotId).OnHitWav, mWorldPosition.x, mWorldPosition.y, False))
@@ -246,19 +244,19 @@ Public Function trigger(ByVal TargetIndex, ByVal TargetType As e_ReferenceType)
     mDotInfo.RemoveEffect = True
     If mDotInfo.TargetRef.RefType = eUser Then
         If UserList(mDotInfo.TargetRef.ArrayIndex).ChatCombate = 1 Then
-            Call WriteLocaleMsg(mDotInfo.TargetRef.ArrayIndex, MsgFallIntoTrap, e_FontTypeNames.FONTTYPE_FIGHT)
+            Call WriteLocaleMsg(mDotInfo.TargetRef.ArrayIndex, MsgFallIntoTrap, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
         End If
     End If
     Select Case EffectOverTime(mDotInfo.EotId).SubType
-        Case e_TrapTypes.eInmovilize
+        Case e_TrapTypes.eParalice
             If mDotInfo.TargetRef.RefType = eUser Then
                 If TargetType = eUser Then
-                    If UserMod.Inmovilize(mDotInfo.TargetRef.ArrayIndex, TargetIndex, NET_INMO_DURATION, EffectOverTime(mDotInfo.EotId).OnHitFx) Then
+                    If UserMod.Inmovilize(mDotInfo.TargetRef.ArrayIndex, TargetIndex, SvrConfig.GetValue("TrapParaliceDuration"), EffectOverTime(mDotInfo.EotId).OnHitFx) Then
                         If EffectOverTime(mDotInfo.EotId).OnHitFx > 0 Then Call SendData(SendTarget.ToPCAliveArea, TargetIndex, PrepareMessageCreateFX(UserList( _
                                 TargetIndex).Char.charindex, EffectOverTime(mDotInfo.EotId).OnHitFx, 0, mWorldPosition.x, mWorldPosition.y))
                         trigger = True
                         If UserList(TargetIndex).ChatCombate = 1 Then
-                            Call WriteLocaleMsg(TargetIndex, MsgTrapInmo, e_FontTypeNames.FONTTYPE_FIGHT, GetName(mDotInfo.TargetRef))
+                            Call WriteLocaleMsg(TargetIndex, MsgTrapInmo, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT, GetName(mDotInfo.TargetRef))
                         End If
                         If TargetType = eUser Then
                             Call RegisterNewAttack(TargetIndex, mDotInfo.TargetRef.ArrayIndex)
@@ -267,7 +265,7 @@ Public Function trigger(ByVal TargetIndex, ByVal TargetType As e_ReferenceType)
                     Exit Function
                 End If
                 If TargetType = eNpc Then
-                    Call NPCs.Inmovilize(mDotInfo.TargetRef.ArrayIndex, TargetIndex, NET_INMO_DURATION * 10, EffectOverTime(mDotInfo.EotId).OnHitFx)
+                    Call NPCs.Paralice(mDotInfo.TargetRef.ArrayIndex, TargetIndex, SvrConfig.GetValue("TrapParaliceDuration") * 6.5, EffectOverTime(mDotInfo.EotId).OnHitFx)
                     If EffectOverTime(mDotInfo.EotId).OnHitFx > 0 Then Call SendData(SendTarget.ToNPCAliveArea, TargetIndex, PrepareMessageCreateFX(NpcList( _
                             TargetIndex).Char.charindex, EffectOverTime(mDotInfo.EotId).OnHitFx, 0, mWorldPosition.x, mWorldPosition.y))
                     trigger = True
@@ -305,7 +303,7 @@ Public Function trigger(ByVal TargetIndex, ByVal TargetType As e_ReferenceType)
                 If EffectOverTime(mDotInfo.EotId).OnHitFx > 0 Then Call SendData(SendTarget.ToPCAliveArea, TargetIndex, PrepareMessageCreateFX(UserList( _
                         TargetIndex).Char.charindex, EffectOverTime(mDotInfo.EotId).OnHitFx, 0, mWorldPosition.x, mWorldPosition.y))
                 If UserList(TargetIndex).ChatCombate = 1 Then
-                    Call WriteLocaleMsg(TargetIndex, MsgTrapPoison, e_FontTypeNames.FONTTYPE_FIGHT, GetName(mDotInfo.TargetRef))
+                    Call WriteLocaleMsg(TargetIndex, MsgTrapPoison, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_VENENO, GetName(mDotInfo.TargetRef))
                 End If
                 If TargetType = eUser Then
                     Call RegisterNewAttack(TargetIndex, mDotInfo.TargetRef.ArrayIndex)

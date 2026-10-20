@@ -872,7 +872,7 @@ Public Sub TryPoisonNpcWithWeapon(ByVal AtacanteIndex As Integer, ByVal NpcIndex
                 chPifia, regenManaPct, regenManaFija, bloqRegenTotal)
     End Select
     If isPoisonArrow Then
-        Call WriteConsoleMsg(AtacanteIndex, "Has envenenado a " & NpcList(NpcIndex).name & " con tus flechas.", e_FontTypeNames.FONTTYPE_FIGHT)
+        Call WriteConsoleMsg(AtacanteIndex, "Has envenenado a " & NpcList(NpcIndex).name & " con tus flechas.", e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
         If isPoisonedAmmo Then
             Call LogPoisonEvent("apply_arrow_vial_npc", UserList(AtacanteIndex).name, NpcList(NpcIndex).name, ObjInd, familia, 0, 0, 0, 0)
         Else
@@ -927,7 +927,7 @@ Public Sub ClearPoisonedWeapon(ByVal UserIndex As Integer, Optional ByVal msg As
         .PoisonedWeaponBloqueaRegenManaTotal = 0
     End With
     If LenB(msg) > 0 Then
-        Call WriteConsoleMsg(UserIndex, msg, e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteConsoleMsg(UserIndex, msg, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
     End If
     Exit Sub
 ClearPoisonedWeapon_Err:
@@ -1077,7 +1077,7 @@ Public Sub ClearPoisonedAmmo(ByVal UserIndex As Integer, Optional ByVal msg As S
     End If
     Call LogPoisonEvent("clear_poisoned_ammo_" & logMotivo, UserList(UserIndex).name, "", oldObjIndex, oldFamilia, 0, oldCargas, 0, 0)
     If LenB(msg) > 0 Then
-        Call WriteConsoleMsg(UserIndex, msg, e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteConsoleMsg(UserIndex, msg, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
     End If
     Exit Sub
 ClearPoisonedAmmo_Err:
@@ -1178,13 +1178,13 @@ Public Sub ApplyPoisonProfileToUser(ByVal NpcIndex As Integer, ByVal UserIndex A
     Dim resistU As t_PoisonResist
     resistU = GetUserPoisonResist(UserIndex, p.FamiliaVeneno)
     If resistU.Inmune <> 0 Then
-        Call WriteConsoleMsg(UserIndex, "Resististe el veneno.", e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteConsoleMsg(UserIndex, "Resististe el veneno.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         Exit Sub
     End If
     Dim chFin As Long
     chFin = p.ChanceAplicarPct - resistU.ChancePct
     If chFin <= 0 Or RandomNumber(1, 100) > chFin Then
-        Call WriteConsoleMsg(UserIndex, "Resististe el veneno.", e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteConsoleMsg(UserIndex, "Resististe el veneno.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         Exit Sub
     End If
     Select Case p.FamiliaVeneno
@@ -1208,7 +1208,7 @@ Public Sub ApplyPoisonProfileToUser(ByVal NpcIndex As Integer, ByVal UserIndex A
                 p.RegenManaReduccionPct, p.RegenManaReduccionFija, _
                 p.BloqueaRegenManaTotal)
     End Select
-    Call WriteConsoleMsg(UserIndex, "¡La criatura te ha envenenado!", e_FontTypeNames.FONTTYPE_FIGHT)
+    Call WriteConsoleMsg(UserIndex, "¡La criatura te ha envenenado!", e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
     Exit Sub
 ApplyPoisonProfileToUser_Err:
     Call TraceError(Err.Number, Err.Description, "EffectsOverTime.ApplyPoisonProfileToUser", Erl)
@@ -1621,7 +1621,7 @@ End Sub
 Public Function ApplyEotModifier(ByRef TargetRef As t_AnyReference, ByRef EffectStats As t_EffectOverTime, Optional ByVal Modifier As Single = 0)
     If IsValidRef(TargetRef) Then
         Call UpdateIncreaseModifier(TargetRef, MagicBonus, EffectStats.MagicDamageDone + EffectStats.MagicDamageDone * Modifier)
-        Call UpdateIncreaseModifier(TargetRef, PhysiccalBonus, EffectStats.PhysicalDamageDone + EffectStats.PhysicalDamageDone * Modifier)
+        Call UpdateIncreaseModifier(TargetRef, PhysiccalBonus, EffectStats.PhysicalDamageDone + EffectStats.PhysicalDamageDone * Modifier, EffectStats.PhysicalBonusPveOnly)
         Call UpdateIncreaseModifier(TargetRef, MagicReduction, EffectStats.MagicDamageReduction + EffectStats.MagicDamageReduction * Modifier)
         Call UpdateIncreaseModifier(TargetRef, PhysicalReduction, EffectStats.PhysicalDamageReduction + EffectStats.PhysicalDamageReduction * Modifier)
         Call UpdateIncreaseModifier(TargetRef, MovementSpeed, EffectStats.SpeedModifier + EffectStats.SpeedModifier * Modifier)
@@ -1629,7 +1629,7 @@ Public Function ApplyEotModifier(ByRef TargetRef As t_AnyReference, ByRef Effect
         Call UpdateIncreaseModifier(TargetRef, e_ModifierTypes.EvasionBonus, EffectStats.EvasionModifier + EffectStats.EvasionModifier * Modifier)
         Call UpdateIncreaseModifier(TargetRef, e_ModifierTypes.SelfHealingBonus, EffectStats.SelfHealingBonus + EffectStats.SelfHealingBonus * Modifier)
         Call UpdateIncreaseModifier(TargetRef, e_ModifierTypes.MagicHealingBonus, EffectStats.MagicHealingBonus + EffectStats.MagicHealingBonus * Modifier)
-        Call UpdateIncreaseModifier(TargetRef, e_ModifierTypes.PhysicalLinearBonus, EffectStats.PhysicalLinearBonus + EffectStats.PhysicalLinearBonus * Modifier)
+        Call UpdateIncreaseModifier(TargetRef, e_ModifierTypes.PhysicalLinearBonus, EffectStats.PhysicalLinearBonus + EffectStats.PhysicalLinearBonus * Modifier, EffectStats.PhysicalBonusPveOnly)
         If IsSet(EffectStats.ApplyStatusMask, eCCInmunity) Then
             If TargetRef.RefType = eUser Then
                 If UserList(TargetRef.ArrayIndex).flags.Inmovilizado = 1 Then
@@ -1650,7 +1650,7 @@ End Function
 Public Function RemoveEotModifier(ByRef TargetRef As t_AnyReference, ByRef EffectStats As t_EffectOverTime, Optional ByVal Modifier As Single = 0)
     If IsValidRef(TargetRef) Then
         Call UpdateIncreaseModifier(TargetRef, MagicBonus, -(EffectStats.MagicDamageDone + EffectStats.MagicDamageDone * Modifier))
-        Call UpdateIncreaseModifier(TargetRef, PhysiccalBonus, -(EffectStats.PhysicalDamageDone + EffectStats.PhysicalDamageDone * Modifier))
+        Call UpdateIncreaseModifier(TargetRef, PhysiccalBonus, -(EffectStats.PhysicalDamageDone + EffectStats.PhysicalDamageDone * Modifier), EffectStats.PhysicalBonusPveOnly)
         Call UpdateIncreaseModifier(TargetRef, MagicReduction, -(EffectStats.MagicDamageReduction + EffectStats.MagicDamageReduction * Modifier))
         Call UpdateIncreaseModifier(TargetRef, PhysicalReduction, -(EffectStats.PhysicalDamageReduction + EffectStats.PhysicalDamageReduction * Modifier))
         Call UpdateIncreaseModifier(TargetRef, MovementSpeed, -(EffectStats.SpeedModifier + EffectStats.SpeedModifier * Modifier))
@@ -1658,7 +1658,7 @@ Public Function RemoveEotModifier(ByRef TargetRef As t_AnyReference, ByRef Effec
         Call UpdateIncreaseModifier(TargetRef, e_ModifierTypes.EvasionBonus, -(EffectStats.EvasionModifier + EffectStats.EvasionModifier * Modifier))
         Call UpdateIncreaseModifier(TargetRef, e_ModifierTypes.SelfHealingBonus, -(EffectStats.SelfHealingBonus + EffectStats.SelfHealingBonus * Modifier))
         Call UpdateIncreaseModifier(TargetRef, e_ModifierTypes.MagicHealingBonus, -(EffectStats.MagicHealingBonus + EffectStats.MagicHealingBonus * Modifier))
-        Call UpdateIncreaseModifier(TargetRef, e_ModifierTypes.PhysicalLinearBonus, -(EffectStats.PhysicalLinearBonus + EffectStats.PhysicalLinearBonus * Modifier))
+        Call UpdateIncreaseModifier(TargetRef, e_ModifierTypes.PhysicalLinearBonus, -(EffectStats.PhysicalLinearBonus + EffectStats.PhysicalLinearBonus * Modifier), EffectStats.PhysicalBonusPveOnly)
         If IsSet(EffectStats.ApplyStatusMask, eCCInmunity) Then
             Call UnsetStatusMask(TargetRef, eCCInmunity)
         End If

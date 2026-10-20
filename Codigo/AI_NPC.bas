@@ -34,6 +34,11 @@ Option Explicit
 Public Const RANGO_VISION_X   As Byte = DEFAULT_NPC_VISION_RANGE_X
 Public Const RANGO_VISION_Y   As Byte = DEFAULT_NPC_VISION_RANGE_Y
 
+Private Const GUARD_PARALYZE_SPELL     As Integer = 25
+Private Const GUARD_DAMAGE_SPELL       As Integer = 204
+Private Const GUARD_NPC_VISION_RANGE   As Byte = 8
+Private Const GUARD_NPC_SPELL_INTERVAL As Long = 1500
+
 
 Public Sub NpcDummyUpdate(ByVal NpcIndex As Integer)
     With NpcList(NpcIndex)
@@ -51,6 +56,8 @@ End Sub
 Public Sub NpcAI(ByVal NpcIndex As Integer)
     On Error GoTo ErrorHandler
     With NpcList(NpcIndex)
+        If HandleNpcCrossMapRoute(NpcIndex) Then Exit Sub
+        If TryGuardAttackHostileNpc(NpcIndex) Then Exit Sub
         Select Case .Movement
             Case e_TipoAI.Estatico
                 ' Es un NPC estatico, no hace nada.
@@ -414,7 +421,7 @@ End Sub
 ' Guides the NPC toward the supplied waypoint while layering the temporary strafe offset and recompute cooldowns.
 ' It is the integration point that merges the reactive orbit destination, checks whether the cached path is still valid,
 ' and only fires a new A* search when the wrap-safe timer signals the cooldown has elapsed.
-Private Sub AI_CaminarConRumbo(ByVal NpcIndex As Integer, ByRef rumbo As t_WorldPos)
+Public Sub AI_CaminarConRumbo(ByVal NpcIndex As Integer, ByRef rumbo As t_WorldPos)
     On Error GoTo AI_CaminarConRumbo_Err
     Dim adjustedRumbo As t_WorldPos
     If NpcList(NpcIndex).TargetUser.ArrayIndex = 0 Then
@@ -425,7 +432,9 @@ Private Sub AI_CaminarConRumbo(ByVal NpcIndex As Integer, ByRef rumbo As t_World
         Exit Sub
     End If
     adjustedRumbo = rumbo
-    Call ApplyNpcStrafeToDestination(NpcIndex, adjustedRumbo)
+    If NpcList(NpcIndex).CrossMapRoute.Mode = eNpcCrossMapRouteNone Then
+        Call ApplyNpcStrafeToDestination(NpcIndex, adjustedRumbo)
+    End If
     If NpcList(NpcIndex).pos.x = adjustedRumbo.x And NpcList(NpcIndex).pos.y = adjustedRumbo.y Then
         Call NpcClearTargetUnreachable(NpcIndex)
         NpcList(NpcIndex).pathFindingInfo.PathLength = 0
@@ -461,8 +470,7 @@ Private Sub AI_CaminarConRumbo(ByVal NpcIndex As Integer, ByRef rumbo As t_World
                         NpcList(NpcIndex).pathFindingInfo.RangoVision = Min(SvrConfig.GetValue("NPC_MAX_VISION_RANGE"), NpcList(NpcIndex).pathFindingInfo.RangoVision + _
                                 PATH_VISION_DELTA)
                     End If
-                    ' Upstream 749840d4: un NPC de rango marcaba inalcanzable a alguien al que SI podia
-                    ' pegarle y dejaba de atacarlo. Solo los cuerpo a cuerpo deben marcarlo.
+                    Call RecordNpcCrossMapPathFailure(NpcIndex)
                     If NpcList(NpcIndex).TargetUser.ArrayIndex <> 0 And NpcList(NpcIndex).AttackRange <= 1 And _
                        NpcList(NpcIndex).flags.LanzaSpells = 0 And NpcList(NpcIndex).flags.AttackedBy = vbNullString Then
                         Call NpcMarkTargetUnreachable(NpcIndex)
@@ -628,6 +636,7 @@ End Sub
 Private Function NpcLanzaSpellInmovilizado(ByVal NpcIndex As Integer, ByVal tIndex As Integer) As Boolean
     NpcLanzaSpellInmovilizado = False
     With NpcList(NpcIndex)
+        If .pos.Map <> UserList(tIndex).pos.Map Then Exit Function
         If Not NPCs.CanMove(.Contadores, .flags) Then
             Select Case .Char.Heading
                 Case e_Heading.NORTH
@@ -696,7 +705,7 @@ Public Function NPCHasAUserInFront(ByVal NpcIndex As Integer, ByRef UserIndex As
         NPCHasAUserInFront = False
         Exit Function
     End If
-    UserIndex = MapData(NextPosNPC.Map, NextPosNPC.x, NextPosNPC.y).UserIndex
+    UserIndex = MapData(NextPosNPC.x, NextPosNPC.y, NextPosNPC.Map).UserIndex
     NPCHasAUserInFront = (UserIndex > 0)
     Exit Function
 NPCHasAUserInFront_Err:
@@ -715,6 +724,7 @@ Private Sub AI_AtacarUsuarioObjetivo(ByVal AtackerNpcIndex As Integer)
     AtacaAlDelFrente = False
     With NpcList(AtackerNpcIndex)
         If Not IsValidUserRef(.TargetUser) Then Exit Sub
+        If .pos.Map <> UserList(.TargetUser.ArrayIndex).pos.Map Then Exit Sub
         EstaPegadoAlUsuario = (Distancia(.pos, UserList(.TargetUser.ArrayIndex).pos) <= 1)
         AtacaConMagia = .flags.LanzaSpells And IntervaloPermiteLanzarHechizo(AtackerNpcIndex)
         AtacaMelee = EstaPegadoAlUsuario And UsuarioAtacableConMelee(AtackerNpcIndex, .TargetUser.ArrayIndex)
@@ -739,7 +749,7 @@ Private Sub AI_AtacarUsuarioObjetivo(ByVal AtackerNpcIndex As Integer)
             End If
             Dim UserIndexFront As Integer
             NextPosNPC = ComputeNextHeadingPos(AtackerNpcIndex)
-            UserIndexFront = MapData(NextPosNPC.Map, NextPosNPC.x, NextPosNPC.y).UserIndex
+            UserIndexFront = MapData(NextPosNPC.x, NextPosNPC.y, NextPosNPC.Map).UserIndex
             AtacaAlDelFrente = (UserIndexFront > 0)
             If AtacaAlDelFrente And NPCs.CanAttack(.Contadores, .flags) Then
                 Call AnimacionIdle(AtackerNpcIndex, True)
@@ -765,7 +775,48 @@ ErrorHandler:
     Call TraceError(Err.Number, Err.Description, "AIv2.AI_AtacarUsuarioObjetivo", Erl)
 End Sub
 
-Public Sub AI_GuardiaPersigueNpc(ByVal NpcIndex As Integer)
+Public Function IsGuardNpcType(ByVal NpcType As e_NPCType) As Boolean
+    Select Case NpcType
+        Case e_NPCType.GuardiaReal, e_NPCType.GuardiasCaos, e_NPCType.GuardiaNpc
+            IsGuardNpcType = True
+    End Select
+End Function
+
+Private Function TryGuardAttackHostileNpc(ByVal NpcIndex As Integer) As Boolean
+    On Error GoTo TryGuardAttackHostileNpc_Err
+    With NpcList(NpcIndex)
+        If .npcType <> e_NPCType.GuardiaReal And .npcType <> e_NPCType.GuardiasCaos Then Exit Function
+        If IsValidNpcRef(.TargetNPC) Then
+            If NpcList(.TargetNPC.ArrayIndex).flags.OldHostil = 0 Or _
+                    NpcList(.TargetNPC.ArrayIndex).Attackable = 0 Or _
+                    IsValidUserRef(NpcList(.TargetNPC.ArrayIndex).MaestroUser) Or _
+                    IsGuardNpcType(NpcList(.TargetNPC.ArrayIndex).npcType) Then Call ClearNpcRef(.TargetNPC)
+        End If
+        If Not IsValidNpcRef(.TargetNPC) Then
+            Call SetNpcRef(.TargetNPC, BuscarNpcEnArea(NpcIndex, GUARD_NPC_VISION_RANGE))
+        End If
+        If Not IsValidNpcRef(.TargetNPC) Then Exit Function
+        If Distancia(.pos, NpcList(.TargetNPC.ArrayIndex).pos) > GUARD_NPC_VISION_RANGE Then
+            Call ClearNpcRef(.TargetNPC)
+            Exit Function
+        End If
+        TryGuardAttackHostileNpc = True
+        If Not NPCs.CanAttack(.Contadores, .flags) Then Exit Function
+        If TicksElapsed(.Contadores.IntervaloLanzarHechizo, GetTickCountRaw()) < GUARD_NPC_SPELL_INTERVAL Then Exit Function
+        .Contadores.IntervaloLanzarHechizo = GetTickCountRaw()
+        If NpcList(.TargetNPC.ArrayIndex).flags.Paralizado = 0 And _
+                NpcList(.TargetNPC.ArrayIndex).flags.AfectaParalisis = 0 Then
+            Call NpcLanzaSpellSobreNpc(NpcIndex, .TargetNPC.ArrayIndex, GUARD_PARALYZE_SPELL)
+        End If
+        If IsValidNpcRef(.TargetNPC) Then
+            Call NpcLanzaSpellSobreNpc(NpcIndex, .TargetNPC.ArrayIndex, GUARD_DAMAGE_SPELL)
+        End If
+    End With
+    Exit Function
+TryGuardAttackHostileNpc_Err:
+    Call TraceError(Err.Number, Err.Description, "AI.TryGuardAttackHostileNpc", Erl)
+End Function
+Public Sub AI_GuardiaPersigueNpc(ByVal NpcIndex As Integer)
     On Error GoTo ErrorHandler
     Dim TargetPos As t_WorldPos
     With NpcList(NpcIndex)
@@ -999,28 +1050,31 @@ Private Function DistanciaRadial(OrigenPos As t_WorldPos, DestinoPos As t_WorldP
     DistanciaRadial = max(Abs(OrigenPos.x - DestinoPos.x), Abs(OrigenPos.y - DestinoPos.y))
 End Function
 
-Private Function BuscarNpcEnArea(ByVal NpcIndex As Integer) As Integer
+Private Function BuscarNpcEnArea(ByVal NpcIndex As Integer, Optional ByVal SearchRadius As Byte = 0) As Integer
     On Error GoTo BuscarNpcEnArea
-    Dim x As Byte, y As Byte
+    Dim x As Integer, y As Integer
     With NpcList(NpcIndex)
-        Dim nRadioGuardias As Integer
-        nRadioGuardias = CInt(SvrConfig.GetValue("NPC_DIAMETRO_GUARDIAS")) \ 2
-        For x = (.Orig.x - nRadioGuardias) To (.Orig.x + nRadioGuardias)
-            For y = (.Orig.y - nRadioGuardias) To (.Orig.y + nRadioGuardias)
-                If MapData(.Orig.Map, x, y).NpcIndex > 0 And NpcIndex <> MapData(.Orig.Map, x, y).NpcIndex Then
+        ' AO20: without an explicit radius the guard radius comes from Server.ini ([IA] DiametroVisionGuardias).
+        If SearchRadius = 0 Then SearchRadius = CInt(SvrConfig.GetValue("NPC_DIAMETRO_GUARDIAS")) \ 2
+        For x = (.Orig.x - SearchRadius) To (.Orig.x + SearchRadius)
+            For y = (.Orig.y - SearchRadius) To (.Orig.y + SearchRadius)
+                If InMapBounds(.Orig.Map, x, y) Then
+                    If MapData(x, y, .Orig.Map).NpcIndex > 0 And NpcIndex <> MapData(x, y, .Orig.Map).NpcIndex Then
                     Dim foundNpc As Integer
-                    foundNpc = MapData(.Orig.Map, x, y).NpcIndex
-                    ' Upstream #1837 (parcial): una mascota de un usuario (MaestroUser valido) no es objetivo de la guardia,
-                    ' aunque su Hostile haya quedado en 1 al dejar de seguir (OldHostil). El resto de #1837 es de #1776.
-                    If NpcList(foundNpc).Hostile <> 0 And Not IsValidUserRef(NpcList(foundNpc).MaestroUser) Then
+                    foundNpc = MapData(x, y, .Orig.Map).NpcIndex
+                    If NpcList(foundNpc).flags.OldHostil <> 0 And _
+                            NpcList(foundNpc).Attackable <> 0 And _
+                            Not IsValidUserRef(NpcList(foundNpc).MaestroUser) And _
+                            Not IsGuardNpcType(NpcList(foundNpc).npcType) Then
                         If Not IsValidUserRef(NpcList(foundNpc).TargetUser) Then
-                            BuscarNpcEnArea = MapData(.Orig.Map, x, y).NpcIndex
+                            BuscarNpcEnArea = MapData(x, y, .Orig.Map).NpcIndex
                             Exit Function
                         ElseIf UserList(NpcList(foundNpc).TargetUser.ArrayIndex).flags.NPCAtacado.ArrayIndex <> foundNpc Then
-                            BuscarNpcEnArea = MapData(.Orig.Map, x, y).NpcIndex
+                            BuscarNpcEnArea = MapData(x, y, .Orig.Map).NpcIndex
                             Exit Function
                         End If
                     End If
+                End If
                 End If
             Next y
         Next x
@@ -1128,7 +1182,7 @@ Private Sub HacerCaminata(ByVal NpcIndex As Integer)
         Destino.Map = .pos.Map
         Destino.x = .Orig.x + .Caminata(.CaminataActual).offset.x
         Destino.y = .Orig.y + .Caminata(.CaminataActual).offset.y
-        ' Si todaviï¿½a no llego al destino
+        ' Si todavía no llego al destino
         If .pos.x <> Destino.x Or .pos.y <> Destino.y Then
             ' Tratamos de acercarnos (podemos pisar npcs, usuarios o triggers)
             Heading = GetHeadingFromWorldPos(.pos, Destino)
@@ -1136,13 +1190,13 @@ Private Sub HacerCaminata(ByVal NpcIndex As Integer)
             NextTile = .pos
             Call HeadtoPos(Heading, NextTile)
             ' Si hay un NPC
-            MoveChar = MapData(NextTile.Map, NextTile.x, NextTile.y).NpcIndex
+            MoveChar = MapData(NextTile.x, NextTile.y, NextTile.Map).NpcIndex
             If MoveChar Then
                 ' Lo movemos hacia un lado
                 Call MoveNpcToSide(MoveChar, Heading)
             End If
             ' Si hay un user
-            MoveChar = MapData(NextTile.Map, NextTile.x, NextTile.y).UserIndex
+            MoveChar = MapData(NextTile.x, NextTile.y, NextTile.Map).UserIndex
             If MoveChar Then
                 ' Si no esta muerto o es admin invisible (porque a esos los atraviesa)
                 If UserList(MoveChar).flags.AdminInvisible = 0 Or UserList(MoveChar).flags.Muerto = 0 Then
@@ -1246,6 +1300,7 @@ Private Sub NpcLanzaUnSpell(ByVal NpcIndex As Integer)
     Dim Target              As Integer
     Dim PuedeDanarAlUsuario As Boolean
     If Not IsValidUserRef(NpcList(NpcIndex).TargetUser) Then Exit Sub
+    If NpcList(NpcIndex).pos.Map <> UserList(NpcList(NpcIndex).TargetUser.ArrayIndex).pos.Map Then Exit Sub
     Target = NpcList(NpcIndex).TargetUser.ArrayIndex
     ' Compute how far the user is from the npcs
     Dim dst_userx As Integer
@@ -1330,6 +1385,7 @@ End Function
 Private Function EsEnemigo(ByVal NpcIndex As Integer, ByVal UserIndex As Integer) As Boolean
     On Error GoTo EsEnemigo_Err
     If NpcIndex = 0 Or UserIndex = 0 Then Exit Function
+    If IsGuardNpcType(NpcList(NpcIndex).npcType) And EsGM(UserIndex) Then Exit Function
     EsEnemigo = True
     With NpcList(NpcIndex)
         ' Si el NPC tiene un atacante

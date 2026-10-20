@@ -100,7 +100,7 @@ Public Sub ReinicioSeguro(Optional ByVal Motivo As String = vbNullString, Option
     m_ReinicioEnCurso = True
 
     Call LogSafeRestart("reinicio", Motivo, Modo)
-    Call MensajeGlobal("Servidor > El servidor se va a reiniciar. Guardando personajes...", e_FontTypeNames.FONTTYPE_SERVER)
+    Call MensajeGlobal("Servidor > El servidor se va a reiniciar. Guardando personajes...", e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_SERVER)
     Call GuardarUsuarios
     Call EcharPjsNoPrivilegiados
 
@@ -141,7 +141,7 @@ Public Sub ApagadoSeguro(Optional ByVal Motivo As String = vbNullString)
     m_ReinicioEnCurso = True
 
     Call LogSafeRestart("apagado", Motivo, "apagado")
-    Call MensajeGlobal("Servidor > El servidor se va a apagar. Guardando personajes...", e_FontTypeNames.FONTTYPE_SERVER)
+    Call MensajeGlobal("Servidor > El servidor se va a apagar. Guardando personajes...", e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_SERVER)
     Call GuardarUsuarios
     Call EcharPjsNoPrivilegiados
 

@@ -107,6 +107,9 @@ Public Sub Initialize(ByVal File As String)
     On Error GoTo Initialize_Err
     If Not FileExist(File) Then
         Debug.Print "Missing file : " & File
+        ' AO20 (plan 15.001): Debug.Print/Assert no hacen nada en el .exe compilado; sin esto un .dat
+        ' faltante (caso EquipamientoInicial.dat) deja todo en cero sin rastro.
+        Call LogError("clsIniManager: no existe el archivo " & File)
         Debug.Assert False ' You must create the .Dat file
         Exit Sub
     End If

@@ -48,6 +48,7 @@ Dim TimeSinceLastTick    As Long
 Dim TickEffect           As Integer
 Dim Modifiers            As Integer
 Dim EffectBonus          As Single
+Dim PhysicalEffectBonusPve As Single
 Dim SecondTargetModifier As Single
 Dim TickDmgColor         As Long
 Dim DotDanoModo          As Byte
@@ -101,6 +102,7 @@ Public Sub Setup(ByVal SourceIndex As Integer, _
                 .TickTime * TargetTicks, .TickTime * TargetTicks, .buffType, StacksActuales)
     End With
     EffectBonus = 1
+    PhysicalEffectBonusPve = 0
     If IsValidRef(Source) Then
         If SourceType = eUser Then
             If IsSet(Modifiers, e_ModifierTypes.MagicBonus) Then
@@ -108,6 +110,7 @@ Public Sub Setup(ByVal SourceIndex As Integer, _
             End If
             If IsSet(Modifiers, e_ModifierTypes.PhysiccalBonus) Then
                 EffectBonus = EffectBonus + UserList(Source.ArrayIndex).Modifiers.PhysicalDamageBonus
+                PhysicalEffectBonusPve = UserList(Source.ArrayIndex).Modifiers.PhysicalDamageBonusPve
             End If
             If IsSet(Modifiers, e_ModifierTypes.MagicHealingBonus) Then
                 EffectBonus = EffectBonus + UserList(Source.ArrayIndex).Modifiers.MagicHealingBonus
@@ -118,6 +121,7 @@ Public Sub Setup(ByVal SourceIndex As Integer, _
             End If
             If IsSet(Modifiers, e_ModifierTypes.PhysiccalBonus) Then
                 EffectBonus = EffectBonus + NpcList(Source.ArrayIndex).Modifiers.PhysicalDamageBonus
+                PhysicalEffectBonusPve = NpcList(Source.ArrayIndex).Modifiers.PhysicalDamageBonusPve
             End If
             If IsSet(Modifiers, e_ModifierTypes.MagicHealingBonus) Then
                 EffectBonus = EffectBonus + NpcList(Source.ArrayIndex).Modifiers.MagicHealingBonus
@@ -307,7 +311,10 @@ Public Sub PerformAction()
         rawTick = rawTick + StacksActuales * perStack
     End If
     Dim TickHP As Long
-    TickHP = rawTick * EffectBonus
+    Dim tickBonus As Single
+    tickBonus = EffectBonus
+    If DotInfo.TargetRef.RefType = eNpc Then tickBonus = tickBonus + PhysicalEffectBonusPve
+    TickHP = rawTick * tickBonus
     ' Factor PvP/PvE por tipo de target
     If DotInfo.TargetRef.RefType = e_ReferenceType.eUser Then
         TickHP = TickHP * DotFactorPvP

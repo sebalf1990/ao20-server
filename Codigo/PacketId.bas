@@ -225,6 +225,10 @@ Public Enum ServerPacketID
     eChangeSkinSlot
     eGuildConfig
     eShowPickUpObj
+    eRemortState
+    eRemortResult
+    eHooTargetedSpellCastResult
+    eHooHouseDoorActionResult
     eNpcRadar
     eNpcRadarNeutralNpc
     eNpcRadarQuestNpc
@@ -290,7 +294,7 @@ Public Enum ClientPacketID
     eGuildLeave              '/SALIRCLAN
     eRequestAccountState     '/BALANCE
     ePetStand                '/QUIETO
-    ePetFollow               '/ACOMPAï¿½AR
+    ePetFollow               '/ACOMPAÑAR
     ePetLeave                '/LIBERAR
     eGrupoMsg                '/GrupoMsg
     eTrainList               '/ENTRENAR
@@ -562,6 +566,11 @@ Public Enum ClientPacketID
     eStartAutomatedAction
     ePetFollowAll
     eAntiMacroMessage
+    eModifyCastleWhiteList
+    eHooClientCapabilities
+    eRequestRemort
+    eHooTargetedSpellCast
+    eHooHouseDoorAction
     eNpcRadarToggle
     eMaxPacket
     [PacketCount]

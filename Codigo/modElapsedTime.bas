@@ -128,7 +128,7 @@ Option Explicit
 ' ==============================================================
 Private Declare Function timeGetTime Lib "winmm.dll" () As Long
 Private Const TICKS32 As Double = 4294967296#
-Private Const TICKS32_HALF As Double = 2147483648#
+Private Const HALF_TICKS32 As Double = 2147483648#
 
 ' New raw version (preferred)
 Public Function GetTickCountRaw() As Long
@@ -140,14 +140,16 @@ End Function
 ' currentTick - startTick desbordaba (error 6) cuando los dos lados caian a cada lado de &H7FFFFFFF/&H80000000.
 Public Function TicksElapsed(ByVal startTick As Long, ByVal currentTick As Long) As Double
     Dim elapsed As Double
-    elapsed = Tick32ToUnsigned(currentTick) - Tick32ToUnsigned(startTick)
+
+    elapsed = Unsigned32FromLong(currentTick) - Unsigned32FromLong(startTick)
     If elapsed < 0# Then elapsed = elapsed + TICKS32
+
     TicksElapsed = elapsed
 End Function
 
 Public Function TickAfter(ByVal a As Long, ByVal b As Long) As Boolean
     ' Modular timestamp ordering is only unambiguous for intervals under 2^31 ms.
-    TickAfter = (TicksElapsed(b, a) < TICKS32_HALF)
+    TickAfter = (TicksElapsed(b, a) < HALF_TICKS32)
 End Function
 
 Public Function PosMod(ByVal a As Double, ByVal m As Long) As Long
@@ -159,32 +161,14 @@ Public Function PosMod(ByVal a As Double, ByVal m As Long) As Long
     PosMod = CLng(r)
 End Function
 
-' 06.002 Ola 2: interpreta un Long como tick sin signo de 32 bits (0..2^32-1) en Double.
-Private Function Tick32ToUnsigned(ByVal v As Long) As Double
-    If v < 0 Then
-        Tick32ToUnsigned = CDbl(v) + TICKS32
-    Else
-        Tick32ToUnsigned = CDbl(v)
-    End If
-End Function
-
-' Vuelve del dominio sin signo (0..2^32-1) al patron de bits de un Long, sin overflow de CLng.
-Private Function Tick32ToSigned(ByVal u As Double) As Long
-    If u >= TICKS32_HALF Then
-        Tick32ToSigned = CLng(u - TICKS32)
-    Else
-        Tick32ToSigned = CLng(u)
-    End If
-End Function
-
 ' Add two tick values modulo 2^32 (wrap-safe)
 ' 06.002 Ola 2: la version anterior hacia CLng de un Double en [2^31, 2^32) -> error 6 (overflow)
 ' en la ventana pegada al wrap de timeGetTime (~49.7 dias de uptime de Windows).
 Public Function AddMod32(ByVal a As Long, ByVal b As Long) As Long
-    Dim s As Double
-    s = Tick32ToUnsigned(a) + Tick32ToUnsigned(b)
-    If s >= TICKS32 Then s = s - TICKS32
-    AddMod32 = Tick32ToSigned(s)
+    Dim sum As Double
+
+    sum = NormalizeUnsigned32(Unsigned32FromLong(a) + Unsigned32FromLong(b))
+    AddMod32 = LongFromUnsigned32(sum)
 End Function
 
 ' ==============================================================
@@ -209,7 +193,29 @@ Public Function DeadlinePassed(ByVal nowRaw As Long, ByVal deadline As Long) As 
     If deadline = 0 Then
         DeadlinePassed = True        ' treat 0 as "no deadline"
     Else
-        ' Upstream #1746: la comparacion modular vive en TickAfter (06.002 Ola 2 la tenia inline aca).
         DeadlinePassed = TickAfter(nowRaw, deadline)
     End If
+End Function
+
+Private Function Unsigned32FromLong(ByVal value As Long) As Double
+    If value < 0 Then
+        Unsigned32FromLong = CDbl(value) + TICKS32
+    Else
+        Unsigned32FromLong = CDbl(value)
+    End If
+End Function
+
+Private Function LongFromUnsigned32(ByVal value As Double) As Long
+    If value >= HALF_TICKS32 Then
+        LongFromUnsigned32 = CLng(value - TICKS32)
+    Else
+        LongFromUnsigned32 = CLng(value)
+    End If
+End Function
+
+Private Function NormalizeUnsigned32(ByVal value As Double) As Double
+    value = value - TICKS32 * Fix(value / TICKS32)
+    If value < 0# Then value = value + TICKS32
+
+    NormalizeUnsigned32 = value
 End Function

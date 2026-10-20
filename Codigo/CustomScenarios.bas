@@ -124,8 +124,6 @@ Public Sub RemoveUpdateScenario(ByRef Index As Integer)
             ActiveUpdateSlots.currentIndex = ActiveUpdateSlots.currentIndex - 1
             AvailableUpdateSlots.currentIndex = AvailableUpdateSlots.currentIndex + 1
             AvailableUpdateSlots.IndexInfo(AvailableUpdateSlots.currentIndex) = Index
-            ' Upstream fd53ef5c: sin este corte el loop sigue sobre posiciones ya movidas y el
-            ' mismo escenario se procesa dos veces en la misma pasada -> Overflow en UpdateAll.
             Exit For
         End If
     Next
@@ -327,8 +325,8 @@ Public Sub ClearMap(ByVal MapNumber As Integer)
     Dim y As Long
     For y = 1 To 99
         For x = 1 To 99
-            If MapData(MapNumber, x, y).ObjInfo.ObjIndex > 0 Then
-                If ItemNoEsDeMapa(MapData(MapNumber, x, y).ObjInfo.ObjIndex) Then
+            If MapData(x, y, MapNumber).ObjInfo.ObjIndex > 0 Then
+                If ItemNoEsDeMapa(MapData(x, y, MapNumber).ObjInfo.ObjIndex) Then
                     Call EraseObj(GetMaxInvOBJ(), MapNumber, x, y)
                 End If
             End If

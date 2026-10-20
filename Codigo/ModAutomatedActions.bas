@@ -43,7 +43,7 @@ Public Sub RunAutomatedActions()
                     ' loop cortaba el permiso pero la accion seguia corriendo y subiendo skill.
                     ' Smelting revalida adentro (modSmelting exige Mineria por su cuenta).
                     If (.AutomatedAction.skill = e_Skill.Talar Or .AutomatedAction.skill = e_Skill.Mineria Or .AutomatedAction.skill = e_Skill.Pescar) And Not TieneProfesionAprendida(UserIndex, CInt(.AutomatedAction.skill)) Then
-                        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_FontTypeNames.FONTTYPE_INFO)
+                        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                         Call ResetUserAutomatedActions(UserIndex)
                     Else
                         Select Case .AutomatedAction.skill
@@ -93,7 +93,7 @@ Public Function DecreaseUserStamina(ByVal UserIndex As Integer, ByVal StaminaReq
             'Msg2129=¡No tengo energía!
             Call SendData(SendTarget.ToIndex, UserIndex, PrepareLocalizedChatOverHead(MSG_NO_ENERGY, UserList(UserIndex).Char.charindex, vbWhite))
             'Msg93=Estás muy cansado
-            Call WriteLocaleMsg(UserIndex, MSG_MUY_CANSADO, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_MUY_CANSADO, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             Call ResetUserAutomatedActions(UserIndex)
             DecreaseUserStamina = False
         End If
@@ -119,10 +119,10 @@ End Function
 
 Public Function ValidResourceAtPos(ByVal UserIndex As Integer, ByVal WorkingToolIndex As e_OBJType, ByVal TargetX As Integer, ByVal TargetY As Integer)
     With UserList(UserIndex)
-        If MapData(.pos.Map, TargetX, TargetY).ObjInfo.ObjIndex = 0 Then
+        If MapData(TargetX, TargetY, .pos.Map).ObjInfo.ObjIndex = 0 Then
             Exit Function
         End If
-        If ObjData(MapData(.pos.Map, TargetX, TargetY).ObjInfo.ObjIndex).OBJType <> WorkingToolIndex Then
+        If ObjData(MapData(TargetX, TargetY, .pos.Map).ObjInfo.ObjIndex).OBJType <> WorkingToolIndex Then
             Exit Function
         End If
         ValidResourceAtPos = True
@@ -134,7 +134,7 @@ Public Function CanUserExtractResource(ByVal UserIndex As Integer, ByVal Resourc
         Exit Function
     End If
     If Not CheckResourceDistance(UserIndex, CLOSE_DISTANCE_EXTRACTION, TargetX, TargetY) Then
-        Call WriteLocaleMsg(UserIndex, MSG_PORTAL_TO_DESTINATION, e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteLocaleMsg(UserIndex, MSG_PORTAL_TO_DESTINATION, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         Exit Function
     End If
     CanUserExtractResource = True

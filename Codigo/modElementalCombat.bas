@@ -476,7 +476,7 @@ Private Function FireProcs(ByRef src As t_ElementalSource, ByVal trig As e_ProcT
                                 Else
                                     Call existEff.Reset(attackerIndex, attackerType, src.Proc(i).EotId)
                                 End If
-                                If attackerType = eUser And LenB(EffectOverTime(src.Proc(i).EotId).ApplyMsg) > 0 Then Call WriteConsoleMsg(attackerIndex, EffectOverTime(src.Proc(i).EotId).ApplyMsg, e_FontTypeNames.FONTTYPE_FIGHT)
+                                If attackerType = eUser And LenB(EffectOverTime(src.Proc(i).EotId).ApplyMsg) > 0 Then Call WriteConsoleMsg(attackerIndex, EffectOverTime(src.Proc(i).EotId).ApplyMsg, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
                                 Call ElementalLog(logCtx & " PROC applyState EotId=" & src.Proc(i).EotId & IIf(existEff Is Nothing, " aplicado", " refrescado"))
                                 If ElementalBalanceLogEnabled() Then Call LogElementalBalance("proc_apply_state", ElementalBalanceActorId(attackerType = eNpc, attackerIndex), ElementalBalanceActorClass(attackerType = eNpc, attackerIndex), ElementalBalanceActorId(targetIsNpc, targetIndex), IIf(targetIsNpc, "npc", "user"), itemObjIndex, ElementalBalanceCatalogTier(itemObjIndex), src.Proc(i).DamageType, 0, 0, ElementalBalanceMap(targetIsNpc, targetIndex), ElementalBalanceCharId(attackerType = eNpc, attackerIndex), ElementalBalanceAccountId(attackerType = eNpc, attackerIndex), ElementalBalanceCharId(targetIsNpc, targetIndex), srcItemObjIndex, ElementalBalanceFightId(ElementalBalanceCharId(attackerType = eNpc, attackerIndex), ElementalBalanceCharId(targetIsNpc, targetIndex)))
                             End If
@@ -821,7 +821,7 @@ Public Sub ClearEnchantedWeapon(ByVal UserIndex As Integer, Optional ByVal msg A
     End With
     ' 06.002 Ola 4: apaga el icono de estado (espejo de ClearEnchantedAmmo).
     If oldObj > 0 Then Call WriteSendSkillCdUpdate(UserIndex, CLIENT_EFFECT_ENCHANTED_WEAPON, CLng(oldObj), 0, 0, eDebuff, 0)
-    If LenB(msg) > 0 Then Call WriteConsoleMsg(UserIndex, msg, e_FontTypeNames.FONTTYPE_INFO)
+    If LenB(msg) > 0 Then Call WriteConsoleMsg(UserIndex, msg, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
     Exit Sub
 ErrHandler:
     Call TraceError(Err.Number, Err.Description, "modElementalCombat.ClearEnchantedWeapon", Erl)
@@ -1051,7 +1051,7 @@ Public Sub ClearEnchantedAmmo(ByVal UserIndex As Integer, Optional ByVal msg As 
     End With
     ' Apaga el icono de estado del tirador (Effect57).
     If oldObj > 0 Then Call WriteSendSkillCdUpdate(UserIndex, CLIENT_EFFECT_ENCHANTED_AMMO, CLng(oldObj), 0, 0, eDebuff, 0)
-    If LenB(msg) > 0 Then Call WriteConsoleMsg(UserIndex, msg, e_FontTypeNames.FONTTYPE_INFO)
+    If LenB(msg) > 0 Then Call WriteConsoleMsg(UserIndex, msg, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
     Exit Sub
 ErrHandler:
     Call TraceError(Err.Number, Err.Description, "modElementalCombat.ClearEnchantedAmmo", Erl)

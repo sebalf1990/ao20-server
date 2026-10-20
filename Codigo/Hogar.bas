@@ -27,25 +27,48 @@ Attribute VB_Name = "Hogar"
 '
 '
 Option Explicit
-Public Const NUMCIUDADES          As Byte = 9
-Public Ciudades(1 To NUMCIUDADES) As t_WorldPos
+' CITY_COUNT is derived from e_City; do not update manually.
+Public Const CITY_COUNT As Byte = cCiudadCount - 1
+' CityData() is the canonical city configuration store.
+' Cities() is the compatibility projection for indexed Map/X/Y lookups.
+' CityNames() is populated from LoadCityData for diagnostics/display.
+' Per-city globals were intentionally removed to simplify adding new cities.
+Public CityData(1 To CITY_COUNT) As t_CityData
+Public CityNames(1 To CITY_COUNT) As String
+Public Cities(1 To CITY_COUNT) As t_WorldPos
 
-' Unico lugar que decide si un Hogar es valido. e_Ciudad va de cUllathorpe=1 a
-' cPenthar=9 y el array Ciudades es 1 To NUMCIUDADES, asi que un 0 (el que deja
+Public Function IsValidCity(ByVal CityId As e_City) As Boolean
+    If CityId < 1 Or CityId > CITY_COUNT Then Exit Function
+
+    With CityData(CityId)
+        IsValidCity = .Map > 0 And .X > 0 And .Y > 0
+    End With
+End Function
+
+' Unico lugar que decide si un Hogar es valido. e_City va de cUllathorpe=1 a
+' cMorgrim=10 y el array Cities es 1 To CITY_COUNT, asi que un 0 (el que deja
 ' Val() cuando el .dat no declara GobernadorDe) da error 9 al indexar.
 ' Devuelve cUllathorpe si el valor no sirve, y DEJA RASTRO: el problema real esta
 ' en el dato o en quien asigno, y hay que poder encontrarlo.
-Public Function SanitizeHogar(ByVal Valor As Long, ByVal Contexto As String) As e_Ciudad
-    If Valor >= 1 And Valor <= NUMCIUDADES Then
+Public Function SanitizeHogar(ByVal Valor As Long, ByVal Contexto As String) As e_City
+    If Valor >= 1 And Valor <= CITY_COUNT Then
         SanitizeHogar = CByte(Valor)
     Else
-        SanitizeHogar = e_Ciudad.cUllathorpe
+        SanitizeHogar = e_City.cUllathorpe
         Call LogError("Hogar invalido (" & Valor & ") en " & Contexto & ". Se usa Ullathorpe. Revisar GobernadorDe del NPC o home_id en la base.")
     End If
 End Function
 
+Public Function IsValidCharacterCreationCity(ByVal CityId As e_City) As Boolean
+    If Not IsValidCity(CityId) Then Exit Function
 
-Public Sub goHome(ByVal UserIndex As Integer)
+    Select Case CityId
+        Case cUllathorpe, cNix, cArghal, cForgat, cEldoria, cPenthar, cMorgrim
+            IsValidCharacterCreationCity = True
+    End Select
+End Function
+
+Public Sub goHome(ByVal UserIndex As Integer, ByVal HomeCostGLD As Long)
     On Error GoTo goHome_Err
     With UserList(UserIndex)
         If .flags.Muerto = 1 Then
@@ -57,7 +80,7 @@ Public Sub goHome(ByVal UserIndex As Integer)
                         .Counters.TimerBarra = HomeTimerAdventurer
                     Case e_TipoUsuario.tHeroe
                         .Counters.TimerBarra = HomeTimerHero
-                    Case e_TipoUsuario.tLeyenda
+                    Case e_TipoUsuario.tLeyenda, e_TipoUsuario.tNoble, e_TipoUsuario.tEmperador
                         .Counters.TimerBarra = HomeTimerLegend
                     Case Else
                         .Counters.TimerBarra = HomeTimer
@@ -65,12 +88,14 @@ Public Sub goHome(ByVal UserIndex As Integer)
             End If
             Call SendData(SendTarget.ToPCArea, UserIndex, PrepareMessageParticleFX(.Char.charindex, e_GraphicEffects.Runa, .Counters.TimerBarra * 100, False, , .pos.x, .pos.y))
             Call SendData(SendTarget.ToPCArea, UserIndex, PrepareMessageBarFx(.Char.charindex, .Counters.TimerBarra, e_AccionBarra.Hogar))
-            Call WriteConsoleMsg(UserIndex, PrepareMessageLocaleMsg(MSG_VOLVERAS_HOGAR_SEGUNDOS, .Counters.TimerBarra, e_FontTypeNames.FONTTYPE_New_Gris)) ' Msg1994=Volverás a tu hogar en ¬1 segundos.
+            Dim HomeMessageExtra As String
+            HomeMessageExtra = .Counters.TimerBarra & Chr$(172) & HomeCostGLD
+            Call WriteLocaleMsg(UserIndex, MSG_VOLVERAS_HOGAR_SEGUNDOS, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Gris, HomeMessageExtra) ' Msg1994=Volverás a tu hogar en ¬1 segundos. Se descontaron ¬2 monedas de oro.
             .Accion.Particula = e_GraphicEffects.Runa
             .Accion.AccionPendiente = True
             .Accion.TipoAccion = e_AccionBarra.Hogar
         Else
-            Call WriteConsoleMsg(UserIndex, PrepareMessageLocaleMsg(MSG_DEBES_ESTAR_MUERTO_PODER_UTILIZAR_COMANDO, vbNullString, e_FontTypeNames.FONTTYPE_FIGHT)) ' Msg1995=Debes estar muerto para poder utilizar este comando.
+            Call WriteLocaleMsg(UserIndex, MSG_DEBES_ESTAR_MUERTO_PODER_UTILIZAR_COMANDO, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja, vbNullString) ' Msg1995=Debes estar muerto para poder utilizar este comando.
         End If
     End With
     Exit Sub
@@ -117,12 +142,20 @@ Public Sub HomeArrival(ByVal UserIndex As Integer)
             Call WriteNadarToggle(UserIndex, False)
             'Le sacamos el navegando, pero no le mostramos a los demas porque va a ser sumoneado hasta ulla.
         End If
-        tX = Ciudades(.Hogar).x
-        tY = Ciudades(.Hogar).y
-        tMap = Ciudades(.Hogar).Map
+        If IsValidCity(.Hogar) Then
+            ' Cities() centralizes home Map/X/Y lookup.
+            tX = Cities(.Hogar).x
+            tY = Cities(.Hogar).y
+            tMap = Cities(.Hogar).Map
+        Else
+            Call LogError("Invalid home city. UserIndex=" & UserIndex & " Hogar=" & .Hogar)
+            tX = Cities(e_City.cUllathorpe).x
+            tY = Cities(e_City.cUllathorpe).y
+            tMap = Cities(e_City.cUllathorpe).Map
+        End If
         Call FindLegalPos(UserIndex, tMap, CByte(tX), CByte(tY))
         Call WarpUserChar(UserIndex, tMap, tX, tY, True)
-        Call WriteConsoleMsg(UserIndex, PrepareMessageLocaleMsg(MSG_HAS_REGRESADO_CIUDAD_ORIGEN, vbNullString, e_FontTypeNames.FONTTYPE_WARNING)) ' Msg1996=Has regresado a tu ciudad de origen.
+        Call WriteLocaleMsg(UserIndex, MSG_HAS_REGRESADO_CIUDAD_ORIGEN, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_PROMEDIO_MAYOR, vbNullString) ' Msg1996=Has regresado a tu ciudad de origen.
         .flags.Traveling = 0
         .Counters.goHome = 0
     End With

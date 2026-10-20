@@ -28,11 +28,11 @@ Attribute VB_Name = "Trabajo"
 Option Explicit
 Public Const GOLD_OBJ_INDEX As Long = 12
 Public Const FISHING_NET_FX As Long = 12
-Public Const NET_INMO_DURATION = 10
+Public Const NET_INMO_DURATION As Long = 10
 
 Function ExpectObjectTypeAt(ByVal objectType As Integer, ByVal Map As Integer, ByVal MapX As Byte, ByVal MapY As Byte) As Boolean
     Dim ObjIndex As Integer
-    ObjIndex = MapData(Map, MapX, MapY).ObjInfo.ObjIndex
+    ObjIndex = MapData(MapX, MapY, Map).ObjInfo.ObjIndex
     If ObjIndex = 0 Then
         ExpectObjectTypeAt = False
         Exit Function
@@ -41,11 +41,11 @@ Function ExpectObjectTypeAt(ByVal objectType As Integer, ByVal Map As Integer, B
 End Function
 
 Function IsUserAtPos(ByVal Map As Integer, ByVal x As Byte, ByVal y As Byte) As Boolean
-    IsUserAtPos = MapData(Map, x, y).UserIndex > 0
+    IsUserAtPos = MapData(x, y, Map).UserIndex > 0
 End Function
 
 Function IsNpcAtPos(ByVal Map As Integer, ByVal x As Byte, ByVal y As Byte)
-    IsNpcAtPos = MapData(Map, x, y).NpcIndex > 0
+    IsNpcAtPos = MapData(x, y, Map).NpcIndex > 0
 End Function
 
 Public Sub Trabajar(ByVal UserIndex As Integer, ByVal Skill As e_Skill)
@@ -75,8 +75,10 @@ Public Sub DoPermanecerOculto(ByVal UserIndex As Integer)
         Dim velocidadOcultarse As Integer
         velocidadOcultarse = 1
         If .clase = e_Class.Hunter Then
-            If ObjData(.invent.EquippedArmorObjIndex).Camouflage And .Stats.UserSkills(e_Skill.Ocultarse) = 100 Then
-                Exit Sub
+            If .invent.EquippedArmorObjIndex > 0 Then
+                If ObjData(.invent.EquippedArmorObjIndex).Camouflage And .Stats.UserSkills(e_Skill.Ocultarse) = 100 Then
+                    Exit Sub
+                End If
             End If
         End If
         .Counters.TiempoOculto = .Counters.TiempoOculto - velocidadOcultarse
@@ -88,7 +90,7 @@ Public Sub DoPermanecerOculto(ByVal UserIndex As Integer)
                     ' Pierde la apariencia de fragata fantasmal
                     Call EquiparBarco(UserIndex)
                     ' Msg592=¡Has recuperado tu apariencia normal!
-                    Call WriteLocaleMsg(UserIndex, MSG_RECUPERADO_APARIENCIA_NORMAL, e_FontTypeNames.FONTTYPE_INFO)
+                    Call WriteLocaleMsg(UserIndex, MSG_RECUPERADO_APARIENCIA_NORMAL, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_PROMEDIO_MAYOR)
                     Call ChangeUserChar(UserIndex, .Char.body, .Char.head, .Char.Heading, NingunArma, NingunEscudo, NingunCasco, NoCart, NoBackPack)
                     Call RefreshCharStatus(UserIndex)
                 End If
@@ -96,7 +98,7 @@ Public Sub DoPermanecerOculto(ByVal UserIndex As Integer)
                 If .flags.invisible = 0 And .flags.AdminInvisible = 0 Then
                     Call SendData(SendTarget.ToPCAliveArea, UserIndex, PrepareMessageSetInvisible(.Char.charindex, False, UserList(UserIndex).pos.x, UserList(UserIndex).pos.y))
                     'Msg1023= ¡Has vuelto a ser visible!
-                    Call WriteLocaleMsg(UserIndex, MSG_VUELTO_VISIBLE_1023, e_FontTypeNames.FONTTYPE_INFO)
+                    Call WriteLocaleMsg(UserIndex, MSG_VUELTO_VISIBLE_1023, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_PROMEDIO_MAYOR)
                 End If
             End If
         End If
@@ -119,7 +121,7 @@ Public Sub DoOcultarse(ByVal UserIndex As Integer)
 
         ' --- Basic guards (with visibility) ---
         If .flags.Navegando = 1 And .clase <> e_Class.Pirat Then
-            Call WriteLocaleMsg(UserIndex, MSG_CANNOT_HIDE_WHILE_SAILING, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_CANNOT_HIDE_WHILE_SAILING, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
             Exit Sub
         End If
 
@@ -174,7 +176,7 @@ Public Sub DoOcultarse(ByVal UserIndex As Integer)
                     Call ChangeUserChar(UserIndex, .Char.body, .Char.head, .Char.Heading, _
                                         NingunArma, NingunEscudo, NingunCasco, NoCart, NoBackPack)
                     'Msg1024= ¡Te has camuflado como barco fantasma!
-                    Call WriteLocaleMsg(UserIndex, MSG_CAMUFLADO_COMO_BARCO_FANTASMA, e_FontTypeNames.FONTTYPE_INFO)
+                    Call WriteLocaleMsg(UserIndex, MSG_CAMUFLADO_COMO_BARCO_FANTASMA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                     Call RefreshCharStatus(UserIndex)
                 End If
             Else
@@ -182,7 +184,7 @@ Public Sub DoOcultarse(ByVal UserIndex As Integer)
                 Call SendData(SendTarget.ToPCAliveArea, UserIndex, _
                               PrepareMessageSetInvisible(.Char.charindex, True, UserList(UserIndex).pos.x, UserList(UserIndex).pos.y))
                 'Msg55=¡Te has escondido entre las sombras!
-                Call WriteLocaleMsg(UserIndex, MSG_ESCONDIDO_ENTRE_SOMBRAS, e_FontTypeNames.FONTTYPE_INFO)
+                Call WriteLocaleMsg(UserIndex, MSG_ESCONDIDO_ENTRE_SOMBRAS, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             End If
 
             Call SubirSkill(UserIndex, Ocultarse)
@@ -190,7 +192,7 @@ Public Sub DoOcultarse(ByVal UserIndex As Integer)
         Else
             If Not .flags.UltimoMensaje = MSG_HIDE_FAILED Then
                 'Msg57=¡No has logrado esconderte!
-                Call WriteLocaleMsg(UserIndex, MSG_HIDE_FAILED, e_FontTypeNames.FONTTYPE_INFO)
+                Call WriteLocaleMsg(UserIndex, MSG_HIDE_FAILED, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                 .flags.UltimoMensaje = MSG_HIDE_FAILED
             End If
         End If
@@ -222,13 +224,13 @@ Public Sub DoNavega(ByVal UserIndex As Integer, ByRef Barco As t_ObjData, ByVal 
                     Case 2  'Galera
                         If Not NavegaConOficio And .clase <> e_Class.Pirat Then
                             'Msg1025= ¡Solo Piratas y pescadores pueden usar galera!
-                            Call WriteLocaleMsg(UserIndex, MSG_SOLO_PIRATAS_TRABAJADORES_PUEDEN_USAR_GALERA, e_FontTypeNames.FONTTYPE_INFO)
+                            Call WriteLocaleMsg(UserIndex, MSG_SOLO_PIRATAS_TRABAJADORES_PUEDEN_USAR_GALERA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
                             Exit Sub
                         End If
                     Case 3  'Galeón
                         If .clase <> e_Class.Pirat Then
                             'Msg1026= Solo los Piratas pueden usar Galeón!!
-                            Call WriteLocaleMsg(UserIndex, MSG_SOLO_PIRATAS_PUEDEN_USAR_GALEON, e_FontTypeNames.FONTTYPE_INFO)
+                            Call WriteLocaleMsg(UserIndex, MSG_SOLO_PIRATAS_PUEDEN_USAR_GALEON, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
                             Exit Sub
                         End If
                 End Select
@@ -237,7 +239,7 @@ Public Sub DoNavega(ByVal UserIndex As Integer, ByRef Barco As t_ObjData, ByVal 
             SkillNecesario = IIf(NavegaConOficio Or .clase = e_Class.Pirat, Barco.MinSkill \ 2, Barco.MinSkill)
             ' Tiene el skill necesario?
             If .Stats.UserSkills(e_Skill.Navegacion) < SkillNecesario Then
-                Call WriteLocaleMsg(UserIndex, MSG_NECESITAS_MENOS_PUNTOS_NAVEGACION_PODER_USAR, e_FontTypeNames.FONTTYPE_INFO, SkillNecesario & "¬" & IIf(Barco.Subtipo = 0, "traje", "barco"))  ' Msg1448=Necesitas al menos ¬1 puntos en navegación para poder usar este ¬2
+                Call WriteLocaleMsg(UserIndex, MSG_NECESITAS_MENOS_PUNTOS_NAVEGACION_PODER_USAR, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja, SkillNecesario & "¬" & IIf(Barco.Subtipo = 0, "traje", "barco"))  ' Msg1448=Necesitas al menos ¬1 puntos en navegación para poder usar este ¬2
                 Exit Sub
             End If
             If .invent.EquippedShipObjIndex = 0 Then
@@ -252,7 +254,7 @@ Public Sub DoNavega(ByVal UserIndex As Integer, ByRef Barco As t_ObjData, ByVal 
             End If
             If .flags.Mimetizado <> e_EstadoMimetismo.Desactivado Then
                 'Msg1027= Pierdes el efecto del mimetismo.
-                Call WriteLocaleMsg(UserIndex, MSG_PIERDES_EFECTO_MIMETISMO_1027, e_FontTypeNames.FONTTYPE_INFO)
+                Call WriteLocaleMsg(UserIndex, MSG_PIERDES_EFECTO_MIMETISMO_1027, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
                 .Counters.Mimetismo = 0
                 .flags.Mimetizado = e_EstadoMimetismo.Desactivado
                 Call RefreshCharStatus(UserIndex)
@@ -320,7 +322,7 @@ Public Sub DoNavega(ByVal UserIndex As Integer, ByRef Barco As t_ObjData, ByVal 
             .flags.Oculto = 0
             .Counters.TiempoOculto = 0
             'MSG307=Has vuelto a ser visible.
-            Call WriteLocaleMsg(UserIndex, MSG_VUELTO_VISIBLE, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_VUELTO_VISIBLE, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_PROMEDIO_MAYOR)
             Call SendData(SendTarget.ToPCAliveArea, UserIndex, PrepareMessageSetInvisible(.Char.charindex, False, UserList(UserIndex).pos.x, UserList(UserIndex).pos.y))
         End If
         Call ChangeUserChar(UserIndex, .Char.body, .Char.head, .Char.Heading, .Char.WeaponAnim, .Char.ShieldAnim, .Char.CascoAnim, .Char.CartAnim, .Char.BackpackAnim)
@@ -405,100 +407,155 @@ QuitarObjetos_Err:
     Call TraceError(Err.Number, Err.Description, "Trabajo.QuitarObjetos", Erl)
 End Function
 
-Sub HerreroQuitarMateriales(ByVal UserIndex As Integer, ByRef Item As t_Obj)
-    On Error GoTo HerreroQuitarMateriales_Err
-    If Item.ObjIndex = 0 Then Exit Sub
-    With ObjData(Item.ObjIndex)
-        If .LingH > 0 Then Call QuitarObjetos(e_Minerales.LingoteDeHierro, .LingH, UserIndex)
-        If .LingP > 0 Then Call QuitarObjetos(e_Minerales.LingoteDePlata, .LingP, UserIndex)
-        If .LingO > 0 Then Call QuitarObjetos(e_Minerales.LingoteDeOro, .LingO, UserIndex)
-        If .Coal > 0 Then Call QuitarObjetos(e_Minerales.Coal, .Coal, UserIndex)
-        If .Blodium > 0 Then Call QuitarObjetos(e_Minerales.Blodium, .Blodium, UserIndex)
-        If .FireEssence > 0 Then Call QuitarObjetos(e_Minerales.FireEssence, .FireEssence, UserIndex)
-        If .WaterEssence > 0 Then Call QuitarObjetos(e_Minerales.WaterEssence, .WaterEssence, UserIndex)
-        If .EarthEssence > 0 Then Call QuitarObjetos(e_Minerales.EarthEssence, .EarthEssence, UserIndex)
-        If .WindEssence > 0 Then Call QuitarObjetos(e_Minerales.WindEssence, .WindEssence, UserIndex)
-        If .RunaFuego > 0 Then Call QuitarObjetos(RunaFuegoObj, .RunaFuego, UserIndex, e_ElementalTags.Fire)
-        If .RunaAgua > 0 Then Call QuitarObjetos(RunaAguaObj, .RunaAgua, UserIndex, e_ElementalTags.Water)
-        If .RunaTierra > 0 Then Call QuitarObjetos(RunaTierraObj, .RunaTierra, UserIndex, e_ElementalTags.Earth)
-        If .RunaViento > 0 Then Call QuitarObjetos(RunaVientoObj, .RunaViento, UserIndex, e_ElementalTags.Wind)
-    End With
-    Exit Sub
-HerreroQuitarMateriales_Err:
-    Call TraceError(Err.Number, Err.Description, "Trabajo.HerreroQuitarMateriales", Erl)
-End Sub
+' Work only on the caller's staged inventory. No packets or equipment callbacks.
+' AO20: elementalTag lets the elemental engine runes (tagged stacks) be staged too.
+Private Function StageCraftingMaterial(ByRef inventory As t_Inventario, ByVal slotCount As Integer, ByVal materialId As Integer, ByVal perItem As Integer, ByVal quantity As Long, ByRef hasCost As Boolean, _
+                                       Optional ByVal elementalTag As e_ElementalTags = e_ElementalTags.Normal) As Boolean
+    On Error GoTo StageCraftingMaterial_Err
+    Const MAX_STACK_AMOUNT As Long = 32767 ' t_UserOBJ.amount is a VB6 Integer.
+    If perItem < 0 Then Exit Function
+    If perItem = 0 Then
+        StageCraftingMaterial = True
+        Exit Function
+    End If
+    ' Reject impossible totals before multiplying; no Integer/Long overflow.
+    If quantity > (CLng(slotCount) * MAX_STACK_AMOUNT) \ perItem Then Exit Function
+    Dim remaining As Long, taken As Long, slot As Integer
+    remaining = CLng(perItem) * quantity
+    For slot = 1 To slotCount
+        With inventory.Object(slot)
+            If .ObjIndex = materialId And .ElementalTags = elementalTag Then
+                ' Crafting ingredients are not equipment. Corrupt stacks fail closed.
+                If .amount <= 0 Or .Equipped <> 0 Then Exit Function
+                taken = .amount
+                If taken > remaining Then taken = remaining
+                .amount = .amount - taken
+                remaining = remaining - taken
+                If .amount = 0 Then
+                    .ObjIndex = 0
+                    .ElementalTags = 0
+                End If
+                If remaining = 0 Then
+                    hasCost = True
+                    StageCraftingMaterial = True
+                    Exit Function
+                End If
+            End If
+        End With
+    Next slot
+    Exit Function
+StageCraftingMaterial_Err:
+    Call TraceError(Err.Number, Err.Description, "Trabajo.StageCraftingMaterial", Erl)
+End Function
 
-Sub CarpinteroQuitarMateriales(ByVal UserIndex As Integer, ByRef Item As t_Obj)
-    On Error GoTo CarpinteroQuitarMateriales_Err
-    If Item.ObjIndex = 0 Then Exit Sub
-    With ObjData(Item.ObjIndex)
-        If .Madera > 0 Then Call QuitarObjetos(Wood, .Madera * Item.amount, UserIndex)
-        If .MaderaElfica > 0 Then Call QuitarObjetos(ElvenWood, .MaderaElfica * Item.amount, UserIndex)
-        If .MaderaPino > 0 Then Call QuitarObjetos(PinoWood, .MaderaPino * Item.amount, UserIndex)
-        If .FireEssence > 0 Then Call QuitarObjetos(e_Minerales.FireEssence, .FireEssence * Item.amount, UserIndex)
-        If .WaterEssence > 0 Then Call QuitarObjetos(e_Minerales.WaterEssence, .WaterEssence * Item.amount, UserIndex)
-        If .EarthEssence > 0 Then Call QuitarObjetos(e_Minerales.EarthEssence, .EarthEssence * Item.amount, UserIndex)
-        If .WindEssence > 0 Then Call QuitarObjetos(e_Minerales.WindEssence, .WindEssence * Item.amount, UserIndex)
-        If .RunaFuego > 0 Then Call QuitarObjetos(RunaFuegoObj, .RunaFuego * Item.amount, UserIndex, e_ElementalTags.Fire)
-        If .RunaAgua > 0 Then Call QuitarObjetos(RunaAguaObj, .RunaAgua * Item.amount, UserIndex, e_ElementalTags.Water)
-        If .RunaTierra > 0 Then Call QuitarObjetos(RunaTierraObj, .RunaTierra * Item.amount, UserIndex, e_ElementalTags.Earth)
-        If .RunaViento > 0 Then Call QuitarObjetos(RunaVientoObj, .RunaViento * Item.amount, UserIndex, e_ElementalTags.Wind)
+' Commit once, after every ingredient succeeds. Failure leaves inventory untouched.
+Public Function TryConsumeCraftingMaterials(ByRef inventory As t_Inventario, ByVal slotCount As Integer, ByRef recipe As t_ObjData, ByVal job As e_JobsTypes, ByVal quantity As Long) As Boolean
+    On Error GoTo TryConsumeCraftingMaterials_Err
+    If slotCount < 1 Or slotCount > UBound(inventory.Object) Or quantity <= 0 Then Exit Function
+    If job <> e_JobsTypes.Carpenter And quantity <> 1 Then Exit Function
+    Dim staged As t_Inventario, hasCost As Boolean, slot As Integer
+    staged = inventory
+    With recipe
+        Select Case job
+            Case e_JobsTypes.Blacksmith
+                If Not StageCraftingMaterial(staged, slotCount, e_Minerales.LingoteDeHierro, .LingH, quantity, hasCost) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, e_Minerales.LingoteDePlata, .LingP, quantity, hasCost) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, e_Minerales.LingoteDeOro, .LingO, quantity, hasCost) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, e_Minerales.Coal, .Coal, quantity, hasCost) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, e_Minerales.Blodium, .Blodium, quantity, hasCost) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, e_Minerales.FireEssence, .FireEssence, quantity, hasCost) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, e_Minerales.WaterEssence, .WaterEssence, quantity, hasCost) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, e_Minerales.EarthEssence, .EarthEssence, quantity, hasCost) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, e_Minerales.WindEssence, .WindEssence, quantity, hasCost) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, RunaFuegoObj, .RunaFuego, quantity, hasCost, e_ElementalTags.Fire) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, RunaAguaObj, .RunaAgua, quantity, hasCost, e_ElementalTags.Water) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, RunaTierraObj, .RunaTierra, quantity, hasCost, e_ElementalTags.Earth) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, RunaVientoObj, .RunaViento, quantity, hasCost, e_ElementalTags.Wind) Then Exit Function
+            Case e_JobsTypes.Carpenter
+                If Not StageCraftingMaterial(staged, slotCount, Wood, .Madera, quantity, hasCost) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, ElvenWood, .MaderaElfica, quantity, hasCost) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, PinoWood, .MaderaPino, quantity, hasCost) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, e_Minerales.FireEssence, .FireEssence, quantity, hasCost) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, e_Minerales.WaterEssence, .WaterEssence, quantity, hasCost) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, e_Minerales.EarthEssence, .EarthEssence, quantity, hasCost) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, e_Minerales.WindEssence, .WindEssence, quantity, hasCost) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, RunaFuegoObj, .RunaFuego, quantity, hasCost, e_ElementalTags.Fire) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, RunaAguaObj, .RunaAgua, quantity, hasCost, e_ElementalTags.Water) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, RunaTierraObj, .RunaTierra, quantity, hasCost, e_ElementalTags.Earth) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, RunaVientoObj, .RunaViento, quantity, hasCost, e_ElementalTags.Wind) Then Exit Function
+            Case e_JobsTypes.Alchemist
+                If Not StageCraftingMaterial(staged, slotCount, Mortero, .Mortero, quantity, hasCost) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, FrascoAlq, .FrascoAlq, quantity, hasCost) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, HongoDeLuz, .HongoDeLuz, quantity, hasCost) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, Esporas, .Esporas, quantity, hasCost) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, Tuna, .Tuna, quantity, hasCost) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, Cala, .Cala, quantity, hasCost) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, ColaDeZorro, .ColaDeZorro, quantity, hasCost) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, FlorOceano, .FlorOceano, quantity, hasCost) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, FlorRoja, .FlorRoja, quantity, hasCost) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, SemillasProsperas, .SemillasProsperas, quantity, hasCost) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, e_Minerales.FireEssence, .FireEssence, quantity, hasCost) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, e_Minerales.WaterEssence, .WaterEssence, quantity, hasCost) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, e_Minerales.EarthEssence, .EarthEssence, quantity, hasCost) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, e_Minerales.WindEssence, .WindEssence, quantity, hasCost) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, RunaFuegoObj, .RunaFuego, quantity, hasCost, e_ElementalTags.Fire) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, RunaAguaObj, .RunaAgua, quantity, hasCost, e_ElementalTags.Water) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, RunaTierraObj, .RunaTierra, quantity, hasCost, e_ElementalTags.Earth) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, RunaVientoObj, .RunaViento, quantity, hasCost, e_ElementalTags.Wind) Then Exit Function
+            Case e_JobsTypes.Tailor
+                If Not StageCraftingMaterial(staged, slotCount, PieldeLobo, .PielLobo, quantity, hasCost) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, PieldeOsoPardo, .PielOsoPardo, quantity, hasCost) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, PieldeOsoPolar, .PielOsoPolaR, quantity, hasCost) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, PielLoboNegro, .PielLoboNegro, quantity, hasCost) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, PielTigre, .PielTigre, quantity, hasCost) Then Exit Function
+                If Not StageCraftingMaterial(staged, slotCount, PielTigreBengala, .PielTigreBengala, quantity, hasCost) Then Exit Function
+            Case Else
+                Exit Function
+        End Select
     End With
-    Exit Sub
-CarpinteroQuitarMateriales_Err:
-    Call TraceError(Err.Number, Err.Description, "Trabajo.CarpinteroQuitarMateriales", Erl)
-End Sub
+    ' No free crafts from missing/empty recipe data.
+    If Not hasCost Then Exit Function
+    staged.NroItems = 0
+    For slot = 1 To UBound(staged.Object)
+        If staged.Object(slot).ObjIndex > 0 Then staged.NroItems = staged.NroItems + 1
+    Next slot
+    inventory = staged
+    TryConsumeCraftingMaterials = True
+    Exit Function
+TryConsumeCraftingMaterials_Err:
+    Call TraceError(Err.Number, Err.Description, "Trabajo.TryConsumeCraftingMaterials", Erl)
+End Function
 
-Sub AlquimistaQuitarMateriales(ByVal UserIndex As Integer, ByRef Item As t_Obj)
-    On Error GoTo AlquimistaQuitarMateriales_Err
-    If Item.ObjIndex = 0 Then Exit Sub
-    With ObjData(Item.ObjIndex)
-        If .Mortero > 0 Then Call QuitarObjetos(Mortero, .Mortero, UserIndex)
-        If .FrascoAlq > 0 Then Call QuitarObjetos(FrascoAlq, .FrascoAlq, UserIndex)
-        If .HongoDeLuz > 0 Then Call QuitarObjetos(HongoDeLuz, .HongoDeLuz, UserIndex)
-        If .Esporas > 0 Then Call QuitarObjetos(Esporas, .Esporas, UserIndex)
-        If .Tuna > 0 Then Call QuitarObjetos(Tuna, .Tuna, UserIndex)
-        If .Cala > 0 Then Call QuitarObjetos(Cala, .Cala, UserIndex)
-        If .ColaDeZorro > 0 Then Call QuitarObjetos(ColaDeZorro, .ColaDeZorro, UserIndex)
-        If .FlorOceano > 0 Then Call QuitarObjetos(FlorOceano, .FlorOceano, UserIndex)
-        If .FlorRoja > 0 Then Call QuitarObjetos(FlorRoja, .FlorRoja, UserIndex)
-        If .SemillasProsperas > 0 Then Call QuitarObjetos(SemillasProsperas, .SemillasProsperas, UserIndex)
-        If .FireEssence > 0 Then Call QuitarObjetos(e_Minerales.FireEssence, .FireEssence, UserIndex)
-        If .WaterEssence > 0 Then Call QuitarObjetos(e_Minerales.WaterEssence, .WaterEssence, UserIndex)
-        If .EarthEssence > 0 Then Call QuitarObjetos(e_Minerales.EarthEssence, .EarthEssence, UserIndex)
-        If .WindEssence > 0 Then Call QuitarObjetos(e_Minerales.WindEssence, .WindEssence, UserIndex)
-        If .RunaFuego > 0 Then Call QuitarObjetos(RunaFuegoObj, .RunaFuego, UserIndex, e_ElementalTags.Fire)
-        If .RunaAgua > 0 Then Call QuitarObjetos(RunaAguaObj, .RunaAgua, UserIndex, e_ElementalTags.Water)
-        If .RunaTierra > 0 Then Call QuitarObjetos(RunaTierraObj, .RunaTierra, UserIndex, e_ElementalTags.Earth)
-        If .RunaViento > 0 Then Call QuitarObjetos(RunaVientoObj, .RunaViento, UserIndex, e_ElementalTags.Wind)
+Private Function ConsumeCraftingMaterials(ByVal UserIndex As Integer, ByRef Item As t_Obj, ByVal job As e_JobsTypes) As Boolean
+    On Error GoTo ConsumeCraftingMaterials_Err
+    If UserIndex < LBound(UserList) Or UserIndex > UBound(UserList) Then Exit Function
+    If Item.ObjIndex < LBound(ObjData) Or Item.ObjIndex > UBound(ObjData) Then Exit Function
+    Dim previous As t_Inventario, slot As Byte
+    With UserList(UserIndex)
+        previous = .invent
+        If Not TryConsumeCraftingMaterials(.invent, .CurrentInventorySlots, ObjData(Item.ObjIndex), job, Item.amount) Then
+            Call WriteMacroTrabajoToggle(UserIndex, False)
+            Exit Function
+        End If
+        ConsumeCraftingMaterials = True
+        ' Publish only after the atomic inventory commit, once per changed slot.
+        For slot = 1 To .CurrentInventorySlots
+            If previous.Object(slot).ObjIndex <> .invent.Object(slot).ObjIndex Or previous.Object(slot).amount <> .invent.Object(slot).amount Then
+                Call UpdateUserInv(False, UserIndex, slot)
+            End If
+        Next slot
     End With
-    Exit Sub
-AlquimistaQuitarMateriales_Err:
-    Call TraceError(Err.Number, Err.Description, "Trabajo.AlquimistaQuitarMateriales", Erl)
-End Sub
-
-Sub SastreQuitarMateriales(ByVal UserIndex As Integer, ByRef Item As t_Obj)
-    On Error GoTo SastreQuitarMateriales_Err
-    If Item.ObjIndex = 0 Then Exit Sub
-    With ObjData(Item.ObjIndex)
-        If .PielLobo > 0 Then Call QuitarObjetos(PieldeLobo, .PielLobo, UserIndex)
-        If .PielOsoPardo > 0 Then Call QuitarObjetos(PieldeOsoPardo, .PielOsoPardo, UserIndex)
-        If .PielOsoPolaR > 0 Then Call QuitarObjetos(PieldeOsoPolar, .PielOsoPolaR, UserIndex)
-        If .PielLoboNegro > 0 Then Call QuitarObjetos(PielLoboNegro, .PielLoboNegro, UserIndex)
-        If .PielTigre > 0 Then Call QuitarObjetos(PielTigre, .PielTigre, UserIndex)
-        If .PielTigreBengala > 0 Then Call QuitarObjetos(PielTigreBengala, .PielTigreBengala, UserIndex)
-    End With
-    Exit Sub
-SastreQuitarMateriales_Err:
-    Call TraceError(Err.Number, Err.Description, "Trabajo.SastreQuitarMateriales", Erl)
-End Sub
+    Exit Function
+ConsumeCraftingMaterials_Err:
+    Call TraceError(Err.Number, Err.Description, "Trabajo.ConsumeCraftingMaterials", Erl)
+End Function
 
 Function CarpinteroTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex As Integer, ByVal Cantidad As Long) As Boolean
     On Error GoTo CarpinteroTieneMateriales_Err
     If ObjData(ItemIndex).Madera > 0 Then
         If Not TieneObjetos(Wood, ObjData(ItemIndex).Madera * Cantidad, UserIndex) Then
             ' Msg609=No tenés suficiente madera.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTE_MADERA, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTE_MADERA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
             CarpinteroTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -507,7 +564,7 @@ Function CarpinteroTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex A
     If ObjData(ItemIndex).MaderaElfica > 0 Then
         If Not TieneObjetos(ElvenWood, ObjData(ItemIndex).MaderaElfica * Cantidad, UserIndex) Then
             ' Msg610=No tenés suficiente madera élfica.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTE_MADERA_ELFICA, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTE_MADERA_ELFICA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
             CarpinteroTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -516,7 +573,7 @@ Function CarpinteroTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex A
     If ObjData(ItemIndex).MaderaPino > 0 Then
         If Not TieneObjetos(PinoWood, ObjData(ItemIndex).MaderaPino * Cantidad, UserIndex) Then
             ' Msg611=No tenés suficiente madera de pino nudoso.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTE_MADERA_PINO_NUDOSO, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTE_MADERA_PINO_NUDOSO, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
             CarpinteroTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -524,7 +581,7 @@ Function CarpinteroTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex A
     End If
     If ObjData(ItemIndex).FireEssence > 0 Then
         If Not TieneObjetos(e_Minerales.FireEssence, ObjData(ItemIndex).FireEssence * Cantidad, UserIndex) Then
-            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             CarpinteroTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -532,7 +589,7 @@ Function CarpinteroTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex A
     End If
     If ObjData(ItemIndex).WaterEssence > 0 Then
         If Not TieneObjetos(e_Minerales.WaterEssence, ObjData(ItemIndex).WaterEssence * Cantidad, UserIndex) Then
-            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             CarpinteroTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -540,7 +597,7 @@ Function CarpinteroTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex A
     End If
     If ObjData(ItemIndex).EarthEssence > 0 Then
         If Not TieneObjetos(e_Minerales.EarthEssence, ObjData(ItemIndex).EarthEssence * Cantidad, UserIndex) Then
-            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             CarpinteroTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -548,7 +605,7 @@ Function CarpinteroTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex A
     End If
     If ObjData(ItemIndex).WindEssence > 0 Then
         If Not TieneObjetos(e_Minerales.WindEssence, ObjData(ItemIndex).WindEssence * Cantidad, UserIndex) Then
-            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             CarpinteroTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -556,7 +613,7 @@ Function CarpinteroTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex A
     End If
     If ObjData(ItemIndex).RunaFuego > 0 Then
         If Not TieneObjetos(RunaFuegoObj, ObjData(ItemIndex).RunaFuego * Cantidad, UserIndex, e_ElementalTags.Fire) Then
-            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             CarpinteroTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -564,7 +621,7 @@ Function CarpinteroTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex A
     End If
     If ObjData(ItemIndex).RunaAgua > 0 Then
         If Not TieneObjetos(RunaAguaObj, ObjData(ItemIndex).RunaAgua * Cantidad, UserIndex, e_ElementalTags.Water) Then
-            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             CarpinteroTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -572,7 +629,7 @@ Function CarpinteroTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex A
     End If
     If ObjData(ItemIndex).RunaTierra > 0 Then
         If Not TieneObjetos(RunaTierraObj, ObjData(ItemIndex).RunaTierra * Cantidad, UserIndex, e_ElementalTags.Earth) Then
-            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             CarpinteroTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -580,7 +637,7 @@ Function CarpinteroTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex A
     End If
     If ObjData(ItemIndex).RunaViento > 0 Then
         If Not TieneObjetos(RunaVientoObj, ObjData(ItemIndex).RunaViento * Cantidad, UserIndex, e_ElementalTags.Wind) Then
-            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             CarpinteroTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -597,7 +654,7 @@ Function AlquimistaTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex A
     If ObjData(ItemIndex).Mortero > 0 Then
         If Not TieneObjetos(Mortero, ObjData(ItemIndex).Mortero, UserIndex) Then
             ' Msg615=No tenés suficientes morteros.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_MORTEROS, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_MORTEROS, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
             AlquimistaTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -606,7 +663,7 @@ Function AlquimistaTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex A
     If ObjData(ItemIndex).FrascoAlq > 0 Then
         If Not TieneObjetos(FrascoAlq, ObjData(ItemIndex).FrascoAlq, UserIndex) Then
             ' Msg616=No tenés suficientes frascos de alquimistas.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_FRASCOS_ALQUIMISTAS, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_FRASCOS_ALQUIMISTAS, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
             AlquimistaTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -615,7 +672,7 @@ Function AlquimistaTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex A
     If ObjData(ItemIndex).HongoDeLuz > 0 Then
         If Not TieneObjetos(HongoDeLuz, ObjData(ItemIndex).HongoDeLuz, UserIndex) Then
             ' Msg621=No tenés suficientes hongos de luz.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_HONGOS_LUZ, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_HONGOS_LUZ, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
             AlquimistaTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -624,7 +681,7 @@ Function AlquimistaTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex A
     If ObjData(ItemIndex).Esporas > 0 Then
         If Not TieneObjetos(Esporas, ObjData(ItemIndex).Esporas, UserIndex) Then
             ' Msg622=No tenés suficientes esporas silvestres.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_ESPORAS_SILVESTRES, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_ESPORAS_SILVESTRES, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
             AlquimistaTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -633,7 +690,7 @@ Function AlquimistaTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex A
     If ObjData(ItemIndex).Tuna > 0 Then
         If Not TieneObjetos(Tuna, ObjData(ItemIndex).Tuna, UserIndex) Then
             ' Msg623=No tenés suficientes tunas silvestres.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_TUNAS_SILVESTRES, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_TUNAS_SILVESTRES, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
             AlquimistaTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -642,7 +699,7 @@ Function AlquimistaTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex A
     If ObjData(ItemIndex).Cala > 0 Then
         If Not TieneObjetos(Cala, ObjData(ItemIndex).Cala, UserIndex) Then
             ' Msg624=No tenés suficientes calas venenosas.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_CALAS_VENENOSAS, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_CALAS_VENENOSAS, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_VENENO)
             AlquimistaTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -651,7 +708,7 @@ Function AlquimistaTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex A
     If ObjData(ItemIndex).ColaDeZorro > 0 Then
         If Not TieneObjetos(ColaDeZorro, ObjData(ItemIndex).ColaDeZorro, UserIndex) Then
             ' Msg625=No tenés suficientes colas de zorro.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_COLAS_ZORRO, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_COLAS_ZORRO, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
             AlquimistaTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -660,7 +717,7 @@ Function AlquimistaTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex A
     If ObjData(ItemIndex).FlorOceano > 0 Then
         If Not TieneObjetos(FlorOceano, ObjData(ItemIndex).FlorOceano, UserIndex) Then
             ' Msg626=No tenés suficientes flores del óceano.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_FLORES_OCEANO, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_FLORES_OCEANO, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
             AlquimistaTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -669,7 +726,7 @@ Function AlquimistaTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex A
     If ObjData(ItemIndex).FlorRoja > 0 Then
         If Not TieneObjetos(FlorRoja, ObjData(ItemIndex).FlorRoja, UserIndex) Then
             ' Msg627=No tenés suficientes flores rojas.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_FLORES_ROJAS, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_FLORES_ROJAS, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
             AlquimistaTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -678,7 +735,7 @@ Function AlquimistaTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex A
     If ObjData(ItemIndex).SemillasProsperas > 0 Then
         If Not TieneObjetos(SemillasProsperas, ObjData(ItemIndex).SemillasProsperas, UserIndex) Then
             ' Msg627=No tenés suficientes flores rojas.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_SEMILLAS_PROSPERAS, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_SEMILLAS_PROSPERAS, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
             AlquimistaTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -686,7 +743,7 @@ Function AlquimistaTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex A
     End If
     If ObjData(ItemIndex).FireEssence > 0 Then
         If Not TieneObjetos(e_Minerales.FireEssence, ObjData(ItemIndex).FireEssence, UserIndex) Then
-            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             AlquimistaTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -694,7 +751,7 @@ Function AlquimistaTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex A
     End If
     If ObjData(ItemIndex).WaterEssence > 0 Then
         If Not TieneObjetos(e_Minerales.WaterEssence, ObjData(ItemIndex).WaterEssence, UserIndex) Then
-            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             AlquimistaTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -702,7 +759,7 @@ Function AlquimistaTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex A
     End If
     If ObjData(ItemIndex).EarthEssence > 0 Then
         If Not TieneObjetos(e_Minerales.EarthEssence, ObjData(ItemIndex).EarthEssence, UserIndex) Then
-            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             AlquimistaTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -710,7 +767,7 @@ Function AlquimistaTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex A
     End If
     If ObjData(ItemIndex).WindEssence > 0 Then
         If Not TieneObjetos(e_Minerales.WindEssence, ObjData(ItemIndex).WindEssence, UserIndex) Then
-            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             AlquimistaTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -718,7 +775,7 @@ Function AlquimistaTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex A
     End If
     If ObjData(ItemIndex).RunaFuego > 0 Then
         If Not TieneObjetos(RunaFuegoObj, ObjData(ItemIndex).RunaFuego, UserIndex, e_ElementalTags.Fire) Then
-            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             AlquimistaTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -726,7 +783,7 @@ Function AlquimistaTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex A
     End If
     If ObjData(ItemIndex).RunaAgua > 0 Then
         If Not TieneObjetos(RunaAguaObj, ObjData(ItemIndex).RunaAgua, UserIndex, e_ElementalTags.Water) Then
-            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             AlquimistaTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -734,7 +791,7 @@ Function AlquimistaTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex A
     End If
     If ObjData(ItemIndex).RunaTierra > 0 Then
         If Not TieneObjetos(RunaTierraObj, ObjData(ItemIndex).RunaTierra, UserIndex, e_ElementalTags.Earth) Then
-            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             AlquimistaTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -742,7 +799,7 @@ Function AlquimistaTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex A
     End If
     If ObjData(ItemIndex).RunaViento > 0 Then
         If Not TieneObjetos(RunaVientoObj, ObjData(ItemIndex).RunaViento, UserIndex, e_ElementalTags.Wind) Then
-            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             AlquimistaTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -759,7 +816,7 @@ Function SastreTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex As In
     If ObjData(ItemIndex).PielLobo > 0 Then
         If Not TieneObjetos(PieldeLobo, ObjData(ItemIndex).PielLobo, UserIndex) Then
             ' Msg633=No tenés suficientes pieles de lobo.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_PIELES_LOBO, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_PIELES_LOBO, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
             SastreTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -768,7 +825,7 @@ Function SastreTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex As In
     If ObjData(ItemIndex).PielOsoPardo > 0 Then
         If Not TieneObjetos(PieldeOsoPardo, ObjData(ItemIndex).PielOsoPardo, UserIndex) Then
             ' Msg634=No tenés suficientes pieles de oso pardo.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_PIELES_OSO_PARDO, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_PIELES_OSO_PARDO, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
             SastreTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -777,7 +834,7 @@ Function SastreTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex As In
     If ObjData(ItemIndex).PielOsoPolaR > 0 Then
         If Not TieneObjetos(PieldeOsoPolar, ObjData(ItemIndex).PielOsoPolaR, UserIndex) Then
             ' Msg635=No tenés suficientes pieles de oso polar.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_PIELES_OSO_POLAR, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_PIELES_OSO_POLAR, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
             SastreTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -786,7 +843,7 @@ Function SastreTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex As In
     If ObjData(ItemIndex).PielLoboNegro > 0 Then
         If Not TieneObjetos(PielLoboNegro, ObjData(ItemIndex).PielLoboNegro, UserIndex) Then
             ' Msg636=No tenés suficientes pieles de lobo negro.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_PIELES_LOBO_NEGRO, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_PIELES_LOBO_NEGRO, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
             SastreTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -795,7 +852,7 @@ Function SastreTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex As In
     If ObjData(ItemIndex).PielTigre > 0 Then
         If Not TieneObjetos(PielTigre, ObjData(ItemIndex).PielTigre, UserIndex) Then
             ' Msg637=No tenés suficientes pieles de tigre.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_PIELES_TIGRE, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_PIELES_TIGRE, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
             SastreTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -804,7 +861,7 @@ Function SastreTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex As In
     If ObjData(ItemIndex).PielTigreBengala > 0 Then
         If Not TieneObjetos(PielTigreBengala, ObjData(ItemIndex).PielTigreBengala, UserIndex) Then
             ' Msg638=No tenés suficientes pieles de tigre de bengala.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_PIELES_TIGRE_BENGALA, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_PIELES_TIGRE_BENGALA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
             SastreTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -821,7 +878,7 @@ Function HerreroTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex As I
     If ObjData(ItemIndex).LingH > 0 Then
         If Not TieneObjetos(e_Minerales.LingoteDeHierro, ObjData(ItemIndex).LingH, UserIndex) Then
             ' Msg639=No tenés suficientes lingotes de hierro.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_LINGOTES_HIERRO, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_LINGOTES_HIERRO, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
             HerreroTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -830,7 +887,7 @@ Function HerreroTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex As I
     If ObjData(ItemIndex).LingP > 0 Then
         If Not TieneObjetos(e_Minerales.LingoteDePlata, ObjData(ItemIndex).LingP, UserIndex) Then
             ' Msg640=No tenés suficientes lingotes de plata.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_LINGOTES_PLATA, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_LINGOTES_PLATA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
             HerreroTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -839,7 +896,7 @@ Function HerreroTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex As I
     If ObjData(ItemIndex).LingO > 0 Then
         If Not TieneObjetos(e_Minerales.LingoteDeOro, ObjData(ItemIndex).LingO, UserIndex) Then
             ' Msg641=No tenés suficientes lingotes de oro.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_LINGOTES_ORO, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_LINGOTES_ORO, e_TextChannel.TEXTCHANNEL_ECONOMY, e_FontTypeNames.FONTTYPE_New_Naranja)
             HerreroTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -848,7 +905,7 @@ Function HerreroTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex As I
     If ObjData(ItemIndex).Coal > 0 Then
         If Not TieneObjetos(e_Minerales.Coal, ObjData(ItemIndex).Coal, UserIndex) Then
             ' Msg642=No tenés suficientes carbón.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_CARBON, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_CARBON, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
             HerreroTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -856,7 +913,7 @@ Function HerreroTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex As I
     End If
     If ObjData(ItemIndex).Blodium > 0 Then
         If Not TieneObjetos(e_Minerales.Blodium, ObjData(ItemIndex).Blodium, UserIndex) Then
-            Call WriteLocaleMsg(UserIndex, MSG_NOT_ENOUGH_BLODIUM, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_NOT_ENOUGH_BLODIUM, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             HerreroTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -876,18 +933,18 @@ Function HerreroTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex As I
         ' una espada al piso y clickearla pasaba este gate y dejaba craftear runas de
         ' Blodium sin yunque.
         Dim TargetObjIndex As Integer
-        TargetObjIndex = MapData(Target.Map, Target.x, Target.y).ObjInfo.ObjIndex
+        TargetObjIndex = MapData(Target.x, Target.y, Target.Map).ObjInfo.ObjIndex
         ' ObjData se dimensiona 1 To NumObjDatas: con el tile vacio (ObjIndex=0) el
         ' acceso tiraba error 9 y salia por el On Error. Rechazaba igual, pero por
         ' excepcion y dejando un TraceError por cada click en un tile sin objeto.
         If TargetObjIndex <= 0 Then
-            Call WriteLocaleMsg(UserIndex, MSG_BLODIUM_ANVIL_REQUIRED, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_BLODIUM_ANVIL_REQUIRED, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             HerreroTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
         End If
         If ObjData(TargetObjIndex).OBJType <> e_OBJType.otAnvil Or ObjData(TargetObjIndex).Subtipo <> e_AnvilType.BlodiumAnvil Then
-            Call WriteLocaleMsg(UserIndex, MSG_BLODIUM_ANVIL_REQUIRED, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_BLODIUM_ANVIL_REQUIRED, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             HerreroTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -895,7 +952,7 @@ Function HerreroTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex As I
     End If
     If ObjData(ItemIndex).FireEssence > 0 Then
         If Not TieneObjetos(e_Minerales.FireEssence, ObjData(ItemIndex).FireEssence, UserIndex) Then
-            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             HerreroTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -903,7 +960,7 @@ Function HerreroTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex As I
     End If
     If ObjData(ItemIndex).WaterEssence > 0 Then
         If Not TieneObjetos(e_Minerales.WaterEssence, ObjData(ItemIndex).WaterEssence, UserIndex) Then
-            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             HerreroTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -911,7 +968,7 @@ Function HerreroTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex As I
     End If
     If ObjData(ItemIndex).EarthEssence > 0 Then
         If Not TieneObjetos(e_Minerales.EarthEssence, ObjData(ItemIndex).EarthEssence, UserIndex) Then
-            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             HerreroTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -919,7 +976,7 @@ Function HerreroTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex As I
     End If
     If ObjData(ItemIndex).WindEssence > 0 Then
         If Not TieneObjetos(e_Minerales.WindEssence, ObjData(ItemIndex).WindEssence, UserIndex) Then
-            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             HerreroTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -927,7 +984,7 @@ Function HerreroTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex As I
     End If
     If ObjData(ItemIndex).RunaFuego > 0 Then
         If Not TieneObjetos(RunaFuegoObj, ObjData(ItemIndex).RunaFuego, UserIndex, e_ElementalTags.Fire) Then
-            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             HerreroTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -935,7 +992,7 @@ Function HerreroTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex As I
     End If
     If ObjData(ItemIndex).RunaAgua > 0 Then
         If Not TieneObjetos(RunaAguaObj, ObjData(ItemIndex).RunaAgua, UserIndex, e_ElementalTags.Water) Then
-            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             HerreroTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -943,7 +1000,7 @@ Function HerreroTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex As I
     End If
     If ObjData(ItemIndex).RunaTierra > 0 Then
         If Not TieneObjetos(RunaTierraObj, ObjData(ItemIndex).RunaTierra, UserIndex, e_ElementalTags.Earth) Then
-            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             HerreroTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -951,7 +1008,7 @@ Function HerreroTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex As I
     End If
     If ObjData(ItemIndex).RunaViento > 0 Then
         If Not TieneObjetos(RunaVientoObj, ObjData(ItemIndex).RunaViento, UserIndex, e_ElementalTags.Wind) Then
-            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             HerreroTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -1008,12 +1065,12 @@ Public Sub HerreroConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As I
     If Not IntervaloPermiteTrabajarConstruir(UserIndex) Then Exit Sub
     ' Plan 04.001: gate de ejecucion — eCraftBlacksmith llegaba directo sin validar profesion.
     If Not TieneProfesionAprendida(UserIndex, e_Skill.Herreria) Then
-        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_ECONOMY, e_FontTypeNames.FONTTYPE_INFO)
         Exit Sub
     End If
     If Not HayLugarEnInventario(UserIndex, ItemIndex, 1) Then
         ' Msg643=No tienes suficiente espacio en el inventario.
-        Call WriteLocaleMsg(UserIndex, MSG_NO_TIENES_SUFICIENTE_ESPACIO_INVENTARIO, e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteLocaleMsg(UserIndex, MSG_NO_TIENES_SUFICIENTE_ESPACIO_INVENTARIO, e_TextChannel.TEXTCHANNEL_ECONOMY, e_FontTypeNames.FONTTYPE_New_Naranja)
         Exit Sub
     End If
     If UserList(UserIndex).flags.Privilegios And (e_PlayerType.Consejero) Then
@@ -1029,7 +1086,7 @@ Public Sub HerreroConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As I
         MiObj.Amount = 1
         MiObj.ObjIndex = ItemIndex
         MiObj.ElementalTags = ObjData(ItemIndex).ElementalTags
-        Call HerreroQuitarMateriales(UserIndex, MiObj)
+        If Not ConsumeCraftingMaterials(UserIndex, MiObj, e_JobsTypes.Blacksmith) Then Exit Sub
         UserList(UserIndex).Stats.MinSta = UserList(UserIndex).Stats.MinSta - 2
         Call WriteUpdateSta(UserIndex)
         ' AGREGAR FX
@@ -1121,7 +1178,7 @@ Public Sub CarpinteroConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex A
     If Not IntervaloPermiteTrabajarConstruir(UserIndex) Then Exit Sub
     ' Plan 04.001: gate de ejecucion, no solo al equipar la herramienta.
     If Not TieneProfesionAprendida(UserIndex, e_Skill.Carpinteria) Then
-        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         Exit Sub
     End If
     If UserList(UserIndex).flags.Privilegios And (e_PlayerType.Consejero Or e_PlayerType.SemiDios Or e_PlayerType.Dios) Then
@@ -1131,7 +1188,7 @@ Public Sub CarpinteroConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex A
     'Si no tiene equipado el serrucho
     If UserList(UserIndex).invent.EquippedWorkingToolObjIndex = 0 Then
         ' Antes de usar la herramienta deberias equipartela.
-        Call WriteLocaleMsg(UserIndex, MSG_MUST_EQUIP_TOOL_FIRST, e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteLocaleMsg(UserIndex, MSG_MUST_EQUIP_TOOL_FIRST, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
         Call WriteMacroTrabajoToggle(UserIndex, False)
         Exit Sub
     End If
@@ -1148,11 +1205,9 @@ Public Sub CarpinteroConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex A
     ebHasTool = (ObjData(UserList(UserIndex).invent.EquippedWorkingToolObjIndex).OBJType = e_OBJType.otWorkingTools And ObjData(UserList(UserIndex).invent.EquippedWorkingToolObjIndex).Subtipo = e_WorkingToolSubType.CarpentryHacksaw)
     ebKnowsRecipe = KnowsCraftingRecipe(UserIndex, ItemIndex)
     If ebHasMats And ebHasSkill And ebValidRecipeType And ebHasTool And ebKnowsRecipe Then
-        If UserList(UserIndex).Stats.MinSta > 2 Then
-            Call QuitarSta(UserIndex, 2)
-        Else
+        If UserList(UserIndex).Stats.MinSta <= 2 Then
             'Msg93=Estás muy cansado para trabajar.
-            Call WriteLocaleMsg(UserIndex, MSG_MUY_CANSADO, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_MUY_CANSADO, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             'Msg2129=¡No tengo energía!
             Call SendData(SendTarget.ToIndex, UserIndex, PrepareLocalizedChatOverHead(MSG_NO_ENERGY, UserList(UserIndex).Char.charindex, vbWhite))
             Call WriteMacroTrabajoToggle(UserIndex, False)
@@ -1162,7 +1217,8 @@ Public Sub CarpinteroConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex A
         MiObj.amount = cantidad_a_construir
         MiObj.ObjIndex = ItemIndex
         MiObj.ElementalTags = ObjData(ItemIndex).ElementalTags
-        Call CarpinteroQuitarMateriales(UserIndex, MiObj)
+        If Not ConsumeCraftingMaterials(UserIndex, MiObj, e_JobsTypes.Carpenter) Then Exit Sub
+        Call QuitarSta(UserIndex, 2)
         UserList(UserIndex).Trabajo.Cantidad = UserList(UserIndex).Trabajo.Cantidad - cantidad_a_construir
         Call WriteTextCharDrop(UserIndex, "+" & cantidad_a_construir, UserList(UserIndex).Char.charindex, vbWhite)
 
@@ -1195,14 +1251,14 @@ Public Sub AlquimistaConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex A
     On Error GoTo AlquimistaConstruirItem_Err
     ' Plan 04.001: gate de ejecucion, no solo al equipar la herramienta.
     If Not TieneProfesionAprendida(UserIndex, e_Skill.Alquimia) Then
-        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         Exit Sub
     End If
     If Not UserList(UserIndex).Stats.MinSta > 0 Then
         'Msg2129=¡No tengo energía!
         Call SendData(SendTarget.ToIndex, UserIndex, PrepareLocalizedChatOverHead(MSG_NO_ENERGY, UserList(UserIndex).Char.charindex, vbWhite))
         'Msg93=Estás muy cansado
-        Call WriteLocaleMsg(UserIndex, MSG_MUY_CANSADO, e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteLocaleMsg(UserIndex, MSG_MUY_CANSADO, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         Exit Sub
     End If
     ' === [ Validate Array Bounds Before Accessing Elements ] ===
@@ -1219,7 +1275,11 @@ Public Sub AlquimistaConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex A
     ' Check if the equipped tool index is valid
     Dim ToolIndex As Integer
     ToolIndex = UserList(UserIndex).invent.EquippedWorkingToolObjIndex
-    If ToolIndex < LBound(ObjData) Or ToolIndex > UBound(ObjData) Then
+    If ToolIndex = 0 Then
+        'Msg376=Antes de usar la herramienta deberías equipártela.
+        Call WriteLocaleMsg(UserIndex, MSG_MUST_EQUIP_TOOL_FIRST, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
+        Exit Sub
+    ElseIf ToolIndex < LBound(ObjData) Or ToolIndex > UBound(ObjData) Then
         Call TraceError(1003, "EquippedWorkingToolObjIndex out of range: " & ToolIndex, "AlquimistaConstruirItem", Erl)
         Exit Sub
     End If
@@ -1231,15 +1291,15 @@ Public Sub AlquimistaConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex A
     ebHasTool = (ObjData(ToolIndex).OBJType = e_OBJType.otWorkingTools And ObjData(ToolIndex).Subtipo = 4)
     ebKnowsRecipe = KnowsCraftingRecipe(UserIndex, ItemIndex)
     If ebHasMats And ebHasSkill And ebValidRecipeType And ebHasTool And ebKnowsRecipe Then
-        UserList(UserIndex).Stats.MinSta = UserList(UserIndex).Stats.MinSta - 1
-        Call WriteUpdateSta(UserIndex)
-        ' AGREGAR FX
-        Call SendData(SendTarget.ToIndex, UserIndex, PrepareMessageParticleFX(UserList(UserIndex).Char.charindex, 253, 25, False, ObjData(ItemIndex).GrhIndex))
         Dim MiObj As t_Obj
         MiObj.amount = 1
         MiObj.ObjIndex = ItemIndex
         MiObj.ElementalTags = ObjData(ItemIndex).ElementalTags
-        Call AlquimistaQuitarMateriales(UserIndex, MiObj)
+        If Not ConsumeCraftingMaterials(UserIndex, MiObj, e_JobsTypes.Alchemist) Then Exit Sub
+        UserList(UserIndex).Stats.MinSta = UserList(UserIndex).Stats.MinSta - 1
+        Call WriteUpdateSta(UserIndex)
+        ' AGREGAR FX
+        Call SendData(SendTarget.ToIndex, UserIndex, PrepareMessageParticleFX(UserList(UserIndex).Char.charindex, 253, 25, False, ObjData(ItemIndex).GrhIndex))
         Call SendData(SendTarget.ToPCAliveArea, UserIndex, PrepareMessagePlayWave(1152, UserList(UserIndex).pos.x, UserList(UserIndex).pos.y))
         If Not MeterItemEnInventario(UserIndex, MiObj) Then
             Call TirarItemAlPiso(UserList(UserIndex).pos, MiObj)
@@ -1262,7 +1322,6 @@ Public Sub AlquimistaConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex A
     Exit Sub
 AlquimistaConstruirItem_Err:
     Call TraceError(Err.Number, Err.Description & " | UserIndex: " & UserIndex & " | ItemIndex: " & ItemIndex, "Trabajo.AlquimistaConstruirItem", Erl)
-    Resume Next ' Allow execution to continue after logging the error
 End Sub
 
 Public Sub SastreConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As Integer)
@@ -1270,14 +1329,14 @@ Public Sub SastreConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As In
     If Not IntervaloPermiteTrabajarConstruir(UserIndex) Then Exit Sub
     ' Plan 04.001: gate de ejecucion, no solo al equipar la herramienta.
     If Not TieneProfesionAprendida(UserIndex, e_Skill.Sastreria) Then
-        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         Exit Sub
     End If
     If Not UserList(UserIndex).Stats.MinSta > 0 Then
         'Msg2129=¡No tengo energía!
         Call SendData(SendTarget.ToIndex, UserIndex, PrepareLocalizedChatOverHead(MSG_NO_ENERGY, UserList(UserIndex).Char.charindex, vbWhite))
         'Msg93=Estás muy cansado
-        Call WriteLocaleMsg(UserIndex, MSG_MUY_CANSADO, e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteLocaleMsg(UserIndex, MSG_MUY_CANSADO, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         Exit Sub
     End If
     If ItemIndex = 0 Then Exit Sub
@@ -1291,18 +1350,18 @@ Public Sub SastreConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As In
     ebHasTool = (ObjData(UserList(UserIndex).invent.EquippedWorkingToolObjIndex).OBJType = e_OBJType.otWorkingTools And ObjData(UserList(UserIndex).invent.EquippedWorkingToolObjIndex).Subtipo = e_WorkingToolSubType.TailorSewingbox)
     ebKnowsRecipe = KnowsCraftingRecipe(UserIndex, ItemIndex)
     If ebHasMats And ebHasSkill And ebValidRecipeType And ebHasTool And ebKnowsRecipe Then
-        UserList(UserIndex).Stats.MinSta = UserList(UserIndex).Stats.MinSta - 2
-        Call WriteUpdateSta(UserIndex)
         Dim MiObj As t_Obj
         MiObj.amount = 1
         MiObj.ObjIndex = ItemIndex
         MiObj.ElementalTags = ObjData(ItemIndex).ElementalTags
+        If Not ConsumeCraftingMaterials(UserIndex, MiObj, e_JobsTypes.Tailor) Then Exit Sub
+        UserList(UserIndex).Stats.MinSta = UserList(UserIndex).Stats.MinSta - 2
+        Call WriteUpdateSta(UserIndex)
         If IsFeatureEnabled("gain_exp_while_working") Then
             Call GiveExpWhileWorking(UserIndex, MiObj, e_JobsTypes.Tailor)
             Call WriteUpdateExp(UserIndex)
             Call CheckUserLevel(UserIndex)
         End If
-        Call SastreQuitarMateriales(UserIndex, MiObj)
         Call WriteTextCharDrop(UserIndex, "+1", UserList(UserIndex).Char.charindex, vbWhite)
         Call SendData(SendTarget.ToPCAliveArea, UserIndex, PrepareMessagePlayWave(63, UserList(UserIndex).pos.x, UserList(UserIndex).pos.y))
         If Not MeterItemEnInventario(UserIndex, MiObj) Then
@@ -1433,24 +1492,24 @@ Sub TratarDeHacerFogata(ByVal Map As Integer, ByVal x As Integer, ByVal y As Int
         .x = x
         .y = y
     End With
-    If MapData(Map, x, y).ObjInfo.ObjIndex <> 58 Then
+    If MapData(x, y, Map).ObjInfo.ObjIndex <> 58 Then
         ' Msg646=Necesitas clickear sobre Leña para hacer ramitas.
-        Call WriteLocaleMsg(UserIndex, MSG_NECESITAS_CLICKEAR_SOBRE_LENA_HACER_RAMITAS, e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteLocaleMsg(UserIndex, MSG_NECESITAS_CLICKEAR_SOBRE_LENA_HACER_RAMITAS, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
         Exit Sub
     End If
     If Distancia(posMadera, UserList(UserIndex).pos) > 2 Then
-        Call WriteLocaleMsg(UserIndex, MSG_SACERDOTE_PUEDE_CURARTE_DEBIDO_DEMASIADO_LEJOS, e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteLocaleMsg(UserIndex, MSG_SACERDOTE_PUEDE_CURARTE_DEBIDO_DEMASIADO_LEJOS, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
         'Call WriteLocaleMsg(UserIndex, MSG_DEMASIADO_LEJOS_PRENDER_FOGATA, e_FontTypeNames.FONTTYPE_INFO)  ' Msg1455=Estás demasiado lejos para prender la fogata.
         Exit Sub
     End If
     If UserList(UserIndex).flags.Muerto = 1 Then
         ' Msg647=No podés hacer fogatas estando muerto.
-        Call WriteLocaleMsg(UserIndex, MSG_NO_PODES_HACER_FOGATAS_ESTANDO_MUERTO, e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteLocaleMsg(UserIndex, MSG_NO_PODES_HACER_FOGATAS_ESTANDO_MUERTO, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
         Exit Sub
     End If
-    If MapData(Map, x, y).ObjInfo.amount < 3 Then
+    If MapData(x, y, Map).ObjInfo.amount < 3 Then
         ' Msg648=Necesitas por lo menos tres troncos para hacer una fogata.
-        Call WriteLocaleMsg(UserIndex, MSG_NECESITAS_MENOS_TRES_TRONCOS_HACER_FOGATA, e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteLocaleMsg(UserIndex, MSG_NECESITAS_MENOS_TRES_TRONCOS_HACER_FOGATA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
         Exit Sub
     End If
     If UserList(UserIndex).Stats.UserSkills(e_Skill.Supervivencia) >= 0 And UserList(UserIndex).Stats.UserSkills(e_Skill.Supervivencia) < 6 Then
@@ -1463,8 +1522,8 @@ Sub TratarDeHacerFogata(ByVal Map As Integer, ByVal x As Integer, ByVal y As Int
     exito = RandomNumber(1, Suerte)
     If exito = 1 Then
         obj.ObjIndex = FOGATA_APAG
-        obj.amount = MapData(Map, x, y).ObjInfo.amount \ 3
-        Call WriteLocaleMsg(UserIndex, MSG_HECHO_RAMITAS, e_FontTypeNames.FONTTYPE_INFO)  ' Msg1456=Has hecho ¬1 ramitas.
+        obj.amount = MapData(x, y, Map).ObjInfo.amount \ 3
+        Call WriteLocaleMsg(UserIndex, MSG_HECHO_RAMITAS, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_PROMEDIO_MAYOR)  ' Msg1456=Has hecho ¬1 ramitas.
         Call MakeObj(obj, Map, x, y)
         'Seteamos la fogata como el nuevo TargetObj del user
         UserList(UserIndex).flags.TargetObj = FOGATA_APAG
@@ -1500,12 +1559,12 @@ Public Sub DoRobar(ByVal LadronIndex As Integer, ByVal VictimaIndex As Integer)
     If MapInfo(UserList(VictimaIndex).pos.Map).Seguro = 1 Then Exit Sub
     If Not UserMod.CanMove(UserList(VictimaIndex).flags, UserList(VictimaIndex).Counters) Then
         'Msg1028= No podes robarle a objetivos inmovilizados.
-        Call WriteLocaleMsg(LadronIndex, "1028", e_FontTypeNames.FONTTYPE_FIGHT)
+        Call WriteLocaleMsg(LadronIndex, MSG_NO_PODES_ROBARLE_A_OBJETIVOS_INMOVILIZADOS, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
         Exit Sub
     End If
     If UserList(VictimaIndex).flags.EnConsulta Then
         'Msg1029= ¡No puedes robar a usuarios en consulta!
-        Call WriteLocaleMsg(LadronIndex, "1029", e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteLocaleMsg(LadronIndex, MSG_NO_PUEDES_ROBAR_A_USUARIOS_EN_CONSULTA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         Exit Sub
     End If
     Dim Penable As Boolean
@@ -1513,19 +1572,19 @@ Public Sub DoRobar(ByVal LadronIndex As Integer, ByVal VictimaIndex As Integer)
         If esCiudadano(LadronIndex) Then
             If (.flags.Seguro) Then
                 'Msg1030= Debes quitarte el seguro para robarle a un ciudadano o a un miembro del Ejército Real
-                Call WriteLocaleMsg(LadronIndex, "1030", e_FontTypeNames.FONTTYPE_FIGHT)
+                Call WriteLocaleMsg(LadronIndex, MSG_DEBES_QUITARTE_EL_SEGURO_PARA_ROBARLE_A_OTRO_PERSONAJE, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
                 Exit Sub
             End If
         ElseIf esArmada(LadronIndex) Then ' Armada robando a armada or ciudadano?
             If (esCiudadano(VictimaIndex) Or esArmada(VictimaIndex)) Then
                 'Msg1031= Los miembros del Ejército Real no tienen permitido robarle a ciudadanos o a otros miembros del Ejército Real
-                Call WriteLocaleMsg(LadronIndex, "1031", e_FontTypeNames.FONTTYPE_FIGHT)
+                Call WriteLocaleMsg(LadronIndex, MSG_LOS_MIEMBROS_DEL_EJERCITO_REAL_NO_TIENEN_PERMITIDO_ROBARLE_A_CIUDADANOS_O_A_OTROS_MIEMBROS_DEL_EJERCITO, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
                 Exit Sub
             End If
         ElseIf esCaos(LadronIndex) Then ' Caos robando a caos?
             If (esCaos(VictimaIndex)) Then
                 'Msg1032= No puedes robar a otros miembros de la Legión Oscura.
-                Call WriteLocaleMsg(LadronIndex, "1032", e_FontTypeNames.FONTTYPE_FIGHT)
+                Call WriteLocaleMsg(LadronIndex, MSG_NO_PUEDES_ROBAR_A_OTROS_MIEMBROS_DE_LA_LEGION_OSCURA, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
                 Exit Sub
             End If
         End If
@@ -1535,7 +1594,7 @@ Public Sub DoRobar(ByVal LadronIndex As Integer, ByVal VictimaIndex As Integer)
             If esCiudadano(LadronIndex) And GuildAlignmentIndex(.GuildIndex) = e_ALINEACION_GUILD.ALINEACION_CIUDADANA Then
                 If PersonajeEsLeader(.Id) Then
                     'Msg1033= No puedes robar siendo lider de un clan ciudadano.
-                    Call WriteLocaleMsg(LadronIndex, "1033", e_FontTypeNames.FONTTYPE_FIGHT)
+                    Call WriteLocaleMsg(LadronIndex, MSG_NO_PUEDES_ROBAR_SIENDO_LIDER_DE_UN_CLAN_CIUDADANO, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
                     Exit Sub
                 End If
             End If
@@ -1547,12 +1606,12 @@ Public Sub DoRobar(ByVal LadronIndex As Integer, ByVal VictimaIndex As Integer)
                 'Msg2129=¡No tengo energía!
                 Call SendData(SendTarget.ToIndex, LadronIndex, PrepareLocalizedChatOverHead(MSG_NO_ENERGY, UserList(LadronIndex).Char.charindex, vbWhite))
                 'Msg1034= Estás muy cansado para robar.
-                Call WriteLocaleMsg(LadronIndex, "1034", e_FontTypeNames.FONTTYPE_INFO)
+                Call WriteLocaleMsg(LadronIndex, MSG_ESTAS_MUY_CANSADO_PARA_ROBAR, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             Else
                 'Msg2129=¡No tengo energía!
                 Call SendData(SendTarget.ToIndex, LadronIndex, PrepareLocalizedChatOverHead(MSG_NO_ENERGY, UserList(LadronIndex).Char.charindex, vbWhite))
                 'Msg1035= Estás muy cansada para robar.
-                Call WriteLocaleMsg(LadronIndex, "1035", e_FontTypeNames.FONTTYPE_INFO)
+                Call WriteLocaleMsg(LadronIndex, MSG_ESTAS_MUY_CANSADA_PARA_ROBAR, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             End If
             Exit Sub
         End If
@@ -1560,7 +1619,7 @@ Public Sub DoRobar(ByVal LadronIndex As Integer, ByVal VictimaIndex As Integer)
             If .flags.SeguroClan And NivelDeClan(.GuildIndex) >= RequiredGuildLevelSafe Then
                 If .GuildIndex = UserList(VictimaIndex).GuildIndex Then
                     'Msg1036= No podes robarle a un miembro de tu clan.
-                    Call WriteLocaleMsg(LadronIndex, "1036", e_FontTypeNames.FONTTYPE_INFOIAO)
+                    Call WriteLocaleMsg(LadronIndex, MSG_NO_PODES_ROBARLE_A_UN_MIEMBRO_DE_TU_CLAN, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                     Exit Sub
                 End If
             End If
@@ -1600,9 +1659,9 @@ Public Sub DoRobar(ByVal LadronIndex As Integer, ByVal VictimaIndex As Integer)
                     OtroUserIndex = UserList(VictimaIndex).ComUsu.DestUsu.ArrayIndex
                     If OtroUserIndex > 0 And OtroUserIndex <= MaxUsers Then
                         'Msg1037= Comercio cancelado, ¡te están robando!
-                        Call WriteLocaleMsg(VictimaIndex, "1037", e_FontTypeNames.FONTTYPE_TALK)
+                        Call WriteLocaleMsg(VictimaIndex, MSG_COMERCIO_CANCELADO_TE_ESTAN_ROBANDO, e_TextChannel.TEXTCHANNEL_ECONOMY, e_FontTypeNames.FONTTYPE_SUBASTA)
                         'Msg1038= Comercio cancelado, al otro usuario le robaron.
-                        Call WriteLocaleMsg(OtroUserIndex, "1038", e_FontTypeNames.FONTTYPE_TALK)
+                        Call WriteLocaleMsg(OtroUserIndex, MSG_COMERCIO_CANCELADO_AL_OTRO_USUARIO_LE_ROBARON, e_TextChannel.TEXTCHANNEL_ECONOMY, e_FontTypeNames.FONTTYPE_SUBASTA)
                         Call LimpiarComercioSeguro(VictimaIndex)
                     End If
                 End If
@@ -1610,7 +1669,7 @@ Public Sub DoRobar(ByVal LadronIndex As Integer, ByVal VictimaIndex As Integer)
                     If TieneObjetosRobables(VictimaIndex) Then
                         Call RobarObjeto(LadronIndex, VictimaIndex)
                     Else
-                        Call WriteConsoleMsg(LadronIndex, PrepareMessageLocaleMsg(MSG_NO_TIENE_OBJETOS, UserList(VictimaIndex).name, e_FontTypeNames.FONTTYPE_INFO)) ' Msg1867=¬1 no tiene objetos.
+                        Call WriteLocaleMsg(LadronIndex, MSG_NO_TIENE_OBJETOS, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja, UserList(VictimaIndex).name) ' Msg1867=¬1 no tiene objetos.
                     End If
                 Else '50% de robar oro
                     If UserList(VictimaIndex).Stats.GLD > 0 Then
@@ -1658,19 +1717,19 @@ Public Sub DoRobar(ByVal LadronIndex As Integer, ByVal VictimaIndex As Integer)
                         End If
                         .Stats.GLD = .Stats.GLD + n
                         If .Stats.GLD > MAXORO Then .Stats.GLD = MAXORO
-                        Call WriteLocaleMsg(LadronIndex, "1458", e_FontTypeNames.FONTTYPE_New_Rojo_Salmon, PonerPuntos(n) & "¬" & UserList(VictimaIndex).name) ' Msg1458=Le has robado ¬1 monedas de oro a ¬2
-                        Call WriteLocaleMsg(VictimaIndex, "1530", e_FontTypeNames.FONTTYPE_New_Rojo_Salmon, UserList(LadronIndex).name & "¬" & PonerPuntos(n)) 'Msg1530=¬1 te ha robado ¬2 monedas de oro.
+                        Call WriteLocaleMsg(LadronIndex, MSG_LE_HAS_ROBADO_MONEDAS_DE_ORO_A, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Rojo_Salmon, PonerPuntos(n) & "¬" & UserList(VictimaIndex).name) ' Msg1458=Le has robado ¬1 monedas de oro a ¬2
+                        Call WriteLocaleMsg(VictimaIndex, MSG_TE_HA_ROBADO_MONEDAS_DE_ORO, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Rojo_Salmon, UserList(LadronIndex).name & "¬" & PonerPuntos(n)) 'Msg1530=¬1 te ha robado ¬2 monedas de oro.
                         Call WriteUpdateGold(LadronIndex) 'Le actualizamos la billetera al ladron
                         Call WriteUpdateGold(VictimaIndex) 'Le actualizamos la billetera a la victima
                     Else
-                        Call WriteConsoleMsg(LadronIndex, PrepareMessageLocaleMsg(MSG_NO_TIENE_ORO, UserList(VictimaIndex).name, e_FontTypeNames.FONTTYPE_INFO)) ' Msg1868=¬1 no tiene oro.
+                        Call WriteLocaleMsg(LadronIndex, MSG_NO_TIENE_ORO, e_TextChannel.TEXTCHANNEL_ECONOMY, e_FontTypeNames.FONTTYPE_New_Naranja, UserList(VictimaIndex).name) ' Msg1868=¬1 no tiene oro.
                     End If
                 End If
                 Call SubirSkill(LadronIndex, e_Skill.Robar)
             Else
                 'Msg1039= ¡No has logrado robar nada!
-                Call WriteLocaleMsg(LadronIndex, "1039", e_FontTypeNames.FONTTYPE_INFO)
-                Call WriteLocaleMsg(VictimaIndex, "1459", e_FontTypeNames.FONTTYPE_INFO)  ' Msg1459=¡¬1 ha intentado robarte!
+                Call WriteLocaleMsg(LadronIndex, MSG_NO_HAS_LOGRADO_ROBAR_NADA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+                Call WriteLocaleMsg(VictimaIndex, MSG_HA_INTENTADO_ROBARTE, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)  ' Msg1459=¡¬1 ha intentado robarte!
                 Call SubirSkill(LadronIndex, e_Skill.Robar)
             End If
             If Status(LadronIndex) = Ciudadano Then Call VolverCriminal(LadronIndex)
@@ -1753,15 +1812,15 @@ Private Sub RobarObjeto(ByVal LadronIndex As Integer, ByVal VictimaIndex As Inte
                 Call TirarItemAlPiso(UserList(LadronIndex).pos, MiObj)
             End If
             If UserList(LadronIndex).clase = e_Class.Thief Then
-                Call WriteLocaleMsg(LadronIndex, "1460", e_FontTypeNames.FONTTYPE_New_Rojo_Salmon, MiObj.Amount & "¬" & ObjData(MiObj.ObjIndex).name)  ' Msg1460=Has robado ¬1 ¬2
-                Call WriteLocaleMsg(VictimaIndex, "1531", e_FontTypeNames.FONTTYPE_New_Rojo_Salmon, UserList(LadronIndex).name & "¬" & MiObj.Amount & "¬" & ObjData( _
+                Call WriteLocaleMsg(LadronIndex, MSG_HAS_ROBADO, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Rojo_Salmon, MiObj.Amount & "¬" & ObjData(MiObj.ObjIndex).name)  ' Msg1460=Has robado ¬1 ¬2
+                Call WriteLocaleMsg(VictimaIndex, MSG_TE_HA_ROBADO, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Rojo_Salmon, UserList(LadronIndex).name & "¬" & MiObj.Amount & "¬" & ObjData( _
                         MiObj.ObjIndex).name) 'Msg1531=¬1 te ha robado ¬2 ¬3.
             Else
-                Call WriteLocaleMsg(LadronIndex, "1461", e_FontTypeNames.FONTTYPE_New_Rojo_Salmon, MiObj.Amount & "¬" & ObjData(MiObj.ObjIndex).name)  ' Msg1461=Has hurtado ¬1 ¬2
+                Call WriteLocaleMsg(LadronIndex, MSG_HAS_HURTADO, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Rojo_Salmon, MiObj.Amount & "¬" & ObjData(MiObj.ObjIndex).name)  ' Msg1461=Has hurtado ¬1 ¬2
             End If
         Else
             'Msg1040= No has logrado robar ningun objeto.
-            Call WriteLocaleMsg(LadronIndex, "1040", e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(LadronIndex, MSG_NO_HAS_LOGRADO_ROBAR_NINGUN_OBJETO, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         End If
         'If exiting, cancel de quien es robado
         Call CancelExit(VictimaIndex)
@@ -1852,23 +1911,23 @@ Public Sub DoMontar(ByVal UserIndex As Integer, ByRef Montura As t_ObjData, ByVa
             Exit Sub
         End If
         If .flags.Montado = 0 And .Counters.EnCombate > 0 Then
-            Call WriteLocaleMsg(UserIndex, MSG_COMBATE_DEBES_AGUARDAR_SEGUNDO_MONTAR, e_FontTypeNames.FONTTYPE_INFOBOLD, .Counters.EnCombate)  ' Msg1466=Estás en combate, debes aguardar ¬1 segundo(s) para montar...
+            Call WriteLocaleMsg(UserIndex, MSG_COMBATE_DEBES_AGUARDAR_SEGUNDO_MONTAR, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_New_Naranja, .Counters.EnCombate)  ' Msg1466=Estás en combate, debes aguardar ¬1 segundo(s) para montar...
             Exit Sub
         End If
         If .flags.EnReto Then
             ' Msg652=No podés montar en un reto.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_PODES_MONTAR_RETO, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_NO_PODES_MONTAR_RETO, e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos)
             Exit Sub
         End If
-        If .flags.Montado = 0 And (MapData(.pos.Map, .pos.x, .pos.y).trigger > e_Trigger.PESCAINVALIDA) _
-           And MapData(.pos.Map, .pos.x, .pos.y).trigger <> e_Trigger.ONLY_PATREON_TILE Then
+        If .flags.Montado = 0 And (MapData(.pos.x, .pos.y, .pos.Map).trigger > e_Trigger.PESCAINVALIDA) _
+           And MapData(.pos.x, .pos.y, .pos.Map).trigger <> e_Trigger.ONLY_PATREON_TILE Then
             ' Msg653=No podés montar aquí.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_PODES_MONTAR_AQUI, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_NO_PODES_MONTAR_AQUI, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
             Exit Sub
         End If
         If .flags.Mimetizado <> e_EstadoMimetismo.Desactivado Then
             ' Msg654=Pierdes el efecto del mimetismo.
-            Call WriteLocaleMsg(UserIndex, MSG_PIERDES_EFECTO_MIMETISMO, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_PIERDES_EFECTO_MIMETISMO, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
             .Counters.Mimetismo = 0
             .flags.Mimetizado = e_EstadoMimetismo.Desactivado
             Call RefreshCharStatus(UserIndex)
@@ -1879,7 +1938,7 @@ Public Sub DoMontar(ByVal UserIndex As Integer, ByRef Montura As t_ObjData, ByVa
             .flags.invisible = 0
             .Counters.TiempoOculto = 0
             .Counters.DisabledInvisibility = 0
-            Call WriteLocaleMsg(UserIndex, MSG_VUELTO_VISIBLE, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_VUELTO_VISIBLE, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_PROMEDIO_MAYOR)
             Call SendData(SendTarget.ToPCAliveArea, UserIndex, PrepareMessageSetInvisible(.Char.charindex, False, UserList(UserIndex).pos.x, UserList(UserIndex).pos.y))
         End If
         If .flags.Meditando Then
@@ -1975,18 +2034,18 @@ End Sub
 Public Sub ActualizarRecurso(ByVal Map As Integer, ByVal x As Integer, ByVal y As Integer)
     On Error GoTo ActualizarRecurso_Err
     Dim ObjIndex As Integer
-    ObjIndex = MapData(Map, x, y).ObjInfo.ObjIndex
+    ObjIndex = MapData(x, y, Map).ObjInfo.ObjIndex
     Dim TiempoActual As Long
     TiempoActual = GetTickCountRaw()
     ' Data = Ultimo uso
     Dim lastUse As Long
-    lastUse = MapData(Map, x, y).ObjInfo.data
+    lastUse = MapData(x, y, Map).ObjInfo.data
     If lastUse <> &H7FFFFFFF Then
         Dim elapsedMs As Double
         elapsedMs = TicksElapsed(lastUse, TiempoActual)
         If elapsedMs / 1000# > ObjData(ObjIndex).TiempoRegenerar Then
-            MapData(Map, x, y).ObjInfo.amount = ObjData(ObjIndex).VidaUtil
-            MapData(Map, x, y).ObjInfo.data = &H7FFFFFFF   ' Ultimo uso = Max Long
+            MapData(x, y, Map).ObjInfo.amount = ObjData(ObjIndex).VidaUtil
+            MapData(x, y, Map).ObjInfo.data = &H7FFFFFFF   ' Ultimo uso = Max Long
         End If
     End If
     Exit Sub
@@ -2040,6 +2099,29 @@ Private Function HayEspacioMascotas(ByVal UserIndex As Integer) As Boolean
     HayEspacioMascotas = (FreeMascotaIndex(UserIndex) > 0)
 End Function
 
+Public Function GetTamingPower(ByVal Charisma As Byte, ByVal Skill As Byte, ByVal Clase As e_Class) As Integer
+    Dim Points As Integer
+    ' Preserve the existing Integer intermediate and VB6 rounding on assignment.
+    Points = CInt(Charisma) * CInt(Skill)
+    If Clase = e_Class.Druid Then
+        Points = Points / 6
+    Else
+        Points = Points / 118
+    End If
+    GetTamingPower = Points
+End Function
+
+Public Function GetTamingAttemptMessage(ByVal Difficulty As Integer, ByVal Power As Integer, ByVal Roll As Integer) As Integer
+    ' Creature eligibility is checked by HandleWorkLeftClick before DoDomar.
+    If Difficulty > Power Then
+        GetTamingAttemptMessage = MSG_NO_PUEDES_DOMAR_ESA_CRIATURA
+    ElseIf Roll = 1 Then
+        GetTamingAttemptMessage = MSG_CRIATURA_HA_ACEPTADO_COMO_SU_AMO
+    Else
+        GetTamingAttemptMessage = MSG_NO_TAME_FAILED
+    End If
+End Function
+
 Sub DoDomar(ByVal UserIndex As Integer, ByVal NpcIndex As Integer)
     On Error GoTo ErrHandler
     Dim puntosDomar As Integer
@@ -2048,30 +2130,29 @@ Sub DoDomar(ByVal UserIndex As Integer, ByVal NpcIndex As Integer)
     Dim NroPets     As Integer
     If IsValidUserRef(NpcList(NpcIndex).MaestroUser) And NpcList(NpcIndex).MaestroUser.ArrayIndex = UserIndex Then
         ' Msg655=Ya domaste a esa criatura.
-        Call WriteLocaleMsg(UserIndex, MSG_DOMASTE_ESA_CRIATURA, e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteLocaleMsg(UserIndex, MSG_DOMASTE_ESA_CRIATURA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         Exit Sub
     End If
     With UserList(UserIndex)
         If .flags.Privilegios And e_PlayerType.Consejero Then Exit Sub
         If .NroMascotas < MAXMASCOTAS And HayEspacioMascotas(UserIndex) Then
-            If IsValidNpcRef(NpcList(NpcIndex).MaestroNPC) > 0 Or IsValidUserRef(NpcList(NpcIndex).MaestroUser) Then
+            If IsValidNpcRef(NpcList(NpcIndex).MaestroNPC) Or IsValidUserRef(NpcList(NpcIndex).MaestroUser) Then
                 ' Msg656=La criatura ya tiene amo.
-                Call WriteLocaleMsg(UserIndex, MSG_CRIATURA_TIENE_AMO, e_FontTypeNames.FONTTYPE_INFO)
+                Call WriteLocaleMsg(UserIndex, MSG_CRIATURA_TIENE_AMO, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                 Exit Sub
             End If
-            puntosDomar = CInt(.Stats.UserAtributos(e_Atributos.Carisma)) * CInt(.Stats.UserSkills(e_Skill.Domar))
-            If .clase = e_Class.Druid Then
-                puntosDomar = puntosDomar / 6 'original es 6
-            Else
-                puntosDomar = puntosDomar / 118 'para que solo el druida dome
-            End If
+            puntosDomar = GetTamingPower(.Stats.UserAtributos(e_Atributos.Carisma), .Stats.UserSkills(e_Skill.Domar), .clase)
             'No tiene nivel suficiente?
             If NpcList(NpcIndex).MinTameLevel > .Stats.ELV Then
                 ' Msg1321=Debes ser nivel ¬1 o superior para domar esta criatura.
-                Call WriteLocaleMsg(UserIndex, MSG_DEBES_NIVEL_SUPERIOR_DOMAR_CRIATURA, e_FontTypeNames.FONTTYPE_INFO, NpcList(NpcIndex).MinTameLevel)
+                Call WriteLocaleMsg(UserIndex, MSG_DEBES_NIVEL_SUPERIOR_DOMAR_CRIATURA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja, NpcList(NpcIndex).MinTameLevel)
                 Exit Sub
             End If
-            If NpcList(NpcIndex).flags.Domable <= puntosDomar And RandomNumber(1, 5) = 1 Then
+            Dim ResultMessage As Integer
+            ' VB6 And evaluated the roll even below the power threshold. Keep that
+            ' draw and the SubirSkill call below for the same progression behavior.
+            ResultMessage = GetTamingAttemptMessage(NpcList(NpcIndex).flags.Domable, puntosDomar, RandomNumber(1, 5))
+            If ResultMessage = MSG_CRIATURA_HA_ACEPTADO_COMO_SU_AMO Then
                 Dim Index As Integer
                 .NroMascotas = .NroMascotas + 1
                 Index = FreeMascotaIndex(UserIndex)
@@ -2082,7 +2163,7 @@ Sub DoDomar(ByVal UserIndex As Integer, ByVal NpcIndex As Integer)
                 Call FollowAmo(NpcIndex)
                 Call ReSpawnNpc(NpcList(NpcIndex))
                 ' Msg657=La criatura te ha aceptado como su amo.
-                Call WriteLocaleMsg(UserIndex, MSG_CRIATURA_HA_ACEPTADO_COMO_SU_AMO, e_FontTypeNames.FONTTYPE_INFO)
+                Call WriteLocaleMsg(UserIndex, MSG_CRIATURA_HA_ACEPTADO_COMO_SU_AMO, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_PROMEDIO_MAYOR)
                 ' Es zona segura?
                 If MapInfo(.pos.Map).NoMascotas = 1 Then
                     petType = NpcList(NpcIndex).Numero
@@ -2091,19 +2172,19 @@ Sub DoDomar(ByVal UserIndex As Integer, ByVal NpcIndex As Integer)
                     .MascotasType(Index) = petType
                     .NroMascotas = NroPets
                     ' Msg658=No se permiten mascotas en zona segura. estas te esperaran afuera.
-                    Call WriteLocaleMsg(UserIndex, MSG_NO_PERMITEN_MASCOTAS_ZONA_SEGURA_ESPERARAN_AFUERA, e_FontTypeNames.FONTTYPE_INFO)
+                    Call WriteLocaleMsg(UserIndex, MSG_NO_PERMITEN_MASCOTAS_ZONA_SEGURA_ESPERARAN_AFUERA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
                 End If
             Else
-                If Not .flags.UltimoMensaje = MSG_NO_TAME_FAILED Then
-                    ' Msg659=No has logrado domar la criatura.
-                    Call WriteLocaleMsg(UserIndex, MSG_NO_TAME_FAILED, e_FontTypeNames.FONTTYPE_INFO)
-                    .flags.UltimoMensaje = MSG_NO_TAME_FAILED
+                If Not .flags.UltimoMensaje = ResultMessage Then
+                    ' Msg718: impossible at current power; Msg659: eligible failed roll.
+                    Call WriteLocaleMsg(UserIndex, ResultMessage, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
+                    .flags.UltimoMensaje = ResultMessage
                 End If
             End If
             Call SubirSkill(UserIndex, e_Skill.Domar)
         Else
             ' Msg660=No puedes controlar mas criaturas.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_PUEDES_CONTROLAR_MAS_CRIATURAS, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_NO_PUEDES_CONTROLAR_MAS_CRIATURAS, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
         End If
     End With
     Exit Sub
@@ -2151,7 +2232,7 @@ Public Function EntregarPezEspecial(ByVal UserIndex As Integer)
             End If
             Call SendData(SendTarget.ToIndex, UserIndex, PrepareMessageParticleFX(.Char.charindex, 253, 25, False, ObjData(obj.ObjIndex).GrhIndex))
             'Msg922=Felicitaciones has pescado un pez de gran porte ( " & ObjData(obj.ObjIndex).name & " )
-            Call WriteLocaleMsg(UserIndex, MSG_FELICITACIONES_PESCADO_PEZ_GRAN_PORTE_OBJDATA_OBJ_OBJINDEX, e_FontTypeNames.FONTTYPE_FIGHT, ObjData(obj.ObjIndex).name)
+            Call WriteLocaleMsg(UserIndex, MSG_FELICITACIONES_PESCADO_PEZ_GRAN_PORTE_OBJDATA_OBJ_OBJINDEX, e_TextChannel.TEXTCHANNEL_PROGRESSION, e_FontTypeNames.FONTTYPE_EXP, ObjData(obj.ObjIndex).name)
             .Stats.NumObj_PezEspecial = 0
             .flags.PescandoEspecial = False
         End If
@@ -2203,16 +2284,16 @@ Sub ThrowNetToTarget(ByVal UserIndex As Integer)
             Dim tU As Integer
             tU = UserList(UserIndex).flags.TargetUser.ArrayIndex
             If UserIndex = tU Then
-                Call WriteLocaleMsg(UserIndex, MsgCantAttackYourself, e_FontTypeNames.FONTTYPE_FIGHT)
+                Call WriteLocaleMsg(UserIndex, MsgCantAttackYourself, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
                 Exit Sub
             End If
             If IsSet(UserList(tU).flags.StatusMask, eCCInmunity) Then
-                Call WriteLocaleMsg(UserIndex, MsgCCInunity, e_FontTypeNames.FONTTYPE_FIGHT)
+                Call WriteLocaleMsg(UserIndex, MsgCCInunity, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
                 Exit Sub
             End If
             If Not UserMod.CanMove(UserList(tU).flags, UserList(tU).Counters) Then
                 ' Msg661=No podes inmovilizar un objetivo que no puede moverse.
-                Call WriteLocaleMsg(UserIndex, MSG_NO_PODES_INMOVILIZAR_OBJETIVO_PUEDE_MOVERSE, e_FontTypeNames.FONTTYPE_FIGHT)
+                Call WriteLocaleMsg(UserIndex, MSG_NO_PODES_INMOVILIZAR_OBJETIVO_PUEDE_MOVERSE, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_New_Naranja)
                 Exit Sub
             End If
             If Not PuedeAtacar(UserIndex, tU) Then Exit Sub
@@ -2248,7 +2329,7 @@ Sub ThrowNetToTarget(ByVal UserIndex As Integer)
                 Call SendData(SendTarget.ToNPCAliveArea, NpcIndex, PrepareMessageFxPiso(FISHING_NET_FX, NpcList(NpcIndex).pos.x, NpcList(NpcIndex).pos.y))
                 Call ClearNpcRef(UserList(UserIndex).flags.TargetNPC)
             Else
-                Call WriteLocaleMsg(UserIndex, MSgNpcInmuneToEffect, e_FontTypeNames.FONTTYPE_INFOIAO)
+                Call WriteLocaleMsg(UserIndex, MSgNpcInmuneToEffect, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_New_Naranja)
             End If
         End If
         If ThrowNet Then
@@ -2332,22 +2413,22 @@ Public Sub GiveExpWhileWorking(ByVal UserIndex As Integer, ByRef Item As t_Obj, 
             End If
         Case e_JobsTypes.Tailor
             If .PielLobo > 0 Then
-                tmpExp = tmpExp + ComputeWorkingExp(.PielLobo , SvrConfig.GetValue("TailoringExp"), Item.Amount)
+                tmpExp = tmpExp + ComputeWorkingExp(.PielLobo, SvrConfig.GetValue("WolfPeltExp"), Item.Amount)
             End If
             If .PielOsoPardo > 0 Then
-                tmpExp = tmpExp + ComputeWorkingExp(.PielOsoPardo , SvrConfig.GetValue("TailoringExp"), Item.Amount)
+                tmpExp = tmpExp + ComputeWorkingExp(.PielOsoPardo, SvrConfig.GetValue("BearPeltExp"), Item.Amount)
             End If
             If .PielOsoPolar > 0 Then
-                tmpExp = tmpExp + ComputeWorkingExp(.PielOsoPolar , SvrConfig.GetValue("TailoringExp"), Item.Amount)
+                tmpExp = tmpExp + ComputeWorkingExp(.PielOsoPolaR, SvrConfig.GetValue("PolarBearPeltExp"), Item.Amount)
             End If
             If .PielLoboNegro > 0 Then
-                tmpExp = tmpExp + ComputeWorkingExp(.PielLoboNegro, SvrConfig.GetValue("TailoringExp"), Item.Amount)
+                tmpExp = tmpExp + ComputeWorkingExp(.PielLoboNegro, SvrConfig.GetValue("BlackWolfPeltExp"), Item.Amount)
             End If
             If .PielTigre > 0 Then
-                tmpExp = tmpExp + ComputeWorkingExp(.PielTigre, SvrConfig.GetValue("TailoringExp"), Item.Amount)
+                tmpExp = tmpExp + ComputeWorkingExp(.PielTigre, SvrConfig.GetValue("TigerPeltExp"), Item.Amount)
             End If
             If .PielTigreBengala > 0 Then
-                tmpExp = tmpExp + ComputeWorkingExp(.PielTigreBengala, SvrConfig.GetValue("TailoringExp"), Item.Amount)
+                tmpExp = tmpExp + ComputeWorkingExp(.PielTigreBengala, SvrConfig.GetValue("BengalTigerPeltExp"), Item.Amount)
             End If
         Case Else
             tmpExp = SvrConfig.GetValue("ElseExp")
@@ -2394,7 +2475,7 @@ Public Function KnowsCraftingRecipe(ByVal UserIndex As Integer, ByVal ItemIndex 
     End If
     If Not TieneHechizo(hIndex, UserIndex) Then
         'Msg644=Lamentablemente no aprendiste la receta para crear este item.
-        Call WriteLocaleMsg(UserIndex, MSG_NO_LAMENTABLEMENTE_APRENDISTE_RECETA_CREAR_ITEM, e_FontTypeNames.FONTTYPE_INFOBOLD)
+        Call WriteLocaleMsg(UserIndex, MSG_NO_LAMENTABLEMENTE_APRENDISTE_RECETA_CREAR_ITEM, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFOBOLD)
         KnowsCraftingRecipe = False
         Exit Function
     End If
