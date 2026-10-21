@@ -2228,6 +2228,8 @@ Public Function TestCsmLayerLoading(ByVal legacy As Boolean, ByVal treeOnScenery
     savedInfo = MapInfo(1)
     saved = True
     MapData(50, 50, 1) = emptyTile
+    ' AO20: the build folder does not exist in our checkout; create it so Open does not fail.
+    If LenB(Dir$(App.Path & "\build", vbDirectory)) = 0 Then MkDir App.Path & "\build"
     fixturePath = App.Path & "\build\five-layer-test.csm"
     If FileExist(fixturePath, vbNormal) Then Kill fixturePath
     fh = FreeFile
