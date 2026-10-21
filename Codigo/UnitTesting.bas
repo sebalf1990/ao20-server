@@ -41,7 +41,16 @@ Option Explicit
     Private FailedTestCount As Integer
     Private TotalElapsed   As Double
 
-    Private Const SUITE_COUNT As Integer = 12
+    ' Must match the number of Case entries in RunSuite; RunAllSuites fails loudly otherwise.
+    Private Const SUITE_COUNT As Integer = 17
+
+    ' Per-suite report and the state RunSuite hands back to RunAllSuites
+    Private SuiteNames()   As String
+    Private SuiteTests()   As Integer
+    Private SuiteFailures() As Integer
+    Private SuitesRun      As Integer
+    Private CurrentSuiteName As String
+    Private SuiteNotRegistered As Boolean
 
 Public Sub Init()
     On Error GoTo Init_Err
@@ -238,24 +247,32 @@ Private Function RunSuite(ByVal suiteIndex As Integer) As Boolean
     On Error GoTo RunSuite_Err
     
     Select Case suiteIndex
-        Case 1: RunSuite = Unit_Math.test_suite_math()
-        Case 2: RunSuite = Unit_Bitmask.test_suite_bitmask()
-        Case 3: RunSuite = Unit_StringValidation.test_suite_strings()
-        Case 4: RunSuite = Unit_Pathfinding.test_suite_pathfinding()
-        Case 5: RunSuite = Unit_Characters.test_suite_characters()
-        Case 6: RunSuite = Unit_ElapsedTime.test_suite_elapsed_time()
-        Case 7: RunSuite = Unit_Timer.test_suite_timer()
-        Case 8: RunSuite = Unit_Queue.test_suite_queue()
-        Case 9: RunSuite = Unit_UserNames.test_suite_usernames()
-        Case 10: RunSuite = Unit_General.test_suite_general()
-        Case 11: RunSuite = Unit_Factions.test_suite_factions()
-        Case 12: RunSuite = Unit_Elemental.test_suite_elemental()
+        Case 1: CurrentSuiteName = "math": RunSuite =  Unit_Math.test_suite_math()
+        Case 2: CurrentSuiteName = "bitmask": RunSuite =  Unit_Bitmask.test_suite_bitmask()
+        Case 3: CurrentSuiteName = "strings": RunSuite =  Unit_StringValidation.test_suite_strings()
+        Case 4: CurrentSuiteName = "pathfinding": RunSuite =  Unit_Pathfinding.test_suite_pathfinding()
+        Case 5: CurrentSuiteName = "characters": RunSuite =  Unit_Characters.test_suite_characters()
+        Case 6: CurrentSuiteName = "elapsed_time": RunSuite =  Unit_ElapsedTime.test_suite_elapsed_time()
+        Case 7: CurrentSuiteName = "timer": RunSuite =  Unit_Timer.test_suite_timer()
+        Case 8: CurrentSuiteName = "queue": RunSuite =  Unit_Queue.test_suite_queue()
+        Case 9: CurrentSuiteName = "usernames": RunSuite =  Unit_UserNames.test_suite_usernames()
+        Case 10: CurrentSuiteName = "general": RunSuite =  Unit_General.test_suite_general()
+        Case 11: CurrentSuiteName = "factions": RunSuite =  Unit_Factions.test_suite_factions()
+        Case 12: CurrentSuiteName = "elemental": RunSuite =  Unit_Elemental.test_suite_elemental()
+        Case 13: CurrentSuiteName = "admin_visibility": RunSuite = Unit_AdminVisibility.test_suite_admin_visibility()
+        Case 14: CurrentSuiteName = "npc_cross_map_pursuit": RunSuite = Unit_NpcCrossMapPursuit.test_suite_npc_cross_map_pursuit()
+        Case 15: CurrentSuiteName = "weather": RunSuite = Unit_Weather.test_suite_weather()
+        Case 16: CurrentSuiteName = "remort_persistence": RunSuite = test_suite_remort_persistence()
+        Case 17: CurrentSuiteName = "remort_capability_state": RunSuite = test_suite_remort_capability_state()
         Case Else
+            SuiteNotRegistered = True
             RunSuite = False
     End Select
     Exit Function
-    
+
 RunSuite_Err:
+    ' A suite that raises used to vanish from the report; count it as a failure with its cause.
+    Call RunTestError("suite " & CStr(suiteIndex) & " " & CurrentSuiteName & " raised", "Err " & CStr(Err.Number) & ": " & Err.Description)
     RunSuite = False
 End Function
 
@@ -264,11 +281,41 @@ Public Sub RunAllSuites()
     Set sw = New Instruments
     sw.start
     
-    Dim i As Integer
-    For i = 1 To SUITE_COUNT
-        Call RunSuite(i)
-    Next i
-    
+    Dim i As Integer, testsBefore As Integer, failuresBefore As Integer, passed As Boolean
+    SuitesRun = 0
+    ReDim SuiteNames(SUITE_COUNT + 1)
+    ReDim SuiteTests(SUITE_COUNT + 1)
+    ReDim SuiteFailures(SUITE_COUNT + 1)
+
+    ' Run until RunSuite reports an unregistered index, so a Case added without
+    ' updating SUITE_COUNT still runs and is flagged below.
+    i = 1
+    Do
+        testsBefore = TotalTests
+        failuresBefore = FailedTests
+        CurrentSuiteName = vbNullString
+        SuiteNotRegistered = False
+        passed = RunSuite(i)
+        If SuiteNotRegistered Then Exit Do
+        If Not passed And FailedTests = failuresBefore Then
+            Call RunTestError("suite " & CStr(i) & " " & CurrentSuiteName, "Suite returned failure")
+        End If
+        SuitesRun = i
+        If SuitesRun > UBound(SuiteNames) Then
+            ReDim Preserve SuiteNames(SuitesRun)
+            ReDim Preserve SuiteTests(SuitesRun)
+            ReDim Preserve SuiteFailures(SuitesRun)
+        End If
+        SuiteNames(SuitesRun) = CurrentSuiteName
+        SuiteTests(SuitesRun) = TotalTests - testsBefore
+        SuiteFailures(SuitesRun) = FailedTests - failuresBefore
+        i = i + 1
+    Loop
+
+    If SuitesRun <> SUITE_COUNT Then
+        Call RunTestError("suite registration", "SUITE_COUNT is " & CStr(SUITE_COUNT) & " but " & CStr(SuitesRun) & " consecutive suites are registered")
+    End If
+
     TotalElapsed = sw.ElapsedMilliseconds
 End Sub
 
@@ -279,7 +326,13 @@ Public Sub WriteResultsToFile(ByVal filePath As String)
     Open filePath For Output As #f
     Print #f, "=== AO20 TEST REPORT ==="
     Print #f, "Total: " & TotalTests & " | Passed: " & PassedTests & " | Failed: " & FailedTests
-    
+    Print #f, "Suites: " & SuitesRun
+
+    Dim s As Integer
+    For s = 1 To SuitesRun
+        Print #f, "  suite " & s & " " & SuiteNames(s) & ": " & SuiteTests(s) & " tests, " & SuiteFailures(s) & " failed"
+    Next s
+
     If FailedTestCount > 0 Then
         Print #f, "Failed tests:"
         Dim i As Integer
@@ -378,7 +431,7 @@ Private Function test_suite_remort_capability_state() As Boolean
     Call RunTest("targeted spell retry interval is wrap safe", test_targeted_spell_retry_interval())
     Call RunTest("targeted spell NPC resolution rejects stale mappings", test_targeted_spell_target_resolution())
     Call RunTest("targeted spell eligibility rejects unsupported spells", test_targeted_spell_eligibility())
-    Call RunTest("targeted spell range matches legacy vision boundaries", test_targeted_spell_range_boundaries())
+    Call RunTest("targeted spell range matches server vision boundaries (RANGO_VISION)",  test_targeted_spell_range_boundaries())
     Call RunTest("targeted spell early rejections are read-only", test_targeted_spell_early_rejections())
     Call RunTest("remort equipment and count eligibility", test_remort_equipment_and_count_eligibility())
     Call RunTest("remort live reset and preservation", test_remort_live_reset_and_preservation())
@@ -526,29 +579,36 @@ Private Function test_targeted_spell_range_boundaries() As Boolean
     UserList(1).pos.x = 50
     UserList(1).pos.y = 50
 
-    NpcList(1).pos.x = 61: NpcList(1).pos.y = 50
+    ' AO20: InRangoVision accepts the FULL half-viewport, so the server boundary is
+    ' RANGO_VISION_X/Y (upstream expected its legacy 11x9 window). The server does not
+    ' know the client's view mode, so this single boundary applies to both modes.
+    Dim rx As Integer, ry As Integer
+    rx = RANGO_VISION_X
+    ry = RANGO_VISION_Y
+
+    NpcList(1).pos.x = 50 + rx: NpcList(1).pos.y = 50
     If Not IsHooTargetedSpellTargetInRange(1, 1) Then GoTo TestDone
-    NpcList(1).pos.x = 39
+    NpcList(1).pos.x = 50 - rx
     If Not IsHooTargetedSpellTargetInRange(1, 1) Then GoTo TestDone
-    NpcList(1).pos.x = 62
+    NpcList(1).pos.x = 50 + rx + 1
     If IsHooTargetedSpellTargetInRange(1, 1) Then GoTo TestDone
-    NpcList(1).pos.x = 38
+    NpcList(1).pos.x = 50 - rx - 1
     If IsHooTargetedSpellTargetInRange(1, 1) Then GoTo TestDone
 
-    NpcList(1).pos.x = 50: NpcList(1).pos.y = 59
+    NpcList(1).pos.x = 50: NpcList(1).pos.y = 50 + ry
     If Not IsHooTargetedSpellTargetInRange(1, 1) Then GoTo TestDone
-    NpcList(1).pos.y = 41
+    NpcList(1).pos.y = 50 - ry
     If Not IsHooTargetedSpellTargetInRange(1, 1) Then GoTo TestDone
-    NpcList(1).pos.y = 60
+    NpcList(1).pos.y = 50 + ry + 1
     If IsHooTargetedSpellTargetInRange(1, 1) Then GoTo TestDone
-    NpcList(1).pos.y = 40
+    NpcList(1).pos.y = 50 - ry - 1
     If IsHooTargetedSpellTargetInRange(1, 1) Then GoTo TestDone
 
-    NpcList(1).pos.x = 61: NpcList(1).pos.y = 59
+    NpcList(1).pos.x = 50 + rx: NpcList(1).pos.y = 50 + ry
     If Not IsHooTargetedSpellTargetInRange(1, 1) Then GoTo TestDone
-    NpcList(1).pos.x = 62
+    NpcList(1).pos.x = 50 + rx + 1
     If IsHooTargetedSpellTargetInRange(1, 1) Then GoTo TestDone
-    NpcList(1).pos.x = 61: NpcList(1).pos.y = 60
+    NpcList(1).pos.x = 50 + rx: NpcList(1).pos.y = 50 + ry + 1
     If IsHooTargetedSpellTargetInRange(1, 1) Then GoTo TestDone
 
     test_targeted_spell_range_boundaries = True
