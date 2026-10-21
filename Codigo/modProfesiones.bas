@@ -210,7 +210,7 @@ Public Function AprenderProfesion(ByVal UserIndex As Integer, ByVal ProfesionId 
         Call WriteLocaleMsg(UserIndex, MSG_PROF_YA_TIENE_2, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         Exit Function
     End If
-    Call Execute("INSERT OR REPLACE INTO user_professions (user_id, profession_id, learned_at) VALUES (?, ?, ?);", UserList(UserIndex).Id, CInt(ProfesionId), CLng(GetTickCountRaw() \ 1000))
+    Call Execute("INSERT OR REPLACE INTO user_professions (user_id, profession_id, learned_at) VALUES (?, ?, strftime('%s','now'));", UserList(UserIndex).Id, CInt(ProfesionId))
     Call RefrescarHerramientasInventario(UserIndex, ProfesionId)
     Call WriteProfessionsUpdate(UserIndex)
     Call WriteLocaleMsg(UserIndex, MSG_PROF_APRENDIDA_OK, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO, NombreProfesion(ProfesionId))

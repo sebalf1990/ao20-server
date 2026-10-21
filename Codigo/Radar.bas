@@ -14,7 +14,7 @@ Attribute VB_Name = "Radar"
 '   GuardiaReal, GuardiaCaos, Mascota, UserGm, UserCiudadano, UserCriminal).
 Option Explicit
 
-Private Const NPC_RADAR_TICK_MS As Long = 300
+' NPC_RADAR_TICK_MS (300 ms) vive ahora en modTickRules, junto a RadarDue.
 Private Const MAX_RADAR_ENTITIES As Integer = 100
 
 ' Estados que viajan en el packet eNpcRadarQuestNpc (Byte por NPC):
@@ -743,19 +743,19 @@ Public Sub UpdateNpcRadarTick()
     For i = 1 To LastUser
         If UserList(i).flags.UserLogged Then
             ' QuestNpc siempre activo para todos los jugadores logueados.
-            If nowTick - UserList(i).Counters.QuestRadarTick >= NPC_RADAR_TICK_MS Then
+            If RadarDue(nowTick, UserList(i).Counters.QuestRadarTick) Then
                 mapChanged = (UserList(i).Counters.NpcRadarLastMap <> UserList(i).pos.Map)
                 Call SendCategoryUpdate(i, e_RadarCategory.eRadarQuestNpc, mapChanged)
                 UserList(i).Counters.QuestRadarTick = nowTick
             End If
             ' NpcSymbol siempre activo para todos los jugadores logueados.
-            If nowTick - UserList(i).Counters.NpcSymbolRadarTick >= NPC_RADAR_TICK_MS Then
+            If RadarDue(nowTick, UserList(i).Counters.NpcSymbolRadarTick) Then
                 mapChanged = (UserList(i).Counters.NpcRadarLastMap <> UserList(i).pos.Map)
                 Call SendCategoryUpdate(i, e_RadarCategory.eRadarNpcSymbol, mapChanged)
                 UserList(i).Counters.NpcSymbolRadarTick = nowTick
             End If
             ' Party/Clan radar siempre activo para todos los jugadores logueados.
-            If nowTick - UserList(i).Counters.SocialRadarTick >= NPC_RADAR_TICK_MS Then
+            If RadarDue(nowTick, UserList(i).Counters.SocialRadarTick) Then
                 mapChanged = (UserList(i).Counters.NpcRadarLastMap <> UserList(i).pos.Map)
                 Call SendCategoryUpdate(i, e_RadarCategory.eRadarPartyMember, mapChanged)
                 Call SendCategoryUpdate(i, e_RadarCategory.eRadarClanMember, mapChanged)
@@ -763,7 +763,7 @@ Public Sub UpdateNpcRadarTick()
             End If
             ' Resto del radar: solo si esta activo por hechizo (1) o GM (2).
             If UserList(i).flags.NpcRadarActive > 0 Then
-                If nowTick - UserList(i).Counters.NpcRadarTick >= NPC_RADAR_TICK_MS Then
+                If RadarDue(nowTick, UserList(i).Counters.NpcRadarTick) Then
                     If UserList(i).flags.NpcRadarActive = 2 Then
                         Call SendNpcRadarUpdateGm(i)
                     ElseIf UserList(i).flags.NpcRadarActive = 3 Then

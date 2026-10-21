@@ -599,7 +599,7 @@ Private Function PuedeLanzar(ByVal UserIndex As Integer, ByVal HechizoIndex As I
                 End If
             End If
         End If
-        If Hechizos(HechizoIndex).Cooldown > 0 And .Counters.UserHechizosInterval(Slot) > 0 Then
+        If Hechizos(HechizoIndex).Cooldown > 0 And TickStampIsSet(.Counters.UserHechizosInterval(Slot)) Then
             Dim nowRaw            As Long
             Dim SegundosFaltantes As Long
             nowRaw = GetTickCountRaw()
@@ -1467,7 +1467,7 @@ Function LanzarHechizo(ByVal Index As Integer, ByVal UserIndex As Integer) As Bo
     End If
     If SpellCastSuccess Then
         If Hechizos(uh).Cooldown > 0 Then
-            UserList(UserIndex).Counters.UserHechizosInterval(Index) = GetTickCountRaw()
+            UserList(UserIndex).Counters.UserHechizosInterval(Index) = NonZeroTick() ' AO20 21.003: 0 reservado como "nunca"
             If Hechizos(uh).CdEffectId > 0 Then Call WriteSendSkillCdUpdate(UserIndex, Hechizos(uh).CdEffectId, -uh, CLng(Hechizos(uh).Cooldown) * 1000, CLng(Hechizos( _
                     uh).Cooldown) * 1000, eCD)
         End If

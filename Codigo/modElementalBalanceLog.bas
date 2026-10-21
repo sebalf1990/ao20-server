@@ -251,7 +251,7 @@ Attribute VB_Name = "modElementalBalanceLog"
 '     tajada puede cerrar con cuidado -- NO implementado, no es un olvido.
 '   session_start / session_end -> Modulo_UsUaRiOs.ConnectUser_Complete /
 '     TCP.CloseUser. raw=0 en session_start; en session_end, raw=milisegundos
-'     jugados (GetTickCountRaw() - Counters.SessionStartTick, campo nuevo en
+'     jugados (modTickRules.SessionElapsedMs, wrap-safe; campo nuevo en
 '     t_UserCounters, Declares.bas). Ambos exigen ElementalBalanceUserReady
 '     (B0): un intento de cerrar sesion sobre un slot que nunca completo el
 '     login no genera fila.
@@ -819,11 +819,12 @@ Private Function FreeElementalFightSlot() As Long
     Next i
     ' Tabla llena (raro: 256 pares de PvP simultaneos): reusar el slot mas
     ' viejo por LastTickMs en vez de perder el evento nuevo.
-    Dim oldest As Long, oldestTick As Long
+    Dim oldest As Long, oldestTick As Long, nowTick As Long
     oldest = 1
+    nowTick = GetTickCountRaw()
     oldestTick = mFights(1).LastTickMs
     For i = 2 To MAX_ACTIVE_ELEMENTAL_FIGHTS
-        If mFights(i).LastTickMs < oldestTick Then
+        If TickIsOlder(nowTick, mFights(i).LastTickMs, oldestTick) Then
             oldestTick = mFights(i).LastTickMs
             oldest = i
         End If
@@ -1011,7 +1012,7 @@ Private Sub WriteElementalFightRow(ByVal evento As String, ByVal slot As Long, B
     Open fname For Append As #fnum
     If writeHeader Then Print #fnum, ELEMENTAL_FIGHT_LOG_HEADER
     With mFights(slot)
-        Print #fnum, GetTickCountRaw() & ";" & evento & ";" & .FightId & ";" & _
+        Print #fnum, TickToCsv(GetTickCountRaw()) & ";" & evento & ";" & .FightId & ";" & _
             .CharA & ";" & .AccountA & ";" & .CharB & ";" & .AccountB & ";" & _
             .ClassA & ";" & .ClassB & ";" & .RaceA & ";" & .RaceB & ";" & _
             .LevelA & ";" & .LevelB & ";" & .FactionA & ";" & .FactionB & ";" & _
@@ -1042,12 +1043,11 @@ Private Sub LogElementalFightEnd(ByVal slot As Long, ByVal outcome As String)
     idxB = ResolveFightUserIndex(mFights(slot).UserIndexB, mFights(slot).CharB)
     If idxA > 0 Then endHpA = UserList(idxA).Stats.MinHp
     If idxB > 0 Then endHpB = UserList(idxB).Stats.MinHp
-    ' Resta simple (no wrap-safe): una pelea individual dura, como mucho, unos
-    ' pocos minutos (se cierra sola a los 30s de silencio) -- el wraparound de
-    ' GetTickCount (~49.7 dias) exigiria que ocurriera A MITAD de esa ventana,
-    ' astronomicamente improbable. Mismo criterio de riesgo aceptado que ya
-    ' usa StartTickMs/LastTickMs en el resto de este archivo.
-    durationMs = GetTickCountRaw() - mFights(slot).StartTickMs
+    ' Wrap-safe (plan 21.003): FightDurationMs usa TicksElapsed (aritmetica sin signo mod 2^32),
+    ' asi que una pelea que cruce &H7FFFFFFF o el wrap de timeGetTime (~49.7 dias) da la
+    ' duracion real. Antes era una resta con signo que desbordaba (error 6) en ese cruce y el
+    ' handler eh perdia la fila fight_end. La duracion se acota a 2147483647 ms.
+    durationMs = FightDurationMs(GetTickCountRaw(), mFights(slot).StartTickMs)
     Call WriteElementalFightRow("fight_end", slot, outcome, endHpA, endHpB, durationMs)
     Exit Sub
 eh:
@@ -1215,10 +1215,10 @@ Public Sub LogElementalBalance(ByVal evento As String, _
         ' estado de los dos toggles al momento de abrir el archivo.
         Dim ebBuildFlags As String
         ebBuildFlags = Replace(BuildStamp(), ";", ",")
-        Print #fnum, GetTickCountRaw() & ";header;" & ebBuildFlags & ";0;n/a;none;0;0;0;" & _
+        Print #fnum, TickToCsv(GetTickCountRaw()) & ";header;" & ebBuildFlags & ";0;n/a;none;0;0;0;" & _
                      IIf(ElementalBalanceLogEnabled(), 1, 0) & ";" & IIf(ElementalPlayerTelemetryEnabled(), 1, 0) & ";0;0;0;0;0;0;0;0;" & ELEMENTAL_BALANCE_LOG_SCHEMA_VERSION & ";" & ElementalBalanceRunId()
     End If
-    Print #fnum, GetTickCountRaw() & ";" & _
+    Print #fnum, TickToCsv(GetTickCountRaw()) & ";" & _
                  evento & ";" & attacker & ";" & attackerClass & ";" & _
                  victim & ";" & victimType & ";" & itemObjIndex & ";" & tier & ";" & _
                  dmgType & ";" & raw & ";" & finalDmg & ";" & resistPct & ";" & _

@@ -744,7 +744,7 @@ Public Sub TryPoisonNpcWithWeapon(ByVal AtacanteIndex As Integer, ByVal NpcIndex
                 If .PoisonedAmmoObjIndex <> ObjInd Then Exit Sub
                 If .PoisonedAmmoCargas <= 0 Then Exit Sub
                 If .PoisonedAmmoDuracionMaxMs > 0 Then
-                    If (GetTickCountRaw() - .PoisonedAmmoAppliedTick) > .PoisonedAmmoDuracionMaxMs Then
+                    If PoisonApplicationExpired(GetTickCountRaw(), .PoisonedAmmoAppliedTick, .PoisonedAmmoDuracionMaxMs) Then
                         Call ClearPoisonedAmmo(AtacanteIndex, "El veneno de tus flechas se ha disipado.", "duracion_expirada")
                         Exit Sub
                     End If
@@ -985,7 +985,7 @@ Public Sub OnPoisonedWeaponSwing(ByVal AtacanteIndex As Integer)
         If UserList(AtacanteIndex).invent.EquippedWeaponObjIndex <> .PoisonedWeaponObjIndex Then Exit Sub
         ' Chequear expiracion por duracion maxima de untado
         If .PoisonedWeaponDuracionMaxMs > 0 Then
-            If (GetTickCountRaw() - .PoisonedWeaponAppliedTick) > .PoisonedWeaponDuracionMaxMs Then
+            If PoisonApplicationExpired(GetTickCountRaw(), .PoisonedWeaponAppliedTick, .PoisonedWeaponDuracionMaxMs) Then
                 Call ClearPoisonedWeapon(AtacanteIndex, "El veneno de tu arma se ha disipado.")
                 Exit Sub
             End If
@@ -1013,9 +1013,7 @@ Public Sub CheckPoisonedWeaponTick(ByVal UserIndex As Integer)
         If .PoisonedWeaponObjIndex <= 0 Or .PoisonedWeaponCargas <= 0 Then Exit Sub
         ' Expiracion por duracion maxima sin pegar
         If .PoisonedWeaponDuracionMaxMs > 0 Then
-            Dim elapsed As Long
-            elapsed = GetTickCountRaw() - .PoisonedWeaponAppliedTick
-            If elapsed > .PoisonedWeaponDuracionMaxMs Then
+            If PoisonApplicationExpired(GetTickCountRaw(), .PoisonedWeaponAppliedTick, .PoisonedWeaponDuracionMaxMs) Then
                 Call ClearPoisonedWeapon(UserIndex, "El veneno de tu arma se ha disipado.")
                 Exit Sub
             End If
@@ -1129,7 +1127,7 @@ Public Sub OnPoisonedAmmoSwing(ByVal UserIndex As Integer, ByVal AmmoObjIndex As
         If .PoisonedAmmoObjIndex <> AmmoObjIndex Then Exit Sub
         If UserList(UserIndex).invent.EquippedMunitionObjIndex <> AmmoObjIndex Then Exit Sub
         If .PoisonedAmmoDuracionMaxMs > 0 Then
-            If (GetTickCountRaw() - .PoisonedAmmoAppliedTick) > .PoisonedAmmoDuracionMaxMs Then
+            If PoisonApplicationExpired(GetTickCountRaw(), .PoisonedAmmoAppliedTick, .PoisonedAmmoDuracionMaxMs) Then
                 Call ClearPoisonedAmmo(UserIndex, "El veneno de tus flechas se ha disipado.", "duracion_expirada")
                 Exit Sub
             End If

@@ -764,6 +764,9 @@ Sub ResetContadores(ByVal UserIndex As Integer)
         .LastResetTick = 0
         .CounterGmMessages = 0
         .LastTransferGold = 0
+        .LastPoisonCurePotion = 0
+        .LastPoisonHemoPartialPotion = 0
+        .SessionStartTick = 0
         .controlHechizos.HechizosCasteados = 0
         .controlHechizos.HechizosTotales = 0
         .timeChat = 0
@@ -1346,10 +1349,11 @@ Sub CloseUser(ByVal UserIndex As Integer)
         ' SessionStartTick=0 => nunca completo ConnectUser_Complete con la
         ' telemetria encendida (sesion vieja, o toggle prendido a mitad de
         ' sesion): no hay "tiempo jugado" confiable, no se loguea.
-        If modElementalBalanceLog.ElementalPlayerTelemetryEnabled() And modElementalBalanceLog.ElementalBalanceUserReady(UserIndex) And .Counters.SessionStartTick > 0 Then
+        If modElementalBalanceLog.ElementalPlayerTelemetryEnabled() And modElementalBalanceLog.ElementalBalanceUserReady(UserIndex) And TickStampIsSet(.Counters.SessionStartTick) Then
             Dim ebSessionMs As Long
-            ebSessionMs = GetTickCountRaw() - .Counters.SessionStartTick
+            ebSessionMs = SessionElapsedMs(GetTickCountRaw(), .Counters.SessionStartTick)
             Call modElementalBalanceLog.LogElementalBalance("session_end", modElementalBalanceLog.ElementalBalanceActorId(False, UserIndex), modElementalBalanceLog.ElementalBalanceActorClass(False, UserIndex), "0", "none", 0, 0, 0, ebSessionMs, ebSessionMs, .pos.Map, modElementalBalanceLog.ElementalBalanceCharId(False, UserIndex), modElementalBalanceLog.ElementalBalanceAccountId(False, UserIndex), 0, 0, 0)
+            .Counters.SessionStartTick = 0
         End If
         .flags.UserLogged = False
         .Counters.Saliendo = False

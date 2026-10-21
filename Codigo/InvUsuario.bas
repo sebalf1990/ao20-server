@@ -2480,11 +2480,9 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
                         ' Cooldown global
                         Dim nowTick As Long
                         nowTick = GetTickCountRaw()
-                        If obj.PoisonCooldownMs > 0 And .Counters.LastPoisonCurePotion > 0 Then
-                            If (nowTick - .Counters.LastPoisonCurePotion) < obj.PoisonCooldownMs Then
-                                Call WriteConsoleMsg(UserIndex, "Aun no puedes usar otra pocion curativa.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
-                                Exit Sub
-                            End If
+                        If CooldownActive(nowTick, .Counters.LastPoisonCurePotion, obj.PoisonCooldownMs) Then
+                            Call WriteConsoleMsg(UserIndex, "Aun no puedes usar otra pocion curativa.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+                            Exit Sub
                         End If
                         ' Detectar si hay algo que curar
                         Dim algoCurado As Boolean
@@ -2505,11 +2503,9 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
                             ebCuredHemo = True
                         ElseIf obj.CuraHemo = 2 And .flags.PoisonHemoStacks > 0 Then
                             ' Cooldown propio para parcial Hemo
-                            If obj.PoisonCooldownMs > 0 And .Counters.LastPoisonHemoPartialPotion > 0 Then
-                                If (nowTick - .Counters.LastPoisonHemoPartialPotion) < obj.PoisonCooldownMs Then
-                                    Call WriteConsoleMsg(UserIndex, "Aun no puedes usar otra pocion curativa parcial de Hemo.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
-                                    Exit Sub
-                                End If
+                            If CooldownActive(nowTick, .Counters.LastPoisonHemoPartialPotion, obj.PoisonCooldownMs) Then
+                                Call WriteConsoleMsg(UserIndex, "Aun no puedes usar otra pocion curativa parcial de Hemo.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+                                Exit Sub
                             End If
                             ' Buscar el EOT Hemo activo y llamar ReduceStacks (actualiza StacksActuales interno + cliente)
                             Dim hemoFx As PoisonHemoEffect
@@ -2523,7 +2519,7 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
                             If Not (hemoFx Is Nothing) Then
                                 Call hemoFx.ReduceStacks(obj.CuraHemoValor)
                             End If
-                            .Counters.LastPoisonHemoPartialPotion = nowTick
+                            .Counters.LastPoisonHemoPartialPotion = NonZeroTickFrom(nowTick)
                             algoCurado = True
                             ebCuredHemo = True
                         End If
@@ -2543,7 +2539,7 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
                             ' confirmado en vivo: fila real con item=0 en vez de 9025.
                             Dim ebAntidoteObjIndex As Integer
                             ebAntidoteObjIndex = .invent.Object(Slot).ObjIndex
-                            .Counters.LastPoisonCurePotion = nowTick
+                            .Counters.LastPoisonCurePotion = NonZeroTickFrom(nowTick)
                             Call QuitarUserInvItem(UserIndex, Slot, 1)
                             ' Grupo 7 (plan 10.001, punto 7b): antidote_use, final=bitmask (1=Menor,2=Hemo,4=Neuro).
                             If modElementalBalanceLog.ElementalPlayerTelemetryEnabled() Then

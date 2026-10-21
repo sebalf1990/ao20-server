@@ -2162,7 +2162,7 @@ Private Function TryApplyArrowAmmoPoisonToUser(ByVal AtacanteIndex As Integer, B
         If .PoisonedAmmoCargas <= 0 Then Exit Function
         If .PoisonedAmmoFamilia < 1 Or .PoisonedAmmoFamilia > 3 Then Exit Function
         If .PoisonedAmmoDuracionMaxMs > 0 Then
-            If (GetTickCountRaw() - .PoisonedAmmoAppliedTick) > .PoisonedAmmoDuracionMaxMs Then
+            If PoisonApplicationExpired(GetTickCountRaw(), .PoisonedAmmoAppliedTick, .PoisonedAmmoDuracionMaxMs) Then
                 Call ClearPoisonedAmmo(AtacanteIndex, "El veneno de tus flechas se ha disipado.", "duracion_expirada")
                 Exit Function
             End If

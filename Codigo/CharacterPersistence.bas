@@ -1816,7 +1816,7 @@ Private Function SetupUserProfessions(ByRef User As t_User) As Boolean
         User.Professions(slot) = 0
     Next slot
     slot = 1
-    Set RS = Query("SELECT profession_id FROM user_professions WHERE user_id = ? ORDER BY learned_at ASC;", User.Id)
+    Set RS = Query("SELECT profession_id FROM user_professions WHERE user_id = ? ORDER BY learned_at ASC, rowid ASC;", User.Id)
     If RS Is Nothing Then Exit Function
     Do While Not RS.EOF
         If slot > PROF_MAX_SLOTS Then Exit Do
@@ -1841,7 +1841,8 @@ Private Sub SaveCharacterProfessionsDB(ByRef U As t_User, ByRef QueryBreakdown A
     ' UPSERT por slot ocupado + lista de profesiones vigentes (config-driven, N slots)
     For i = 1 To PROF_MAX_SLOTS
         If U.Professions(i) > 0 Then
-            Call Execute("INSERT OR REPLACE INTO user_professions (user_id, profession_id, learned_at) VALUES (?, ?, ?);", U.Id, CInt(U.Professions(i)), CLng(GetTickCountRaw() \ 1000))
+            ' OR IGNORE: el save no pisa learned_at de filas existentes (solo AprenderProfesion lo escribe).
+            Call Execute("INSERT OR IGNORE INTO user_professions (user_id, profession_id, learned_at) VALUES (?, ?, strftime('%s','now'));", U.Id, CInt(U.Professions(i)))
             If LenB(idList) > 0 Then idList = idList & ","
             idList = idList & CStr(CInt(U.Professions(i)))
         End If

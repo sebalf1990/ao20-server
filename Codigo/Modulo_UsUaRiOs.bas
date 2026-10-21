@@ -879,7 +879,7 @@ Dim tStr                        As String
         ' login recien completo puso UserLogged=True mas arriba en esta
         ' misma funcion, ver .flags.UserLogged = True).
         If modElementalBalanceLog.ElementalPlayerTelemetryEnabled() And modElementalBalanceLog.ElementalBalanceUserReady(UserIndex) Then
-            .Counters.SessionStartTick = GetTickCountRaw()
+            .Counters.SessionStartTick = NonZeroTick()
             Call modElementalBalanceLog.LogElementalBalance("session_start", modElementalBalanceLog.ElementalBalanceActorId(False, UserIndex), modElementalBalanceLog.ElementalBalanceActorClass(False, UserIndex), "0", "none", 0, 0, 0, 0, 0, .pos.Map, modElementalBalanceLog.ElementalBalanceCharId(False, UserIndex), modElementalBalanceLog.ElementalBalanceAccountId(False, UserIndex), 0, 0, 0)
             Call modElementalBalanceLog.ElementalBalanceLogGearSnapshot(UserIndex)
         End If
