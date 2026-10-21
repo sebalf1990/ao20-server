@@ -2226,14 +2226,33 @@ RunScriptInFile_Err:
     RunScriptInFile = False
 End Function
 
+'Plan 21.004: True si dos archivos de ScriptsDB comparten la identidad (los primeros 11
+'caracteres, YYYYMMDD-NN) y el par no es la unica excepcion declarada. LoadDBMigrations
+'la usa para negarse a correr migraciones antes que saltear una en silencio.
+Public Function MigrationIdentityCollides(ByVal FileA As String, ByVal FileB As String) As Boolean
+    'Unica excepcion: nuestra "account emails lowercase" tomo la identidad de una del oficial
+    'que hace el mismo rename que 20260724-05. Corre la primera por orden; la de castillos se
+    'saltea siempre (plan 21.004, D1). No agregar excepciones nuevas: renumerar la migracion
+    'nueva (las propias van con NN 50-99). Espejo en tools/testclient/migraciones_scriptsdb.py.
+    Const PAR_A As String = "20260708-01-account emails lowercase.sql"
+    Const PAR_B As String = "20260708-01-rename castle column.sql"
+    If LCase$(Left$(FileA, 11)) <> LCase$(Left$(FileB, 11)) Then Exit Function
+    If (LCase$(FileA) = PAR_A And LCase$(FileB) = PAR_B) Or (LCase$(FileA) = PAR_B And LCase$(FileB) = PAR_A) Then Exit Function
+    MigrationIdentityCollides = True
+End Function
+
 'Lee los archivos de la carpeta ScriptsDB (.sql: create table, alter, insert, etc.) y
 'aplica los que todavia no esten registrados en la tabla migrations, en orden por
 'nombre. Formato del nombre: YYYYMMDD-NN-descripcion.sql (NN = numero de migracion del
-'dia); los primeros 11 caracteres son la identidad (date_) y un archivo aplicado nunca
-'se renombra. Cada archivo puede tener comentarios '--' y /* */ y varias sentencias
-'separadas por ';', partidas en varias lineas: se aplica completo dentro de una unica
-'transaccion junto con su fila en migrations (RunScriptInFile). No escribir BEGIN/
-'COMMIT propios (se ignoran) ni ROLLBACK/SAVEPOINT/RELEASE (hacen fallar la migracion).
+'dia); los primeros 11 caracteres son la identidad (date_), igual que en el server
+'oficial, y un archivo aplicado nunca se renombra. Las migraciones propias usan NN 50-99
+'(las del oficial, los numeros bajos) para no chocar nunca. Si dos archivos comparten la
+'identidad (salvo la excepcion de MigrationIdentityCollides) no se corre NINGUNA
+'migracion y queda el error en el log (plan 21.004). Cada archivo puede tener
+'comentarios '--' y /* */ y varias sentencias separadas por ';', partidas en varias
+'lineas: se aplica completo dentro de una unica transaccion junto con su fila en
+'migrations (RunScriptInFile). No escribir BEGIN/COMMIT propios (se ignoran) ni
+'ROLLBACK/SAVEPOINT/RELEASE (hacen fallar la migracion).
 Public Sub LoadDBMigrations()
     On Error GoTo LoadDBMigrations_Err
     'Consulto a la DB a ver si existe la tabla migrations; si no existe, la creo.
@@ -2273,6 +2292,14 @@ Public Sub LoadDBMigrations()
             j = j - 1
         Loop
         Files(j + 1) = tmp
+    Next i
+    'Plan 21.004: identidad repetida = no se corre nada. Ya ordenados, los archivos con la
+    'misma identidad quedan contiguos, asi que alcanza con comparar vecinos.
+    For i = 1 To count - 1
+        If MigrationIdentityCollides(Files(i - 1), Files(i)) Then
+            Call LogDatabaseError("Migraciones NO aplicadas: identidad repetida " & Left$(Files(i), 11) & ": " & Files(i - 1) & " | " & Files(i) & ". Renumerar la migracion nueva (propias: NN 50-99).")
+            Call Err.raise(5, , "identidad repetida - " & Files(i - 1) & " | " & Files(i))
+        End If
     Next i
     'Aplicamos en orden las que todavia NO esten registradas en la tabla migrations.
     'Chequeo por-archivo (no marca de agua): asi un hueco como 20260513-02 sin -01
