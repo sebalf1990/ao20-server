@@ -42,7 +42,7 @@ Option Explicit
     Private TotalElapsed   As Double
 
     ' Must match the number of Case entries in RunSuite; RunAllSuites fails loudly otherwise.
-    Private Const SUITE_COUNT As Integer = 17
+    Private Const SUITE_COUNT As Integer = 42
 
     ' Per-suite report and the state RunSuite hands back to RunAllSuites
     Private SuiteNames()   As String
@@ -264,6 +264,31 @@ Private Function RunSuite(ByVal suiteIndex As Integer) As Boolean
         Case 15: CurrentSuiteName = "weather": RunSuite = Unit_Weather.test_suite_weather()
         Case 16: CurrentSuiteName = "remort_persistence": RunSuite = test_suite_remort_persistence()
         Case 17: CurrentSuiteName = "remort_capability_state": RunSuite = test_suite_remort_capability_state()
+        Case 18: CurrentSuiteName = "bit_shift": RunSuite = Unit_BitShift.test_suite_bit_shift()
+        Case 19: CurrentSuiteName = "int_bitmask": RunSuite = Unit_IntBitmask.test_suite_int_bitmask()
+        Case 20: CurrentSuiteName = "sumar_tiempo": RunSuite = Unit_SumarTiempo.test_suite_sumar_tiempo()
+        Case 21: CurrentSuiteName = "uptime": RunSuite = Unit_Uptime.test_suite_uptime()
+        Case 22: CurrentSuiteName = "time_format": RunSuite = Unit_TimeFormat.test_suite_time_format()
+        Case 23: CurrentSuiteName = "timer_struct": RunSuite = Unit_TimerStruct.test_suite_timer_struct()
+        Case 24: CurrentSuiteName = "world_time": RunSuite = Unit_WorldTime.test_suite_world_time()
+        Case 25: CurrentSuiteName = "string_valid": RunSuite = Unit_StringValid.test_suite_string_valid()
+        Case 26: CurrentSuiteName = "string_utils": RunSuite = Unit_StringUtils.test_suite_string_utils()
+        Case 27: CurrentSuiteName = "stringbuilder": RunSuite = Unit_StringBuilder.test_suite_stringbuilder()
+        Case 28: CurrentSuiteName = "circular_log": RunSuite = Unit_CircularLog.test_suite_circular_log()
+        Case 29: CurrentSuiteName = "crypto_convert": RunSuite = Unit_CryptoConvert.test_suite_crypto_convert()
+        Case 30: CurrentSuiteName = "ini_manager": RunSuite = Unit_IniManager.test_suite_ini_manager()
+        Case 31: CurrentSuiteName = "combatmath": RunSuite = Unit_CombatMath.test_suite_combatmath()
+        Case 32: CurrentSuiteName = "commerce": RunSuite = Unit_Commerce.test_suite_commerce()
+        Case 33: CurrentSuiteName = "commerce_ext": RunSuite = Unit_CommerceExt.test_suite_commerce_ext()
+        Case 34: CurrentSuiteName = "mapbounds": RunSuite = Unit_MapBounds.test_suite_mapbounds()
+        Case 35: CurrentSuiteName = "spawn": RunSuite = Unit_Spawn.test_suite_spawn()
+        Case 36: CurrentSuiteName = "scoreboard": RunSuite = Unit_ScoreBoard.test_suite_scoreboard()
+        Case 37: CurrentSuiteName = "network_aurora": RunSuite = Unit_Network_Aurora.test_suite_network_aurora()
+        Case 38: CurrentSuiteName = "gamestatus": RunSuite = Unit_GameStatus.test_suite_gamestatus()
+        Case 39: CurrentSuiteName = "crafting": RunSuite = Unit_Crafting.test_suite_crafting()
+        Case 40: CurrentSuiteName = "profesiones": RunSuite = Unit_Profesiones.test_suite_profesiones()
+        Case 41: CurrentSuiteName = "clanexp": RunSuite = Unit_ClanExp.test_suite_clanexp()
+        Case 42: CurrentSuiteName = "venenos": RunSuite = Unit_Venenos.test_suite_venenos()
         Case Else
             SuiteNotRegistered = True
             RunSuite = False
