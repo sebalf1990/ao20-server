@@ -167,7 +167,7 @@ Message files:
 - [Spanish – SP_LocalMsg.dat](https://github.com/ao-org/Recursos/blob/master/init/SP_LocalMsg.dat)
 - [English – EN_LocalMsg.dat](https://github.com/ao-org/Recursos/blob/master/init/EN_LocalMsg.dat)
 
-To regenerate: run `python generar_localindex.py` or `generar_localindex.exe` from `/tools/`.
+To regenerate: run `python generar_localindex.py` from `/tools/`.
 
 #### Client-side (`JsonLanguage`)
 
