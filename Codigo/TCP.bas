@@ -393,11 +393,9 @@ Function ConnectNewUser(ByVal UserIndex As Integer, _
         UltimoChar = UCase$(name)
         Call SaveNewUser(UserIndex)
         ConnectNewUser = True
-        #If PYMMO = 1 Then
-            Call ConnectUser(UserIndex, name, True)
-        #ElseIf PYMMO = 0 Then
-            Call ConnectUser(UserIndex, name, False)
-        #End If
+        ' newUser=True also with PYMMO=0 so the client shows the welcome tutorial.
+        ' Upstream sends False when PYMMO=0 (af912b72); this project always runs PYMMO=0.
+        Call ConnectUser(UserIndex, name, True)
     End With
     Exit Function
 ConnectNewUser_Err:
