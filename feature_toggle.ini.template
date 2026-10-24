@@ -111,7 +111,7 @@ name=underworld
 value=1
 [TOGGLE36]
 name=collectible_cards
-value=0
+value=1
 [TOGGLE37]
 name=hoo-adjacent-characters-v1
 value=0
