@@ -810,8 +810,9 @@ Public Sub AbandonarReto(ByVal UserIndex As Integer, Optional ByVal Desconexion 
     With UserList(UserIndex)
         Sala = .flags.SalaReto
         Equipo = .flags.EquipoReto
-        ' Cuenta regresiva activa = la ronda todavia no empezo (llega a 0 con el "YA!").
-        EnConteo = (.Counters.CuentaRegresiva > 0)
+        ' Cuenta regresiva activa = la ronda todavia no empezo: General.bas muestra "1" y deja
+        ' el contador en 0; recien el tick siguiente manda "YA!" y lo deja en -1. Por eso >= 0.
+        EnConteo = (.Counters.CuentaRegresiva >= 0)
         .Counters.CuentaRegresiva = -1
         .flags.EnReto = False
     End With
@@ -907,18 +908,19 @@ Private Sub CancelarRetoEnConteo(ByVal Sala As Integer, ByVal Abandona As Intege
         Else
             texto = "El reto fue cancelado: " & UserList(Abandona).name & " se fue antes de empezar."
         End If
+        ' Primero SOLO se acredita el oro (sin escrituras de red ni warps): si algo falla mas
+        ' abajo, nadie pierde su apuesta.
         For i = 0 To UBound(.Jugadores)
             If IsValidUserRef(.Jugadores(i)) Then
                 Idx = .Jugadores(i).ArrayIndex
                 UserList(Idx).Stats.GLD = UserList(Idx).Stats.GLD + .Apuesta
-                Call WriteUpdateGold(Idx)
-                Call RevivirYLimpiar(Idx)
-                UserList(Idx).Counters.CuentaRegresiva = -1
-                UserList(Idx).flags.EnReto = False
-                Call DevolverPosAnterior(Idx)
-                If Not (Desconexion And Idx = Abandona) Then
-                    Call WriteConsoleMsg(Idx, texto, e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos)
-                End If
+            End If
+        Next i
+        ' Despues la limpieza jugador por jugador; un fallo en uno no corta a los demas.
+        For i = 0 To UBound(.Jugadores)
+            If IsValidUserRef(.Jugadores(i)) Then
+                Idx = .Jugadores(i).ArrayIndex
+                Call DevolverJugadorCancelado(Idx, texto, Desconexion And Idx = Abandona)
             End If
         Next i
         If ClavesSalas.Exists(Sala) Then
@@ -931,6 +933,23 @@ Private Sub CancelarRetoEnConteo(ByVal Sala As Integer, ByVal Abandona As Intege
 ErrHandler:
     Call TraceError(Err.Number, Err.Description, "ModRetos.CancelarRetoEnConteo", Erl)
     Call SalaLiberada(Sala)
+End Sub
+
+' Limpieza de un jugador al cancelar el reto en la cuenta regresiva. Tiene su propio
+' manejador de errores para que un fallo en uno no deje sin devolver a los demas.
+Private Sub DevolverJugadorCancelado(ByVal Idx As Integer, ByVal texto As String, ByVal EsDesconectado As Boolean)
+    On Error GoTo ErrHandler
+    UserList(Idx).Counters.CuentaRegresiva = -1
+    UserList(Idx).flags.EnReto = False
+    Call WriteUpdateGold(Idx)
+    Call RevivirYLimpiar(Idx)
+    Call DevolverPosAnterior(Idx)
+    If Not EsDesconectado Then
+        Call WriteConsoleMsg(Idx, texto, e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos)
+    End If
+    Exit Sub
+ErrHandler:
+    Call TraceError(Err.Number, Err.Description, "ModRetos.DevolverJugadorCancelado", Erl)
 End Sub
 
 Private Sub SalaLiberada(ByVal Sala As Integer)
