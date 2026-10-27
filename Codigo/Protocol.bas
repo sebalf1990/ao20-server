@@ -6625,9 +6625,9 @@ Public Sub HandleDuel(ByVal UserIndex As Integer)
         Bet = reader.ReadInt32
         PocionesMaximas = reader.ReadInt16
         CaenItems = reader.ReadBool
-        'Msg1233= No puedes realizar un reto en este momento.
-        Call WriteLocaleMsg(UserIndex, MSG_NO_PUEDES_REALIZAR_RETO_MOMENTO, e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos)
-        'Exit Sub
+        ' Habia colgado un WriteLocaleMsg "No puedes realizar un reto en este momento" que se
+        ' mandaba SIEMPRE y despues igual creaba el reto: era la mitad de un kill switch al
+        ' que le comentaron el Exit Sub. Los retos estan habilitados; lo que sobraba era el mensaje.
         Call CrearReto(UserIndex, Players, Bet, PocionesMaximas, CaenItems)
     End With
     Exit Sub

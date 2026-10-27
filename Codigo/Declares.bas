@@ -2367,6 +2367,17 @@ Public Type t_SalaReto
     TamañoEquipoIzq As Byte
     TamañoEquipoDer As Byte
     Jugadores() As t_UserReference
+    ' Plan 27.001 ola 6 (05.002): foto del ELO tomada al arrancar el reto. El calculo viejo
+    ' sumaba el ELO de los que seguian en la sala AL TERMINAR, asi que un abandono cambiaba
+    ' retroactivamente la fuerza del rival. Con la foto el rating no depende de quien se fue.
+    EloHabilitado As Boolean
+    EloPromedioIzq As Long
+    EloPromedioDer As Long
+    TamañoInicialIzq As Byte
+    TamañoInicialDer As Byte
+    ' Marca por slot: "a este ya se le liquido el ELO de este reto". Separa la participacion
+    ' en el rating de la presencia en el array, que se usa para el oro y los items.
+    EloSaldado() As Boolean
 End Type
 
 Public Type t_Retos
@@ -2375,6 +2386,14 @@ Public Type t_Retos
     ImpuestoApuesta As Single
     DuracionMaxima As Long
     TiempoConteo As Byte
+    ' TiempoGuardarItems ya existia en Retos.dat pero nadie lo leia.
+    TiempoGuardarItems As Integer
+    ' FactorK = K del Elo clasico. NivelMinimoELO reemplaza al nivel hardcodeado.
+    FactorK As Integer
+    NivelMinimoELO As Byte
+    ' Freno anti win-trading: retos seguidos del mismo conjunto exacto y minutos de espera.
+    MaximoRetosSeguidos As Integer
+    MinutosEnfriamiento As Integer
     Salas() As t_SalaReto
     TotalSalas As Integer
     SalasLibres As Integer
