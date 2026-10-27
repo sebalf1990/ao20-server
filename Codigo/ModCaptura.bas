@@ -26,7 +26,9 @@ Attribute VB_Name = "ModCaptura"
 '
 '
 Option Explicit
-Public Const CAPTURA_TIEMPO_ESPERA = 90 'Tiempo que dura la inscripcion
+' Plan 27.001 (05.002 wave 4): CAPTURA_TIEMPO_ESPERA (90 s) was removed. Its only consumer was
+' clsCaptura, which is gone. The registration window of the CTF is set by the lobby:
+' ModLobby.WaitingForPlayersTime = 300000 ms (5 minutes).
 #If DEBUGGING Then
     Public Const CAPTURA_TIEMPO_INICIO_RONDA = 10 '60 'Tiempo hasta que se inicia la ronda
 #Else
@@ -53,4 +55,21 @@ Public Const MAX_SALA_ESPERA_X     As Byte = 56
 Public Const MAX_SALA_ESPERA_Y     As Byte = 73
 Public Const OBJ_CAPTURA_BANDERA_1 As Integer = 3674 'Estandarte Azul
 Public Const OBJ_CAPTURA_BANDERA_2 As Integer = 3675 'Estandarte Rojo
-Public InstanciaCaptura            As clsCaptura
+' Plan 27.001 (05.002 wave 4): the InstanciaCaptura singleton is gone. The CTF is an engine
+' scenario (ScenarioCaptureTheFlag) that lives inside its lobby and is resolved through the map
+' where the player stands, like every other scenario.
+Public Function GetCapturaEscenario(ByVal UserIndex As Integer) As ScenarioCaptureTheFlag
+    On Error GoTo ErrHandler
+    Dim sc As IBaseScenario
+    Set GetCapturaEscenario = Nothing
+    If UserIndex <= 0 Then Exit Function
+    Set sc = CustomScenarios.GetMap(UserList(UserIndex).pos.Map)
+    If sc Is Nothing Then Exit Function
+    If TypeOf sc Is ScenarioCaptureTheFlag Then
+        Set GetCapturaEscenario = sc
+    End If
+    Exit Function
+ErrHandler:
+    Call TraceError(Err.Number, Err.Description, "ModCaptura.GetCapturaEscenario", Erl)
+    Set GetCapturaEscenario = Nothing
+End Function

@@ -1447,9 +1447,8 @@ Sub PasarSegundo()
         End If
         CuentaRegresivaTimer = CuentaRegresivaTimer - 1
     End If
-    If Not InstanciaCaptura Is Nothing Then
-        Call InstanciaCaptura.PasarSegundo
-    End If
+    ' Plan 27.001 (05.002 wave 4): CTF is no longer ticked from here. It is an engine scenario and
+    ' runs from IBaseScenario_Update, which keeps its own 1 s cadence.
     segundos = segundos + 1
     For i = 1 To LastUser
         With UserList(i)

@@ -436,8 +436,10 @@ Sub DropObj(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal num As Integer
                         "Ya no tenes flechas envenenadas equipadas.")
                     Call UpdateUserInv(False, UserIndex, Slot)
                     If .flags.jugando_captura = 1 Then
-                        If Not InstanciaCaptura Is Nothing Then
-                            Call InstanciaCaptura.tiraBandera(UserIndex, obj.ObjIndex)
+                        Dim ctfTira As ScenarioCaptureTheFlag
+                        Set ctfTira = GetCapturaEscenario(UserIndex)
+                        If Not ctfTira Is Nothing Then
+                            Call ctfTira.TiraBandera(UserIndex, obj.ObjIndex)
                         End If
                     End If
                     If Not .flags.Privilegios And e_PlayerType.User Then
@@ -668,8 +670,10 @@ Public Sub PickObjAt(ByVal UserIndex As Integer, _
             ' Gold and capture-the-flag objects do not have ordinary slot semantics.
             If DestinationSlot > 0 And (MapData(x, y, Map).ObjInfo.ObjIndex = 12 Or UserList(UserIndex).flags.jugando_captura = 1) Then Exit Sub
             If UserList(UserIndex).flags.jugando_captura = 1 Then
-                If Not InstanciaCaptura Is Nothing Then
-                    If Not InstanciaCaptura.tomaBandera(UserIndex, MapData(x, y, Map).ObjInfo.ObjIndex) Then
+                Dim ctfToma As ScenarioCaptureTheFlag
+                Set ctfToma = GetCapturaEscenario(UserIndex)
+                If Not ctfToma Is Nothing Then
+                    If Not ctfToma.TomaBandera(UserIndex, MapData(x, y, Map).ObjInfo.ObjIndex) Then
                         Exit Sub
                     End If
                 End If
@@ -712,8 +716,10 @@ Public Sub PickObjAt(ByVal UserIndex As Integer, _
                 End If
                 Call UserDidPickupItem(UserIndex, MiObj.ObjIndex)
                 If UserList(UserIndex).flags.jugando_captura = 1 Then
-                    If Not InstanciaCaptura Is Nothing Then
-                        Call InstanciaCaptura.quitarBandera(UserIndex, MiObj.ObjIndex)
+                    Dim ctfQuita As ScenarioCaptureTheFlag
+                    Set ctfQuita = GetCapturaEscenario(UserIndex)
+                    If Not ctfQuita Is Nothing Then
+                        Call ctfQuita.QuitarBandera(UserIndex, MiObj.ObjIndex)
                     End If
                 End If
                 If BusquedaTesoroActiva Then

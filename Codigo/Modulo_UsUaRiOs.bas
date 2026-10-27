@@ -1984,11 +1984,9 @@ Sub UserDie(ByVal UserIndex As Integer)
         If .flags.EnReto Then
             Call MuereEnReto(UserIndex)
         End If
-        If .flags.jugando_captura = 1 Then
-            If Not InstanciaCaptura Is Nothing Then
-                Call InstanciaCaptura.muereUsuario(UserIndex)
-            End If
-        End If
+        ' Plan 27.001 (05.002 wave 4): a death in the CTF is no longer handled here. It enters
+        ' through CustomScenarios.UserDie, which routes to the scenario of the map like every other
+        ' mode (that call already exists in the death flow).
         'Borramos todos los personajes del area
         'HarThaoS: Mando un 5 en head para que cuente como muerto el area y no recalcule las posiciones.
         Call CheckUpdateNeededUser(UserIndex, 5, 0, .flags.Muerto)
@@ -2435,12 +2433,8 @@ Sub Cerrar_Usuario(ByVal UserIndex As Integer, Optional ByVal forceClose As Bool
                 ' Msg577=Has vuelto a ser visible
                 Call WriteLocaleMsg(UserIndex, MSG_VUELTO_VISIBLE_577, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_PROMEDIO_MAYOR)
             End If
-            'HarThaoS: Captura de bandera
-            If .flags.jugando_captura = 1 Then
-                If Not InstanciaCaptura Is Nothing Then
-                    Call InstanciaCaptura.eliminarParticipante(InstanciaCaptura.GetPlayer(UserIndex))
-                End If
-            End If
+            ' Plan 27.001 (05.002 wave 4): taking a player out of the CTF when he leaves is done by
+            ' the lobby through its disconnect hook (RegisterDisconnectedUser), as in every mode.
             Call WriteLocaleMsg(UserIndex, MSG_GAME_CLOSING_IN_SECONDS, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO, .Counters.Salir)
             If EsGM(UserIndex) Or MapInfo(.pos.Map).Seguro = 1 Or forceClose Then
                 Call WriteDisconnect(UserIndex)
