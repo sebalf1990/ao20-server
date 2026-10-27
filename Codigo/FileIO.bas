@@ -2120,7 +2120,7 @@ Public Sub CargarMapaFormatoCSM(ByVal Map As Long, ByVal MAPFl As String)
                         End If
                     Else
                         ' Lo guardo en los logs + aparece en el Debug.Print
-                        Call TraceError(404, "NPC no existe en los .DAT's o está mal dateado. NpcIndex: " & NumNpc & " Posicion: " & Map & "-" & NPCs(i).x & "-" & NPCs(i).y, "ES.CargarMapaFormatoCSM")
+                        Call TraceError(404, "No se pudo abrir el NPC. NpcIndex: " & NumNpc & " Posicion: " & Map & "-" & NPCs(i).x & "-" & NPCs(i).y & " Motivo: " & LastOpenNpcFailReason, "ES.CargarMapaFormatoCSM")
                     End If
                 End If
             Next i

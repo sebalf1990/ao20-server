@@ -27,6 +27,10 @@ Attribute VB_Name = "NPCs"
 '
 Private Const RespawnQueueRetryIntervalSeconds As Long = 5
 Public Const NpcIndexHeapSize       As Integer = 10000
+
+' Reason of the last OpenNPC failure (empty after a successful call). Lets callers such as the
+' map loader log WHY an NPC could not be opened instead of a generic message (plan 24.001 T2).
+Public LastOpenNpcFailReason As String
 ' Store only respawn data so queued NPCs stay independent from recycled NpcList slots.
 Private Type t_NpcRespawnQueueEntry
     Active As Byte
@@ -1411,6 +1415,7 @@ Function OpenNPC(ByVal NpcNumber As Integer, Optional ByVal Respawn As Boolean =
 
     ' Default return (failure)
     OpenNPC = 0
+    LastOpenNpcFailReason = vbNullString
 
     '----------------------------
     ' Ensure cache initialized
@@ -1494,10 +1499,12 @@ Function OpenNPC(ByVal NpcNumber As Integer, Optional ByVal Respawn As Boolean =
     Exit Function
 
 Fail:
+    LastOpenNpcFailReason = FailReason
     LogInfoServidor "OpenNPC FAILED | NpcNumber=" & NpcNumber & " | Reason=" & FailReason
     Exit Function
 
 OpenNPC_Err:
+    LastOpenNpcFailReason = "Error " & Err.Number & ": " & Err.Description
     LogInfoServidor "OpenNPC ERROR | NpcNumber=" & NpcNumber & _
                     " | Err=" & Err.Number & _
                     " | Desc=" & Err.Description
