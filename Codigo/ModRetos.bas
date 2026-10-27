@@ -51,19 +51,14 @@ Public Sub CargarInfoRetos()
         .ApuestaMinima = val(File.GetValue("Retos", "ApuestaMinima"))
         .ImpuestoApuesta = val(File.GetValue("Retos", "ImpuestoApuesta"))
         .DuracionMaxima = val(File.GetValue("Retos", "DuracionMaxima"))
-        .TiempoGuardarItems = val(File.GetValue("Retos", "TiempoGuardarItems"))
-        .FactorK = val(File.GetValue("Retos", "FactorK"))
-        .NivelMinimoELO = val(File.GetValue("Retos", "NivelMinimoELO"))
-        .MaximoRetosSeguidos = val(File.GetValue("Retos", "MaximoRetosSeguidos"))
-        .MinutosEnfriamiento = val(File.GetValue("Retos", "MinutosEnfriamiento"))
-        ' Defaults obligatorios: el binario y el .dat se despliegan por separado. Con un
+        .TiempoGuardarItems = LeerRetoAcotado(File, "TiempoGuardarItems", 60, 32767)
+        .FactorK = LeerRetoAcotado(File, "FactorK", 24, 32767)
+        .NivelMinimoELO = LeerRetoAcotado(File, "NivelMinimoELO", 35, 255)
+        .MaximoRetosSeguidos = LeerRetoAcotado(File, "MaximoRetosSeguidos", 3, 32767)
+        .MinutosEnfriamiento = LeerRetoAcotado(File, "MinutosEnfriamiento", 45, 32767)
+        ' Defaults obligatorios (en LeerRetoAcotado): el binario y el .dat se despliegan por separado. Con un
         ' .dat viejo FactorK quedaria en 0 y el ELO de todo el servidor se congelaria sin
         ' que nadie se entere.
-        If .TiempoGuardarItems <= 0 Then .TiempoGuardarItems = 60
-        If .FactorK <= 0 Then .FactorK = 24
-        If .NivelMinimoELO <= 0 Then .NivelMinimoELO = 35
-        If .MaximoRetosSeguidos <= 0 Then .MaximoRetosSeguidos = 3
-        If .MinutosEnfriamiento <= 0 Then .MinutosEnfriamiento = 45
         #If DEBUGGING Then
             .TiempoConteo = 3
         #Else
@@ -90,6 +85,18 @@ Public Sub CargarInfoRetos()
     End With
     Set File = Nothing
 End Sub
+
+' Lee un entero de Retos.dat acotado a 1..Maximo; fuera de rango (o 0/vacio) cae al default.
+' val() devuelve Double: asignarlo directo a un Byte/Integer con un valor enorme da error 6.
+Private Function LeerRetoAcotado(ByVal File As clsIniManager, ByVal Clave As String, ByVal ValorDefault As Long, ByVal Maximo As Long) As Long
+    Dim Valor As Double
+    Valor = val(File.GetValue("Retos", Clave))
+    If Valor < 1# Or Valor > CDbl(Maximo) Then
+        LeerRetoAcotado = ValorDefault
+    Else
+        LeerRetoAcotado = CLng(Fix(Valor))
+    End If
+End Function
 
 Public Sub CrearReto(ByVal UserIndex As Integer, JugadoresStr As String, ByVal Apuesta As Long, ByVal PocionesMaximas As Integer, Optional ByVal CaenItems As Boolean = False)
     On Error GoTo ErrHandler
@@ -1235,7 +1242,12 @@ Private Sub RegistrarEnfrentamiento(ByVal Clave As String)
     MasViejo = 0
     For i = 0 To MAX_HISTORIAL_RETOS - 1
         If HistorialRetos(i).Clave = Clave Then
-            HistorialRetos(i).Repeticiones = HistorialRetos(i).Repeticiones + 1
+            If TicksElapsed(HistorialRetos(i).UltimoTick, Ahora) >= Ventana Then
+                ' La ventana ya vencio (reto encolado o pedidos simultaneos): cuenta de nuevo desde 1.
+                HistorialRetos(i).Repeticiones = 1
+            Else
+                HistorialRetos(i).Repeticiones = HistorialRetos(i).Repeticiones + 1
+            End If
             HistorialRetos(i).UltimoTick = Ahora
             Exit Sub
         End If
