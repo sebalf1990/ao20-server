@@ -223,7 +223,7 @@ Public Sub CancelarSolicitudReto(ByVal Oferente As Integer, mensaje As String)
     On Error GoTo ErrHandler
     With UserList(Oferente).flags.SolicitudReto
         If .Estado = e_SolicitudRetoEstado.EnCola Then
-            Call ListaDeEspera.Remove(Oferente)
+            If ListaDeEspera.Exists(Oferente) Then Call ListaDeEspera.Remove(Oferente)
         End If
         .Estado = e_SolicitudRetoEstado.Libre
         Dim i As Integer, tUser As t_UserReference
@@ -251,6 +251,10 @@ Private Sub BuscarSala(ByVal Oferente As Integer)
     On Error GoTo ErrHandler
     With UserList(Oferente).flags.SolicitudReto
         If Retos.SalasLibres <= 0 Then
+            ' Plan 05.002 ola 1: el estado EnCola no se asignaba NUNCA, asi que el guard de
+            ' CancelarSolicitudReto no disparaba y el oferente quedaba en ListaDeEspera para
+            ' siempre: al liberarse una sala se le arrancaba un reto que ya habia cancelado.
+            .Estado = e_SolicitudRetoEstado.EnCola
             Call ListaDeEspera.Add(Oferente, 0)
             Call MensajeATodosSolicitud(Oferente, "No hay salas disponibles. El reto comenzará cuando se desocupe una sala.", e_FontTypeNames.FONTTYPE_FIGHT)
             Exit Sub
@@ -309,6 +313,7 @@ Private Sub IniciarReto(ByVal Oferente As Integer, ByVal Sala As Integer)
     End With
     With Retos.Salas(Sala)
         .EnUso = True
+        .Finalizado = False
         .Puntaje = 0
         .Ronda = 1
         .Apuesta = Apuesta
@@ -451,6 +456,12 @@ End Sub
 Public Sub FinalizarReto(ByVal Sala As Integer, Optional ByVal TiempoAgotado As Boolean)
     On Error GoTo ErrorHandler
     With Retos.Salas(Sala)
+        ' Plan 05.002 ola 1 (patron de cierre, paso 1): marcar terminado ANTES de pagar.
+        ' El timer de 10s (frmMain.TiempoRetos_Timer) vuelve a entrar aca mientras la sala
+        ' siga EnUso, y en un reto con CaenItems la sala NO se libera al finalizar (queda
+        ' el minuto de looteo): sin este guard el pozo se pagaba una y otra vez.
+        If .Finalizado Then Exit Sub
+        .Finalizado = True
         ' Calculamos el oro total del premio
         Dim OroTotal As Long, Oro As Long, OroStr As String
         OroTotal = .Apuesta * (UBound(.Jugadores) + 1)
@@ -681,10 +692,20 @@ Public Sub IniciarDepositoItems(ByVal Sala As Integer)
 End Sub
 
 Public Sub TerminarTiempoAgarrarItems(ByVal Sala As Integer)
+    ' Plan 05.002 ola 1: esta Sub NO tenia On Error. Si QuitarNPC fallaba (banquero ya
+    ' muerto o indice rancio) el error subia al timer de retos y abortaba el tick de TODAS
+    ' las salas restantes, dejando esta sala EnUso para siempre.
+    On Error GoTo ErrHandler
     Dim Ganador As e_EquipoReto
     With Retos.Salas(Sala)
-        'Mato al banquero
-        Call QuitarNPC(.IndexBanquero, eChallenge)
+        ' Idempotente: se puede llegar aca por el timer y por AbandonarReto en el mismo tick.
+        If Not .EnUso Then Exit Sub
+        'Mato al banquero (solo si sigue vivo; despues se olvida el indice para no
+        'reintentar sobre un NPC ajeno que herede ese slot)
+        If .IndexBanquero > 0 Then
+            Call QuitarNPC(.IndexBanquero, eChallenge)
+            .IndexBanquero = 0
+        End If
         If .Puntaje < 0 Then
             Ganador = e_EquipoReto.Izquierda
         Else
@@ -709,6 +730,12 @@ Public Sub TerminarTiempoAgarrarItems(ByVal Sala As Integer)
         Next x
     End With
     Call SalaLiberada(Sala)
+    Exit Sub
+ErrHandler:
+    ' Aun si algo falla a mitad, la sala se libera: una sala colgada EnUso no se recupera
+    ' sin reiniciar el server.
+    Call TraceError(Err.Number, Err.Description, "ModRetos.TerminarTiempoAgarrarItems", Erl)
+    Call SalaLiberada(Sala)
 End Sub
 
 Public Sub AbandonarReto(ByVal UserIndex As Integer, Optional ByVal Desconexion As Boolean)
@@ -721,15 +748,19 @@ Public Sub AbandonarReto(ByVal UserIndex As Integer, Optional ByVal Desconexion 
     End With
     With Retos.Salas(Sala)
         If .CaenItems And Abs(.Puntaje) >= 2 Then
-            If .Puntaje < 0 Then
-                .TamañoEquipoIzq = .TamañoEquipoIzq - 1
-                If .TamañoEquipoIzq <= 0 Then
-                    TerminarTiempoAgarrarItems (Sala)
-                End If
-            Else
-                .TamañoEquipoDer = .TamañoEquipoDer - 1
-                If .TamañoEquipoDer <= 0 Then
-                    TerminarTiempoAgarrarItems (Sala)
+            ' Fase de looteo: solo cuenta que se vayan los GANADORES (son los unicos que
+            ' pueden levantar). Antes se descontaba al equipo ganador aunque el que se iba
+            ' fuera del equipo perdedor, y el contador podia irse a negativo y re-disparar
+            ' el cierre. Plan 05.002 ola 1.
+            Dim GanadorLooteo As e_EquipoReto
+            GanadorLooteo = IIf(.Puntaje < 0, e_EquipoReto.Izquierda, e_EquipoReto.Derecha)
+            If Equipo = GanadorLooteo Then
+                If GanadorLooteo = e_EquipoReto.Izquierda Then
+                    If .TamañoEquipoIzq > 0 Then .TamañoEquipoIzq = .TamañoEquipoIzq - 1
+                    If .TamañoEquipoIzq <= 0 Then Call TerminarTiempoAgarrarItems(Sala)
+                Else
+                    If .TamañoEquipoDer > 0 Then .TamañoEquipoDer = .TamañoEquipoDer - 1
+                    If .TamañoEquipoDer <= 0 Then Call TerminarTiempoAgarrarItems(Sala)
                 End If
             End If
             Exit Sub
@@ -776,14 +807,28 @@ End Sub
 
 Private Sub SalaLiberada(ByVal Sala As Integer)
     On Error GoTo ErrHandler
+    ' Plan 05.002 ola 1: doble liberacion inflaba SalasLibres y podia arrancar un reto de
+    ' la cola sobre una sala que otro flujo ya estaba reusando.
+    If Not Retos.Salas(Sala).EnUso Then Exit Sub
     Retos.Salas(Sala).EnUso = False
+    Retos.Salas(Sala).TiempoItems = 0
     Retos.SalasLibres = Retos.SalasLibres + 1
-    If ListaDeEspera.count > 0 Then
+    ' Plan 05.002 ola 1: descartar de la cola a los que ya no pueden arrancar (se
+    ' desconectaron o cancelaron). Antes se le iniciaba el reto igual.
+    Do While ListaDeEspera.count > 0
         Dim Oferente As Integer
         Oferente = ListaDeEspera.Keys(0)
         Call ListaDeEspera.Remove(Oferente)
-        Call IniciarReto(Oferente, Sala)
-    End If
+        If Oferente > 0 Then
+            If UserList(Oferente).flags.UserLogged Then
+                If UserList(Oferente).flags.SolicitudReto.Estado = e_SolicitudRetoEstado.EnCola Then
+                    UserList(Oferente).flags.SolicitudReto.Estado = e_SolicitudRetoEstado.Libre
+                    Call IniciarReto(Oferente, Sala)
+                    Exit Do
+                End If
+            End If
+        End If
+    Loop
     Exit Sub
 ErrHandler:
     Call TraceError(Err.Number, Err.Description, "ModRetos.SalaLiberada", Erl)

@@ -174,6 +174,23 @@ Public Sub ReleaseLobby(ByVal LobbyIndex As Integer)
     If GlobalLobbyIndex = LobbyIndex Then
         GlobalLobbyIndex = -1
     End If
+    Call LogLobbyPool("release", LobbyIndex)
+End Sub
+
+Public Function LobbiesDisponibles() As Integer
+    ' Plan 05.002 ola 1: el pool era inobservable (AvailableLobby es Private y no se
+    ' logueaba), asi que "el pool vuelve al mismo tamano" no se podia verificar. Todas las
+    ' olas siguientes lo necesitan para demostrar que no filtran slots.
+    LobbiesDisponibles = AvailableLobby.currentIndex + 1
+End Function
+
+Public Function LobbiesEnUso() As Integer
+    LobbiesEnUso = ActiveLobby.currentIndex + 1
+End Function
+
+Private Sub LogLobbyPool(ByVal accion As String, ByVal LobbyIndex As Integer)
+    On Error Resume Next
+    Call LogInfoServidor("[LobbyPool] " & accion & " idx=" & LobbyIndex & " libres=" & LobbiesDisponibles() & "/" & (LobbyCount + 1) & " activos=" & LobbiesEnUso())
 End Sub
 
 Public Function GetAvailableLobby() As Integer
@@ -185,6 +202,7 @@ Public Function GetAvailableLobby() As Integer
     AvailableLobby.currentIndex = AvailableLobby.currentIndex - 1
     ActiveLobby.currentIndex = ActiveLobby.currentIndex + 1
     ActiveLobby.IndexInfo(ActiveLobby.currentIndex) = GetAvailableLobby
+    Call LogLobbyPool("reserve", GetAvailableLobby)
 End Function
 
 Public Sub InitializeLobby(ByRef instance As t_Lobby)
@@ -999,6 +1017,22 @@ Public Function ValidateLobbySettings(ByRef LobbySettings As t_NewScenearioSetti
         Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_LOBBY_MIN_LEVEL_GREATER_THAN_MAX, "", e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos))
         Exit Function
     End If
+    ' Plan 05.002 ola 1: el cliente arma /CREAREVENTO LOBBY con MinPlayers=0 y el evento
+    ' arrancaba vacio y no se cerraba nunca. Se valida server-side, donde no se puede evitar.
+    ' Backstop: HandleStartEvent ya normaliza estos valores para el camino de staff. Esto
+    ' cubre al scheduler de auto-eventos, que arma los settings desde Configuracion.ini.
+    ' Avisa a los admins ademas de loguear: fallar en silencio hacia perder media
+    ' hora buscando por que "el comando no hace nada".
+    If LobbySettings.MinPlayers < 2 Then
+        Call LogError("ValidateLobbySettings: MinPlayers invalido (" & LobbySettings.MinPlayers & "), minimo 2")
+        Call SendData(SendTarget.ToAdmins, 0, PrepareMessageConsoleMsg("[Eventos] Evento rechazado: minimo de jugadores invalido (" & LobbySettings.MinPlayers & ").", e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_INFO))
+        Exit Function
+    End If
+    If LobbySettings.MaxPlayers < LobbySettings.MinPlayers Then
+        Call LogError("ValidateLobbySettings: MaxPlayers (" & LobbySettings.MaxPlayers & ") menor que MinPlayers (" & LobbySettings.MinPlayers & ")")
+        Call SendData(SendTarget.ToAdmins, 0, PrepareMessageConsoleMsg("[Eventos] Evento rechazado: maximo de jugadores menor que el minimo.", e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_INFO))
+        Exit Function
+    End If
     ValidateLobbySettings = True
 End Function
 
@@ -1019,21 +1053,25 @@ Public Sub CreatePublicEvent(ByRef LobbySettings As t_NewScenearioSettings)
 End Sub
 
 Public Sub initEventLobby(ByVal UserIndex As Integer, ByVal eventType As Integer, LobbySettings As t_NewScenearioSettings)
-    If eventType = 0 Then
-        CurrentActiveEventType = LobbySettings.ScenearioType
-        Select Case LobbySettings.ScenearioType
-            Case e_EventType.CaptureTheFlag
-                Call HandleIniciarCaptura(LobbySettings)
-            Case Else
-                Call CreatePublicEvent(LobbySettings)
-        End Select
-    Else
-        With UserList(UserIndex)
-            If IsValidNpcRef(.flags.TargetNPC) Then
-                If NpcList(.flags.TargetNPC.ArrayIndex).npcType = e_NPCType.EventMaster And .flags.Muerto = 0 Then
-                    Call CreatePublicEvent(LobbySettings)
-                End If
-            End If
-        End With
-    End If
+    ' Plan 05.002 ola 1. El gate de privilegios vive en HandleStartEvent, que es la UNICA
+    ' puerta de entrada a esta Sub: si llegaste aca, sos staff.
+    '
+    ' Por eso desaparece el chequeo del NPC EventMaster que tenia la rama de eventType<>0:
+    ' era la segunda puerta del mismo agujero (cualquier jugador que targeteara ese NPC
+    ' creaba un evento publico con cupos y precio elegidos por el cliente). Cerrarla por
+    ' privilegio upstream, y no por el NPC, es lo que mata el agujero sin sacarle la
+    ' herramienta al staff: el eventType lo elige el CLIENTE (0 = comandos de chat,
+    ' 1 = formulario "Crear Batalla"), asi que gatear por eventType habria bloqueado el
+    ' formulario para los GMs.
+    '
+    ' Las dos ramas se unifican en el mismo ruteo por tipo de escenario. Efecto lateral
+    ' deseado: el formulario mandaba TODO a CreatePublicEvent, incluido CaptureTheFlag, y
+    ' abria un lobby sin logica de CTF; ahora rutea igual que el comando de chat.
+    CurrentActiveEventType = LobbySettings.ScenearioType
+    Select Case LobbySettings.ScenearioType
+        Case e_EventType.CaptureTheFlag
+            Call HandleIniciarCaptura(LobbySettings)
+        Case Else
+            Call CreatePublicEvent(LobbySettings)
+    End Select
 End Sub

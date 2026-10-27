@@ -4034,7 +4034,40 @@ Public Sub HandleStartEvent(ByVal UserIndex As Integer)
     LobbySettings.InscriptionFee = reader.ReadInt32
     LobbySettings.Description = reader.ReadString8
     LobbySettings.Password = reader.ReadString8
-    CurrentActiveEventType = LobbySettings.ScenearioType
+    ' Plan 05.002 ola 1: el payload se lee ENTERO antes de cualquier rechazo (si no, el
+    ' stream de protocolo se desincroniza). Recien aca se valida.
+    ' Gate de privilegios: crear eventos es facultad de staff, igual que cancelarlos
+    ' (HandleCancelarEvento). Antes NO habia ningun chequeo: cualquier cliente crafteado
+    ' creaba eventos globales y agotaba el pool de lobbies.
+    If (UserList(UserIndex).flags.Privilegios And (e_PlayerType.Admin Or e_PlayerType.Dios Or e_PlayerType.SemiDios)) = 0 Then
+        'Msg528=Servidor > Comando deshabilitado para tu cargo.
+        Call WriteLocaleMsg(UserIndex, MSG_SERVIDOR_COMANDO_DESHABILITADO_CARGO, e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_SERVER)
+        Call LogSecurity(GetUserRealName(UserIndex) & " IP:" & UserList(UserIndex).ConnectionDetails.IP & " intento crear un evento sin privilegios (eStartEvent).")
+        Exit Sub
+    End If
+    If LobbySettings.ScenearioType < e_EventType.Generic Or LobbySettings.ScenearioType > e_EventType.NavalBattle Then
+        Call WriteConsoleMsg(UserIndex, "Tipo de evento invalido.", e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_INFO)
+        Exit Sub
+    End If
+    ' MinPlayers: los comandos de chat del cliente (/CREAREVENTO ...) NO lo mandan y llega
+    ' en 0; un evento con minimo 0 arranca vacio y no se cierra solo. Se NORMALIZA aca en
+    ' vez de rechazar: rechazar dejaria al staff sin la herramienta por un default del
+    ' cliente. La correccion del lado cliente va en el corte de cliente de la ola 9.
+    If LobbySettings.MinPlayers < 2 Then
+        If LobbySettings.TeamSize > 1 Then
+            LobbySettings.MinPlayers = CInt(LobbySettings.TeamSize) * 2
+        Else
+            LobbySettings.MinPlayers = 2
+        End If
+        Call WriteConsoleMsg(UserIndex, "Minimo de jugadores ajustado a " & LobbySettings.MinPlayers & " (el comando no lo especifica).", e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_INFO)
+    End If
+    If LobbySettings.MaxPlayers < LobbySettings.MinPlayers Then
+        Call WriteConsoleMsg(UserIndex, "El maximo de jugadores (" & LobbySettings.MaxPlayers & ") no puede ser menor que el minimo (" & LobbySettings.MinPlayers & ").", e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_INFO)
+        Exit Sub
+    End If
+    ' CurrentActiveEventType NO se escribe aca: se pisaba ANTES de validar nada y quedaba
+    ' rancio aunque la creacion fallara. Lo setea initEventLobby cuando el evento existe
+    ' de verdad (la ola 3 lo reemplaza por un valor derivado del lobby vivo).
     Call initEventLobby(UserIndex, eventType, LobbySettings)
     Exit Sub
 ErrHandler:

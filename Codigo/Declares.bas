@@ -2361,6 +2361,9 @@ Public Type t_SalaReto
     CaenItems As Boolean
     TiempoRestante As Long
     TiempoItems As Integer
+    ' Plan 05.002 ola 1: marca de cierre. El pozo se pagaba mas de una vez porque nada
+    ' impedia re-entrar a FinalizarReto sobre una sala ya finalizada.
+    Finalizado As Boolean
     TamañoEquipoIzq As Byte
     TamañoEquipoDer As Byte
     Jugadores() As t_UserReference
