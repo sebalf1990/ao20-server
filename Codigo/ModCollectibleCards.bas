@@ -20,13 +20,20 @@ Public Enum e_CardRarity
     gold = 3
 End Enum
 
-Private Const UPSERT_NEW_COLLECTIBLE_CARDS As String = _
-    "INSERT INTO account_collectible_cards (account_id, card_quantities) " & _
-    "VALUES (?, ?) " & _
-    "ON CONFLICT(account_id) " & _
-    "DO UPDATE SET card_quantities = excluded.card_quantities;"
-    
-Private Const GET_ACCOUNT_COLLECTIBLE_CARDS As String = "SELECT card_quantities FROM account_collectible_cards WHERE account_id = ?"
+' Maximum copies of a single card an account can hold.
+Private Const MAX_COLLECTIBLE_CARD_COPIES As Long = 10
+
+' One row per card (plan 24.001, D2). Parameters: account_id, card_index, cap, inc, cap, inc.
+' The sum and the cap happen inside SQLite, so two characters of the same account adding cards at
+' the same time cannot overwrite each other (the old blob was rewritten whole on logout/autosave).
+Private Const ADD_ACCOUNT_COLLECTIBLE_CARD As String = _
+    "INSERT INTO account_collectible_card (account_id, card_index, quantity) " & _
+    "VALUES (?, ?, MIN(?, ?)) " & _
+    "ON CONFLICT(account_id, card_index) " & _
+    "DO UPDATE SET quantity = MIN(?, quantity + ?);"
+
+Private Const GET_ACCOUNT_COLLECTIBLE_CARDS As String = "SELECT card_index, quantity FROM account_collectible_card WHERE account_id = ?"
+Private Const GET_ACCOUNT_COLLECTIBLE_CARD As String = "SELECT quantity FROM account_collectible_card WHERE account_id = ? AND card_index = ?"
 
 Public Sub ResetUserAccountCollectibleCardCollection(ByRef User As t_User)
     ' Clears the in-memory card collection held by a user slot.
@@ -34,8 +41,8 @@ Public Sub ResetUserAccountCollectibleCardCollection(ByRef User As t_User)
     ' WHY THIS EXISTS: user slots are reused across sessions. When a player
     ' disconnects, ResetUserSlot wipes most fields but NOT the card arrays, so
     ' the freed slot keeps the previous account's card data in memory. If the
-    ' next account to occupy the slot has no saved blob in the
-    ' account_collectible_cards table (the SELECT hits EOF), that stale data
+    ' next account to occupy the slot has no rows in the
+    ' account_collectible_card table (the SELECT hits EOF), that stale data
     ' would be left untouched and the new account would inherit the previous
     ' account's card collection and all its gameplay bonuses (EXP, damage,
     ' damage reduction and drop rate).
@@ -57,133 +64,142 @@ End Sub
 Public Function SetupUserAccountAccountCollectibleCardBitArray(ByRef User As t_User)
     On Error GoTo GetUserCollectibleCards_Err
     Dim RS As ADODB.Recordset
-    Dim Cmd As ADODB.Command
-    Dim i As Integer
-    Dim QuantityData() As Byte
-    
+    Dim CardIndex As Long
+    Dim Quantity As Long
+
     ' Wipe any card data left in memory by a previous account that occupied
     ' this slot before loading the real collection for the current account.
-    ' Without this, an account with no saved blob (EOF on the SELECT below)
+    ' Without this, an account with no saved cards (EOF on the SELECT below)
     ' would silently keep the previous account's cards.
     Call ResetUserAccountCollectibleCardCollection(User)
-    
-    ' Create command to fetch the collectible card blob
-    Set Cmd = New ADODB.Command
-    With Cmd
-        .ActiveConnection = Connection ' Your SQLite connection object
-        .CommandText = GET_ACCOUNT_COLLECTIBLE_CARDS
-        .CommandType = adCmdText
-        
-        ' Add parameter for account_id
-        .Parameters.Append .CreateParameter("@AccountID", adInteger, adParamInput, , User.AccountID)
-        
-        ' Execute and get recordset
-        Set RS = .Execute
-    End With
-    
-    If Not RS Is Nothing Then
-        If Not RS.EOF And Not RS.BOF Then
-            ' Load quantity array (1024 bytes)
-            If Not IsNull(RS!card_quantities) Then
-                ' Get the quantity blob data
-                QuantityData = RS!card_quantities
-                
-                ' Copy quantity data into the user's byte array
-                For i = 1 To MAX_COLLECTIBLE_CARDS_QUANTITY_SIZE
-                    If i <= UBound(QuantityData) + 1 Then
-                        User.AccountCollectibleCardQuantities(i) = QuantityData(i - 1) ' Arrays are 0-based from DB
-                    Else
-                        User.AccountCollectibleCardQuantities(i) = 0
-                    End If
-                Next i
-            End If
-        End If
-        RS.Close
+
+    ' One row per owned card: card_index is the same 1-based index the array uses.
+    DBError = vbNullString
+    Set RS = Query(GET_ACCOUNT_COLLECTIBLE_CARDS, User.AccountID)
+    If RS Is Nothing Then
+        Call TraceError(0, "Could not load collectible cards: " & DBError, "ModCollectibleCards.SetupUserAccountAccountCollectibleCardBitArray", Erl)
+        Exit Function
     End If
-    
+
+    Do While Not RS.EOF
+        CardIndex = CLng(RS!card_index)
+        Quantity = CLng(RS!quantity)
+        If CardIndex >= 1 And CardIndex <= MAX_COLLECTIBLE_CARDS_QUANTITY_SIZE Then
+            If Quantity < 0 Then Quantity = 0
+            If Quantity > 255 Then Quantity = 255
+            User.AccountCollectibleCardQuantities(CardIndex) = CByte(Quantity)
+        End If
+        RS.MoveNext
+    Loop
+    RS.Close
+
     Set RS = Nothing
-    Set Cmd = Nothing
     Exit Function
 
 GetUserCollectibleCards_Err:
     Call TraceError(Err.Number, Err.Description, "ModCollectibleCards.SetupUserAccountAccountCollectibleCardBitArray", Erl)
     Set RS = Nothing
-    Set Cmd = Nothing
 End Function
 
-Public Function SaveUserAccountCollectibleCards(ByVal UserIndex As Integer, ByVal QueryBreakDown As String)
-    On Error GoTo SaveUserAccountCollectibleCards_Err
-    Dim Cmd As ADODB.Command
-    Dim QuantityData(0 To 1023) As Byte
-    Dim i As Integer
-    
-    ' Copy user's quantity array to 0-based array for database (1024 bytes)
-    For i = 1 To MAX_COLLECTIBLE_CARDS_QUANTITY_SIZE
-        QuantityData(i - 1) = UserList(UserIndex).AccountCollectibleCardQuantities(i)
-    Next i
-    
-    ' Create command to upsert the blob
-    Set Cmd = New ADODB.Command
-    With Cmd
-        .ActiveConnection = Connection ' Your SQLite connection object
-        .CommandText = UPSERT_NEW_COLLECTIBLE_CARDS
-        .CommandType = adCmdText
-        
-        ' Add account_id parameter
-        .Parameters.Append .CreateParameter("@AccountID", adInteger, adParamInput, , UserList(UserIndex).AccountID)
-        
-        ' Add quantity blob parameter (1024 bytes)
-        .Parameters.Append .CreateParameter("@QuantityData", adVarBinary, adParamInput, MAX_COLLECTIBLE_CARDS_QUANTITY_SIZE, QuantityData)
-        
-        ' Execute the upsert
-        .Execute
-    End With
-    
-    Set Cmd = Nothing
+' Reads one card quantity straight from the database (the source of truth: another character of the
+' same account may have changed it after this one logged in). Returns False on a database failure.
+Private Function ReadCardQuantityFromDb(ByVal AccountID As Long, ByVal CardIndex As Long, ByRef Quantity As Long) As Boolean
+    On Error GoTo ReadCardQuantityFromDb_Err
+    Dim RS As ADODB.Recordset
+    DBError = vbNullString
+    Set RS = Query(GET_ACCOUNT_COLLECTIBLE_CARD, AccountID, CardIndex)
+    If RS Is Nothing Then Exit Function
+    Quantity = 0
+    If Not RS.EOF Then Quantity = CLng(RS!quantity)
+    RS.Close
+    Set RS = Nothing
+    ReadCardQuantityFromDb = True
     Exit Function
-
-SaveUserAccountCollectibleCards_Err:
-    Call TraceError(Err.Number, Err.Description, "ModCollectibleCards.SaveUserAccountCollectibleCards", Erl)
-    Set Cmd = Nothing
+ReadCardQuantityFromDb_Err:
+    Call TraceError(Err.Number, Err.Description, "ModCollectibleCards.ReadCardQuantityFromDb", Erl)
+    Set RS = Nothing
 End Function
 
+' Copies a card quantity into the in-memory collection of EVERY online character of the account,
+' so the bonuses (GetCard*BonusForNpc) of the other connected characters are not stale.
+Private Sub SyncCardQuantityInMemory(ByVal AccountID As Long, ByVal CardIndex As Long, ByVal Quantity As Long)
+    Dim i As Long
+    If Quantity < 0 Then Quantity = 0
+    If Quantity > 255 Then Quantity = 255
+    For i = 1 To LastUser
+        If UserList(i).flags.UserLogged And UserList(i).AccountID = AccountID Then
+            UserList(i).AccountCollectibleCardQuantities(CardIndex) = CByte(Quantity)
+        End If
+    Next i
+End Sub
+
+' Consumes one card item into the account collection. Returns True when the item must be consumed.
+'  - Returns False (item NOT consumed) when the account already holds MAX_COLLECTIBLE_CARD_COPIES of
+'    the card, or when the database could not be read/written (nothing is granted in memory either).
+'  - The increment depends on the rarity (CardBronce/Silver/GoldQuantity in the server config); with an
+'    increment of 0 the item is still consumed and nothing is added (same as before plan 24.001).
+'  - The quantity is capped at MAX_COLLECTIBLE_CARD_COPIES inside SQL and written immediately.
 Public Function AddCollectibleCardToUser(ByVal UserIndex As Integer, ByRef ObjCard As t_Obj) As Boolean
+    On Error GoTo AddCollectibleCardToUser_Err
     If ObjCard.ObjIndex = 0 Then Exit Function
-    
+
     Dim CardIndex As Integer
     CardIndex = ObjData(ObjCard.ObjIndex).CollectibleCardIndex
-    
+
     ' Validate card index
     If CardIndex < 1 Or CardIndex > MAX_COLLECTIBLE_CARDS_QUANTITY_SIZE Then Exit Function
-        
-    With UserList(UserIndex)
-        If .AccountCollectibleCardQuantities(CardIndex) >= 10 Then
-            AddCollectibleCardToUser = False
+
+    Dim AccountID As Long
+    Dim CurrentQty As Long
+    Dim NewQty As Long
+    Dim Inc As Long
+    Dim RS As ADODB.Recordset
+    AccountID = UserList(UserIndex).AccountID
+
+    ' Cap check against the database, not against this character's possibly stale copy.
+    If Not ReadCardQuantityFromDb(AccountID, CardIndex, CurrentQty) Then Exit Function
+    Call SyncCardQuantityInMemory(AccountID, CardIndex, CurrentQty)
+    If CurrentQty >= MAX_COLLECTIBLE_CARD_COPIES Then
+        AddCollectibleCardToUser = False
+        Exit Function
+    End If
+
+    If ObjData(ObjCard.ObjIndex).CollectibleCardRarity = e_CardRarity.Bronce Then
+        Inc = CLng(SvrConfig.GetValue("CardBronceQuantity"))
+    ElseIf ObjData(ObjCard.ObjIndex).CollectibleCardRarity = e_CardRarity.Silver Then
+        Inc = CLng(SvrConfig.GetValue("CardSilverQuantity"))
+    ElseIf ObjData(ObjCard.ObjIndex).CollectibleCardRarity = e_CardRarity.gold Then
+        Inc = CLng(SvrConfig.GetValue("CardGoldQuantity"))
+    Else
+        Inc = 0
+    End If
+
+    If Inc > 0 Then
+        DBError = vbNullString
+        Set RS = Query(ADD_ACCOUNT_COLLECTIBLE_CARD, AccountID, CLng(CardIndex), MAX_COLLECTIBLE_CARD_COPIES, Inc, MAX_COLLECTIBLE_CARD_COPIES, Inc)
+        If RS Is Nothing Then
+            ' Not persisted: do not grant the card in memory and do not consume the item.
+            Call TraceError(0, "Could not save collectible card " & CardIndex & " for account " & AccountID & ": " & DBError, "ModCollectibleCards.AddCollectibleCardToUser", Erl)
             Exit Function
         End If
-    
-        .flags.DirtyCollectibleCardCollection = True
-        ' Increment the quantity for this specific card (cap at 255 per byte)
-        Dim Inc As Integer
-        If ObjData(ObjCard.ObjIndex).CollectibleCardRarity = e_CardRarity.Bronce Then
-            Inc = CInt(SvrConfig.GetValue("CardBronceQuantity"))
-        ElseIf ObjData(ObjCard.ObjIndex).CollectibleCardRarity = e_CardRarity.Silver Then
-            Inc = CInt(SvrConfig.GetValue("CardSilverQuantity"))
-        ElseIf ObjData(ObjCard.ObjIndex).CollectibleCardRarity = e_CardRarity.gold Then
-            Inc = CInt(SvrConfig.GetValue("CardGoldQuantity"))
-        Else
-            Inc = 0
-        End If
+        Set RS = Nothing
 
-        If Inc > 0 Then
-            Dim NewQty As Integer
-            NewQty = .AccountCollectibleCardQuantities(CardIndex) + Inc
-            If NewQty > 10 Then NewQty = 10
-            .AccountCollectibleCardQuantities(CardIndex) = CByte(NewQty)
+        ' Take the final value back from the database (it also reflects concurrent additions).
+        If Not ReadCardQuantityFromDb(AccountID, CardIndex, NewQty) Then
+            ' The write succeeded but the read-back failed: mirror what SQL just computed.
+            NewQty = CurrentQty + Inc
+            If NewQty > MAX_COLLECTIBLE_CARD_COPIES Then NewQty = MAX_COLLECTIBLE_CARD_COPIES
         End If
-    End With
-    
+        Call SyncCardQuantityInMemory(AccountID, CardIndex, NewQty)
+    End If
+
     AddCollectibleCardToUser = True
+    Exit Function
+
+AddCollectibleCardToUser_Err:
+    Call TraceError(Err.Number, Err.Description, "ModCollectibleCards.AddCollectibleCardToUser", Erl)
+    Set RS = Nothing
+    AddCollectibleCardToUser = False
 End Function
 
 Public Function HasUserCollectedNpcCard(ByVal UserIndex As Integer, ByVal NpcIndex As Integer) As Boolean

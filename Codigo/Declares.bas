@@ -3053,7 +3053,6 @@ Public Type t_UserFlags
     QuestNumber As Integer
     QuestItemSlot As Integer
     RespondiendoPregunta As Boolean
-    DirtyCollectibleCardCollection As Boolean
     CurrentTeam As Byte
     'Captura de bandera
     jugando_captura As Byte
