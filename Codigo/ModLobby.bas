@@ -98,6 +98,7 @@ Type t_Lobby
     BroadOpenEvent As t_Timer
     RoundCount As Byte ' Cantidad de rondas que tendrá el lobby/evento
     ScenearioType As Byte ' e_EventType this lobby was created for (ActiveEventType derives from it)
+    PrizesPaid As Boolean ' True once any prize gold left the pool (see GiveGoldToPlayer / ForceReset)
 End Type
 
 Public Type t_response
@@ -224,8 +225,9 @@ Public Sub InitializeLobby(ByRef instance As t_Lobby)
     ' Plan 05.002 wave 5: without this SortType was inherited from the previous occupant of the
     ' slot (a plain lobby could start with the eFixedTeamCount a Naval Boarding left behind).
     instance.SortType = eFixedTeamSize
-    ' The slot is recycled: do not let it report the previous event's type.
+    ' The slot is recycled: do not let it report the previous event's type or prize state.
     instance.ScenearioType = 0
+    instance.PrizesPaid = False
     instance.TeamSortDone = False
     instance.NextTeamId = 1
     instance.AvailableInscriptionMoney = 0
@@ -552,6 +554,16 @@ CancelLobby_Err:
 End Sub
 
 Public Function GiveGoldToPlayer(ByRef instance As t_Lobby, ByVal UserSlotIndex As Integer, ByVal amount As Long) As Boolean
+    ' Prize payout door. Plan 05.002 wave 5 (decision W3): paying a prize marks the lobby as
+    ' PrizesPaid, which is the signal ForceReset uses to decide whether to refund. The refunds
+    ' go through RefundPlayer -> PayOutGold directly and do NOT set the flag.
+    Dim Paid As Boolean
+    Paid = PayOutGold(instance, UserSlotIndex, amount)
+    If Paid Then instance.PrizesPaid = True
+    GiveGoldToPlayer = Paid
+End Function
+
+Private Function PayOutGold(ByRef instance As t_Lobby, ByVal UserSlotIndex As Integer, ByVal amount As Long) As Boolean
     ' Plan 05.002 wave 2 (class A). This is the ONLY door through which gold leaves an event:
     ' the cancel refund and the prize payout of all scenarios use it. It used to pay only if
     ' the user reference was still alive, so a disconnected player silently lost both the
@@ -566,14 +578,14 @@ Public Function GiveGoldToPlayer(ByRef instance As t_Lobby, ByVal UserSlotIndex 
     If IsValidUserRef(instance.Players(UserSlotIndex).User) Then
         Call AddGold(instance.Players(UserSlotIndex).User.ArrayIndex, amount)
         instance.AvailableInscriptionMoney = instance.AvailableInscriptionMoney - amount
-        GiveGoldToPlayer = True
+        PayOutGold = True
     ElseIf instance.Players(UserSlotIndex).UserId > 0 Then
         ' Offline: written to the database. Safe precisely because the user is NOT logged in;
         ' if they were, the logout save would overwrite the value with the in-memory one.
         If Execute("UPDATE user SET gold = gold + ? WHERE id = ?;", amount, instance.Players(UserSlotIndex).UserId) Then
             instance.AvailableInscriptionMoney = instance.AvailableInscriptionMoney - amount
             Call LogInfoServidor("[Evento] Oro acreditado offline: user_id=" & instance.Players(UserSlotIndex).UserId & " monto=" & amount)
-            GiveGoldToPlayer = True
+            PayOutGold = True
         End If
     End If
     Exit Function
@@ -586,7 +598,7 @@ Public Sub RefundPlayer(ByRef instance As t_Lobby, ByVal UserSlotIndex As Intege
     ' goes through here, so it is not reimplemented in each flow.
     On Error GoTo RefundPlayer_Err
     If instance.InscriptionPrice <= 0 Then Exit Sub
-    Call GiveGoldToPlayer(instance, UserSlotIndex, instance.InscriptionPrice)
+    Call PayOutGold(instance, UserSlotIndex, instance.InscriptionPrice)
     Exit Sub
 RefundPlayer_Err:
     Call TraceError(Err.Number, Err.Description, "ModLobby.RefundPlayer", Erl)
@@ -782,14 +794,35 @@ Public Sub BroadcastOpenLobby(ByRef instance As t_Lobby)
     End If
 End Sub
 
+Public Function PrizesAlreadyPaid(ByRef instance As t_Lobby) As Boolean
+    ' Plan 05.002 wave 5 (decision W3): "did this event already reach the prize stage?".
+    ' Two independent signals, either one is enough, so the answer errs on the side of NOT
+    ' refunding (never pay the same pool twice):
+    '  - PrizesPaid: set by GiveGoldToPlayer the moment any prize gold leaves the pool. It is
+    '    the exact signal, and it survives a scenario that failed halfway through its payout
+    '    while the lobby state was still InProgress.
+    '  - State >= Completed: the scenarios flip to Completed in the same call chain that pays
+    '    (DeathMatch and Hunt set it BEFORE GiveRewards; Naval Boarding right after), so it
+    '    also covers an event whose rewards were all zero or failed before the first payment.
+    PrizesAlreadyPaid = instance.PrizesPaid Or (instance.State >= e_LobbyState.Completed)
+End Function
+
 Public Sub ForceReset(ByRef instance As t_Lobby, ByVal LobbyIndex As Integer)
     On Error GoTo ForceReset_Err
     ' Plan 05.002 wave 2: it used to drop the players array without returning the players or
     ' refunding: they stayed trapped in the instance map and the gold was lost. Walk BACKWARDS
     ' because ClearUserSocket compacts the array.
-    Dim p As Integer
+    ' Wave 5 (decision W3): the inscription is refunded ONLY if the event did not pay prizes
+    ' yet. Refunding after the payout would hand the leftover of the pool to the players who
+    ' already played and were already paid. Decided BEFORE the loop: the state is rewritten below.
+    Dim p              As Integer
+    Dim RefundPlayers  As Boolean
+    RefundPlayers = Not PrizesAlreadyPaid(instance)
+    If Not RefundPlayers Then
+        Call LogInfoServidor("[Evento] ForceReset del lobby " & LobbyIndex & " sin reembolso: el evento ya pago premios (estado " & instance.State & ").")
+    End If
     For p = instance.RegisteredPlayers - 1 To 0 Step -1
-        Call RemovePlayerFromEvent(instance, p, True)
+        Call RemovePlayerFromEvent(instance, p, RefundPlayers)
     Next p
     instance.MinLevel = 1
     instance.MaxLevel = 47
