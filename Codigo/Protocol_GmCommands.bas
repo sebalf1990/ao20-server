@@ -4065,9 +4065,8 @@ Public Sub HandleStartEvent(ByVal UserIndex As Integer)
         Call WriteConsoleMsg(UserIndex, "El maximo de jugadores (" & LobbySettings.MaxPlayers & ") no puede ser menor que el minimo (" & LobbySettings.MinPlayers & ").", e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_INFO)
         Exit Sub
     End If
-    ' CurrentActiveEventType NO se escribe aca: se pisaba ANTES de validar nada y quedaba
-    ' rancio aunque la creacion fallara. Lo setea initEventLobby cuando el evento existe
-    ' de verdad (la ola 3 lo reemplaza por un valor derivado del lobby vivo).
+    ' The active event type is not stored anywhere: it is derived from the live lobby
+    ' (ModLobby.ActiveEventType), so there is nothing to set before the event exists.
     Call initEventLobby(UserIndex, eventType, LobbySettings)
     Exit Sub
 ErrHandler:
@@ -4081,7 +4080,7 @@ Public Sub HandleCancelarEvento(ByVal UserIndex As Integer)
         Call WriteLocaleMsg(UserIndex, MSG_SERVIDOR_COMANDO_DESHABILITADO_CARGO, e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_SERVER)
         Exit Sub
     End If
-    If CurrentActiveEventType = CaptureTheFlag Then
+    If ModLobby.ActiveEventType() = e_EventType.CaptureTheFlag Then
         If InstanciaCaptura Is Nothing Then
             'Msg1003= Eventos » No hay ninguna instancia en curso para ese evento.
             Call WriteLocaleMsg(UserIndex, MSG_NO_EVENTOS_HAY_NINGUNA_INSTANCIA_CURSO_ESE_EVENTO, e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos)

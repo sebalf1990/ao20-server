@@ -6418,7 +6418,7 @@ Public Sub HandleParticipar(ByVal UserIndex As Integer)
     Password = reader.ReadString8
     With UserList(UserIndex)
         If RoomId = -1 Then
-            If CurrentActiveEventType = CaptureTheFlag Then
+            If ModLobby.ActiveEventType() = e_EventType.CaptureTheFlag Then
                 If Not InstanciaCaptura Is Nothing Then
                     Call InstanciaCaptura.inscribirse(UserIndex)
                     Exit Sub

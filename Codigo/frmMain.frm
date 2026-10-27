@@ -1225,7 +1225,7 @@ Private Sub Automatic_Event_Timer()
             LobbySettings.Description = SvrConfig.GetValue("AUTONAVALBATTLE_Description")
     End Select
     LobbySettings.Password = ""
-    CurrentActiveEventType = LobbySettings.ScenearioType
+    ' Plan 05.002 wave 3: the event type is no longer stored in a scalar, it is derived.
     If LobbySettings.ScenearioType = e_EventType.CaptureTheFlag Then
         Call HandleIniciarCaptura(LobbySettings)
     Else
