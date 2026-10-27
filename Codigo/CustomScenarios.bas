@@ -396,6 +396,9 @@ Public Function PrepareNewEvent(ByVal eventType As e_EventType, ByVal LobbyIndex
             Set LobbyList(LobbyIndex).Scenario = New ScenarioDeathMatch
         Case e_EventType.NavalBattle
             Set LobbyList(LobbyIndex).Scenario = New ScenarioNavalBoarding
+        Case e_EventType.CaptureTheFlag
+            ' Plan 27.001 (05.002 wave 4): the CTF is an engine scenario now.
+            Set LobbyList(LobbyIndex).Scenario = New ScenarioCaptureTheFlag
         Case e_EventType.Generic
             ' No scenario ON PURPOSE: this is the MANUAL event of the GM (/CREAREVENTO LOBBY),
             ' started and ended by hand. ModLobby.UpdateLobbiesWithoutScenario advances it.
@@ -403,8 +406,7 @@ Public Function PrepareNewEvent(ByVal eventType As e_EventType, ByVal LobbyIndex
             PrepareNewEvent = True
             Exit Function
         Case Else
-            ' CaptureTheFlag does not come through here yet (it keeps its own singleton until
-            ' it is migrated to IBaseScenario), and any other value is a bug in the caller.
+            ' Any other value is a bug in the caller.
             Call LogError("CustomScenarios.PrepareNewEvent: tipo de evento no soportado (" & eventType & ") para el lobby " & LobbyIndex & ".")
             Exit Function
     End Select

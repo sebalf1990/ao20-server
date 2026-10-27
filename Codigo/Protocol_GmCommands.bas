@@ -1870,7 +1870,12 @@ Public Sub HandleExecute(ByVal UserIndex As Integer)
         If (.flags.Privilegios And (e_PlayerType.Admin Or e_PlayerType.Dios Or e_PlayerType.SemiDios)) Then
             tUser = NameIndex(username)
             If IsValidUserRef(tUser) Then
-                Call CustomScenarios.UserDie(UserIndex)
+                ' Plan 27.001 (05.002 wave 4): this passed UserIndex, the GM who executes, not the
+                ' victim. It did not matter while the CTF hooked the end of UserMod.UserDie; now
+                ' CustomScenarios.UserDie is the ONLY route to the scenario, so with the wrong index
+                ' the victim is never sent back to the waiting room nor revived and stays dead and
+                ' stuck inside the event.
+                Call CustomScenarios.UserDie(tUser.ArrayIndex)
                 Call UserMod.UserDie(tUser.ArrayIndex)
                 Call SendData(SendTarget.ToAdmins, 0, PrepareMessageLocaleMsg(MSG_EJECUTADO, .name & "¬" & UserList(tUser.ArrayIndex).name, e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_EJECUCION)) ' Msg1832=¬1 ha ejecutado a ¬2.
                 Call LogGM(GetUserRealName(UserIndex), " ejecuto a " & username)
@@ -4080,21 +4085,15 @@ Public Sub HandleCancelarEvento(ByVal UserIndex As Integer)
         Call WriteLocaleMsg(UserIndex, MSG_SERVIDOR_COMANDO_DESHABILITADO_CARGO, e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_SERVER)
         Exit Sub
     End If
-    If ModLobby.ActiveEventType() = e_EventType.CaptureTheFlag Then
-        If InstanciaCaptura Is Nothing Then
-            'Msg1003= Eventos » No hay ninguna instancia en curso para ese evento.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_EVENTOS_HAY_NINGUNA_INSTANCIA_CURSO_ESE_EVENTO, e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos)
-        Else
-            Call InstanciaCaptura.finalizarCaptura
-        End If
+    ' Plan 27.001 (05.002 wave 4): the CTF has no cancel branch of its own any more. It lives
+    ' inside its lobby, so CancelLobby ends it like any other scenario (returns the players,
+    ' refunds the inscription and the scenario closes itself on its next tick).
+    If GlobalLobbyIndex >= 0 Then
+        Call CancelLobby(LobbyList(GlobalLobbyIndex))
+        If LobbyList(GlobalLobbyIndex).Scenario Is Nothing Then Call ReleaseLobby(GlobalLobbyIndex)
+        Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_EVENTOS_EVENTO_SIDO_CANCELADO, vbNullString, e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos)) 'Msg1738=Eventos» El evento ha sido cancelado.
     Else
-        If GlobalLobbyIndex >= 0 Then
-            Call CancelLobby(LobbyList(GlobalLobbyIndex))
-            If LobbyList(GlobalLobbyIndex).Scenario Is Nothing Then Call ReleaseLobby(GlobalLobbyIndex)
-            Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_EVENTOS_EVENTO_SIDO_CANCELADO, vbNullString, e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos)) 'Msg1738=Eventos» El evento ha sido cancelado.
-        Else
-            Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_NO_ENCONTRO_NINGUN_EVENTO_ACTIVO, vbNullString, e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos)) 'Msg1739=No se encontró ningún evento activo.
-        End If
+        Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_NO_ENCONTRO_NINGUN_EVENTO_ACTIVO, vbNullString, e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos)) 'Msg1739=No se encontró ningún evento activo.
     End If
     Exit Sub
 ErrHandler:
@@ -4181,34 +4180,34 @@ HandleFeatureToggle_Err:
 End Sub
 
 'HarThaoS: Iniciar captura de bandera
-Public Sub HandleIniciarCaptura(EventSettings As t_NewScenearioSettings)
+' Plan 27.001 (05.002 wave 4): it NO LONGER creates the instance. The CTF is created like any other
+' engine scenario (CreatePublicEvent -> lobby -> ScenarioCaptureTheFlag). This stays only as the
+' mode's own settings validator, which CreatePublicEvent runs BEFORE reserving the lobby slot.
+' Returns True if the settings are usable.
+Public Function HandleIniciarCaptura(EventSettings As t_NewScenearioSettings) As Boolean
     On Error GoTo ErrHandler
-    If Not InstanciaCaptura Is Nothing Then
-        Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_CAPTURE_EVENT_ALREADY_ACTIVE, "", e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos))
-        Exit Sub
-    Else
-        'El precio no puede ser negativo
-        If EventSettings.InscriptionFee < 0 Then
-            Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_CAPTURE_INVALID_INSCRIPTION_FEE, "", e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos))
-            Exit Sub
-        End If
-        'Permito un máximo de 48 participantes
-        If EventSettings.MaxPlayers > 48 Then 'Leer de una variable de configuración
-            Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_CAPTURE_MAX_PLAYERS_EXCEEDED, "", e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos))
-            Exit Sub
-        End If
-        If EventSettings.MinLevel < 1 Or EventSettings.MinLevel > 47 Then
-            Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_CAPTURE_INVALID_MIN_LEVEL, "", e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos))
-            Exit Sub
-        End If
-        If EventSettings.MinLevel > EventSettings.MaxLevel Then
-            Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_CAPTURE_MIN_LEVEL_GREATER_THAN_MAX, "", e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos))
-            Exit Sub
-        End If
-        Set InstanciaCaptura = New clsCaptura
-        Call InstanciaCaptura.inicializar(EventSettings.MaxPlayers, EventSettings.RoundNumber, EventSettings.MinLevel, EventSettings.MaxLevel, EventSettings.InscriptionFee)
+    HandleIniciarCaptura = False
+    'El precio no puede ser negativo
+    If EventSettings.InscriptionFee < 0 Then
+        Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_CAPTURE_INVALID_INSCRIPTION_FEE, "", e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos))
+        Exit Function
     End If
-    Exit Sub
+    'Permito un máximo de 48 participantes
+    If EventSettings.MaxPlayers > 48 Then 'Leer de una variable de configuración
+        Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_CAPTURE_MAX_PLAYERS_EXCEEDED, "", e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos))
+        Exit Function
+    End If
+    If EventSettings.MinLevel < 1 Or EventSettings.MinLevel > 47 Then
+        Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_CAPTURE_INVALID_MIN_LEVEL, "", e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos))
+        Exit Function
+    End If
+    If EventSettings.MinLevel > EventSettings.MaxLevel Then
+        Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_CAPTURE_MIN_LEVEL_GREATER_THAN_MAX, "", e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos))
+        Exit Function
+    End If
+    HandleIniciarCaptura = True
+    Exit Function
 ErrHandler:
     Call TraceError(Err.Number, Err.Description, "Protocol.HandleIniciarCaptura", Erl)
-End Sub
+    HandleIniciarCaptura = False
+End Function

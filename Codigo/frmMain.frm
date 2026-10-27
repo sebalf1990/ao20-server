@@ -1249,17 +1249,10 @@ Private Sub Automatic_Event_Timer()
     ' Plan 05.002 wave 8: CreatePublicEvent is now a Function and returns the concrete reason.
     ' Before, the day was marked as done NO MATTER WHAT: if creation fell through any early
     ' exit, that day had no auto event and no trace of why.
-    If LobbySettings.ScenearioType = e_EventType.CaptureTheFlag Then
-        ' Capture the Flag is still the legacy singleton (it does not go through
-        ' CreatePublicEvent until the wave 4 migration). HandleIniciarCaptura is a Sub with no
-        ' result, but on rejection it leaves InstanciaCaptura as Nothing (IsEventActive was
-        ' false just above, so it was Nothing before the call).
-        Call HandleIniciarCaptura(LobbySettings)
-        If InstanciaCaptura Is Nothing Then
-            Call RegistrarAutoEventoFallido("Capture the Flag settings rejected (fee " & LobbySettings.InscriptionFee & ", players " & LobbySettings.MaxPlayers & ", levels " & LobbySettings.MinLevel & "-" & LobbySettings.MaxLevel & ").")
-            Exit Sub
-        End If
-    ElseIf Not CreatePublicEvent(LobbySettings, MotivoFallo) Then
+    ' Plan 27.001 (05.002 wave 4): Capture the Flag is an engine scenario now and goes through
+    ' CreatePublicEvent like the other modes (it runs its own settings validator there, before
+    ' reserving the lobby, and reports the concrete reason through MotivoFallo).
+    If Not CreatePublicEvent(LobbySettings, MotivoFallo) Then
         Call RegistrarAutoEventoFallido(MotivoFallo)
         Exit Sub
     End If

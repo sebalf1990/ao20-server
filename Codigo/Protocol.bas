@@ -6436,14 +6436,9 @@ Public Sub HandleParticipar(ByVal UserIndex As Integer)
     Password = reader.ReadString8
     With UserList(UserIndex)
         If RoomId = -1 Then
-            If ModLobby.ActiveEventType() = e_EventType.CaptureTheFlag Then
-                If Not InstanciaCaptura Is Nothing Then
-                    Call InstanciaCaptura.inscribirse(UserIndex)
-                    Exit Sub
-                End If
-            Else
-                RoomId = GlobalLobbyIndex
-            End If
+            ' Plan 27.001 (05.002 wave 4): the CTF registers through its lobby like every other mode
+            ' (it used to have its own branch with its own participant collection).
+            RoomId = GlobalLobbyIndex
         End If
         If RoomId < 0 Or RoomId > UBound(LobbyList) Then
             ' R2: sin evento activo (GlobalLobbyIndex=-1) o RoomId invalido -> evita LobbyList fuera de rango

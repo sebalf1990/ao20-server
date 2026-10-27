@@ -1318,14 +1318,10 @@ End Function
 Public Function ActiveEventType() As Integer
     ' Plan 05.002 wave 3: single source of truth for the running public event type, derived
     ' from what is alive. Returns NO_ACTIVE_EVENT when there is none.
-    ' CTF still lives in its own singleton; once it is migrated to IBaseScenario this first
-    ' branch goes away and only the lobby one remains.
+    ' Plan 27.001 (05.002 wave 4): the CTF is a scenario inside its lobby, so the lobby is the
+    ' only source (the singleton branch is gone).
     On Error GoTo ActiveEventType_Err
     ActiveEventType = NO_ACTIVE_EVENT
-    If Not InstanciaCaptura Is Nothing Then
-        ActiveEventType = e_EventType.CaptureTheFlag
-        Exit Function
-    End If
     If GlobalLobbyIndex >= 0 And GlobalLobbyIndex <= UBound(LobbyList) Then
         If LobbyList(GlobalLobbyIndex).State > e_LobbyState.UnInitilized And LobbyList(GlobalLobbyIndex).State <= e_LobbyState.InProgress Then
             ActiveEventType = LobbyList(GlobalLobbyIndex).ScenearioType
@@ -1350,6 +1346,15 @@ Public Function CreatePublicEvent(ByRef LobbySettings As t_NewScenearioSettings,
     If Not ValidateLobbySettings(LobbySettings) Then
         FailReason = "invalid settings for type " & LobbySettings.ScenearioType & " (levels " & LobbySettings.MinLevel & "-" & LobbySettings.MaxLevel & ", players " & LobbySettings.MinPlayers & "-" & LobbySettings.MaxPlayers & ")."
         Exit Function
+    End If
+    ' Plan 27.001 (05.002 wave 4): the CTF brings settings rules of its own (fee not negative,
+    ' capacity <= 48, level range). They run BEFORE reserving the lobby, like ValidateLobbySettings,
+    ' so invalid settings never leak a pool slot.
+    If LobbySettings.ScenearioType = e_EventType.CaptureTheFlag Then
+        If Not HandleIniciarCaptura(LobbySettings) Then
+            FailReason = "Capture the Flag settings rejected (fee " & LobbySettings.InscriptionFee & ", capacity " & LobbySettings.MaxPlayers & ", levels " & LobbySettings.MinLevel & "-" & LobbySettings.MaxLevel & ")."
+            Exit Function
+        End If
     End If
     ' Plan 05.002 wave 3 (owner decision 2: ONE public event at a time, formalized).
     ' GlobalLobbyIndex used to be overwritten without checking, leaving the previous lobby
@@ -1400,10 +1405,8 @@ Public Sub initEventLobby(ByVal UserIndex As Integer, ByVal eventType As Integer
     ' deseado: el formulario mandaba TODO a CreatePublicEvent, incluido CaptureTheFlag, y
     ' abria un lobby sin logica de CTF; ahora rutea igual que el comando de chat.
     ' The event type is no longer stored in a scalar: it is derived (ActiveEventType).
-    Select Case LobbySettings.ScenearioType
-        Case e_EventType.CaptureTheFlag
-            Call HandleIniciarCaptura(LobbySettings)
-        Case Else
-            Call CreatePublicEvent(LobbySettings)
-    End Select
+    ' Plan 27.001 (05.002 wave 4): the CTF has no branch of its own any more. It is an engine
+    ' scenario, so it enters through CreatePublicEvent and inherits the lobby (participants,
+    ' charge, refund, state, disconnections).
+    Call CreatePublicEvent(LobbySettings)
 End Sub
