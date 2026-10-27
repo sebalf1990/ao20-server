@@ -183,9 +183,16 @@ Friend Sub Class_Initialize()
     Call LoadTeamWeapoints(2, Team2Waypoints, WpCount, ScenarioIni)
     Call LoadForbidenItems(ScenarioIni)
     Call LoadTileBlock(TileBlocks, ScenarioIni)
-    UpdateIndex = AddUpdateScenario(Me)
-    Call CustomScenarios.SetCustomScenario(MapNumbers(0), Me)
-    Call CustomScenarios.SetCustomScenario(MapNumbers(1), Me)
+    ' Plan 27.001: register both maps FIRST and hook the tick only if both took, so a failed
+    ' SetCustomScenario leaves UpdateIndex = 0 and PrepareNewEvent's postcondition sees it.
+    ' If only the second one failed, give the first one back (it is ours).
+    If CustomScenarios.SetCustomScenario(MapNumbers(0), Me) Then
+        If CustomScenarios.SetCustomScenario(MapNumbers(1), Me) Then
+            UpdateIndex = AddUpdateScenario(Me)
+        Else
+            Call CustomScenarios.RemoveCustomScenario(MapNumbers(0))
+        End If
+    End If
     Call LoadNpcSpawnInfo(NpcSpawnList, ScenarioIni)
     Call LoadTeamCargo(TeamCargo(1), 1, ScenarioIni)
     Call LoadTeamCargo(TeamCargo(2), 2, ScenarioIni)

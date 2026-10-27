@@ -122,8 +122,11 @@ Private Sub Class_Initialize()
     MinArenaSize = val(ScenarioIni.GetValue("INIT", "MinArenaSize"))
     TargetScore = val(ScenarioIni.GetValue("INIT", "TargetScore"))
     Call LoadForbidenItems(ScenarioIni)
-    UpdateIndex = AddUpdateScenario(Me)
-    Call CustomScenarios.SetCustomScenario(MapNumber, Me)
+    ' Plan 27.001: register the map FIRST and hook the tick only on success, so a failed
+    ' SetCustomScenario leaves UpdateIndex = 0 and PrepareNewEvent's postcondition sees it.
+    If CustomScenarios.SetCustomScenario(MapNumber, Me) Then
+        UpdateIndex = AddUpdateScenario(Me)
+    End If
     Call LoadItemsToSpawn(ScenarioIni)
     Exit Sub
 DeathMatch_Initialize_Err:

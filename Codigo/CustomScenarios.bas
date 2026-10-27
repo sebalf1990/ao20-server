@@ -410,12 +410,17 @@ Public Function PrepareNewEvent(ByVal eventType As e_EventType, ByVal LobbyIndex
     End Select
     If LobbyList(LobbyIndex).Scenario Is Nothing Then Exit Function
     LobbyList(LobbyIndex).Scenario.SetLobbyIndex (LobbyIndex)
-    ' Postcondition: AddUpdateScenario is called from Class_Initialize. If it swallowed an
-    ' error (duplicate key in SetCustomScenario, instance pool exhausted, missing .ini) the
-    ' object exists but is NOT in the tick.
+    ' Postcondition: Class_Initialize hooks the tick (AddUpdateScenario) only AFTER
+    ' SetCustomScenario succeeded (plan 27.001). If either failed (duplicate key, missing
+    ' .ini, an error swallowed by the constructor) the object exists but is NOT in the tick.
     If Not IsScenarioInUpdateList(LobbyList(LobbyIndex).Scenario) Then
         Call LogError("CustomScenarios.PrepareNewEvent: el escenario tipo " & eventType & " del lobby " & LobbyIndex & " no quedo registrado en el tick. Se descarta.")
         Call SendData(SendTarget.ToAdmins, 0, PrepareMessageConsoleMsg("[Eventos] El escenario no pudo inicializarse (ver log). El evento no se abre.", e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_INFO))
+        ' Plan 27.001: the constructor already took its map instance(s) from the pool before it
+        ' failed. Reset gives them back (ClearMap + ReleaseInstance, all guarded by MapNumber > 0)
+        ' and is safe on a half-built scenario: it swallows its own errors and RemoveUpdateScenario
+        ' ignores slot 0. Without it every failed open leaked an instance map until restart.
+        Call LobbyList(LobbyIndex).Scenario.Reset
         Set LobbyList(LobbyIndex).Scenario = Nothing
         Exit Function
     End If

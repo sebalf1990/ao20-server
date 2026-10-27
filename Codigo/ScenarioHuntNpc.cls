@@ -105,8 +105,11 @@ Private Sub Class_Initialize()
     PlayerRespawnTime = PlayerRespawnTime * 1000
     TargetScore = val(ScenarioIni.GetValue("INIT", "TargetScore"))
     Call RegisterNpc("TARGET", validNpcCount, MatchNpc, ScenarioIni)
-    UpdateIndex = AddUpdateScenario(Me)
-    Call CustomScenarios.SetCustomScenario(MapNumber, Me)
+    ' Plan 27.001: register the map FIRST and hook the tick only on success, so a failed
+    ' SetCustomScenario leaves UpdateIndex = 0 and PrepareNewEvent's postcondition sees it.
+    If CustomScenarios.SetCustomScenario(MapNumber, Me) Then
+        UpdateIndex = AddUpdateScenario(Me)
+    End If
     LastBroadCastTime = 0
     Exit Sub
 Hunt_Initialize_Err:
@@ -133,6 +136,7 @@ Private Sub ClearMap()
     On Error GoTo ClearMap_Err:
     CustomScenarios.RemoveCustomScenario (MapNumber)
     CustomScenarios.RemoveUpdateScenario (UpdateIndex)
+    UpdateIndex = 0
     MapInfo(MapNumber).Seguro = PrevMapState
     MapInfo(MapNumber).DropItems = MapDropItems
     Exit Sub
