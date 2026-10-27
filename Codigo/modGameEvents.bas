@@ -87,6 +87,11 @@ Public Sub MaybeRunGameEvents()
 
     Call PerformTimeLimitCheck(PerformanceTimer, "MaybeRunGameEvents User loop", USER_LOOP_TIME_LIMIT_MS)
     Call CustomScenarios.UpdateAll
+    ' Plan 05.002 wave 5: lobbies WITHOUT a scenario (Generic type) were ticked by nobody,
+    ' because UpdateWaitingForPlayers was only called from the IBaseScenario_Update of the
+    ' scenarios. The nominal interval is passed: its only consumer there is the 30 s announce
+    ' timer (BroadOpenEvent); the real expiry uses GlobalFrameTime.
+    Call ModLobby.UpdateLobbiesWithoutScenario(GAME_EVENTS_INTERVAL_MS)
     Call PerformTimeLimitCheck(PerformanceTimer, "MaybeRunGameEvents customScenarios", CUSTOM_SCENARIOS_TIME_LIMIT_MS)
     Call MaybeRunShipTravel
 

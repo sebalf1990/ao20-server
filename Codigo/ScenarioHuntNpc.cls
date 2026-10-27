@@ -162,7 +162,27 @@ Public Function IBaseScenario_GetExtraInterfaces() As Long
 End Function
 
 Public Sub IBaseScenario_Reset()
+    ' Plan 05.002 wave 5 (Reset contract). The ONLY caller is ModLobby.ForceReset
+    ' (/lobby forcereset), which ALREADY returned and refunded the players and left
+    ' RegisteredPlayers at 0 BEFORE calling here. So the lobby list cannot be iterated here.
+    ' What belongs to the scenario and nobody did: kill the spawned creatures and give the
+    ' instance map back to the pool. ReleaseLobby does NOT go here: giving the pool slot back
+    ' is ForceReset's job.
+    On Error GoTo Reset_Err
+    Dim key As Variant
+    For Each key In SpawnedCreaturesId.Keys
+        Call QuitarNPC(key, eClearHunt)
+    Next key
+    Call SpawnedCreaturesId.RemoveAll
+    Call PlayerRespawn.RemoveAll
     Call ClearMap
+    If MapNumber > 0 Then
+        Call ReleaseInstance(MapNumber)
+        MapNumber = 0
+    End If
+    Exit Sub
+Reset_Err:
+    Call TraceError(Err.Number, Err.Description, "ScenarioHunt.Reset", Erl)
 End Sub
 
 Private Function IBaseScenario_RequiresSpawn() As Boolean
@@ -249,8 +269,17 @@ Private Sub IBaseScenario_PlayerKillNpc(ByVal NpcIndex As Integer, ByVal UserInd
     Else
         Call WriteLocaleMsg(UserIndex, MSG_MUST_HIT_WITH_WEAPON_TO_SCORE_POINTS, e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos, ObjData(RequiredWeaponId).name)
     End If
-    Call SpawnedCreaturesId.Remove(NpcIndex)
-    Call SpawnNpc(npcType)
+    ' Plan 05.002 wave 5: Scripting.Dictionary.Remove on a missing key raises 32811 and this
+    ' handler has no On Error of its own: the error went up to CustomScenarios.PlayerKillNpc,
+    ' which swallows it, and the SpawnNpc below NEVER ran (the creature was not replaced).
+    ' The hook fires for ANY npc killed by a user on the map, not only the hunt ones: pets that
+    ' WarpMascotas re-summons on the instance map, summons, GM-created npcs. SpawnNpc goes
+    ' INSIDE the If on purpose: replacing a creature for the death of someone else's pet would
+    ' spawn the pet as prey.
+    If SpawnedCreaturesId.Exists(NpcIndex) Then
+        Call SpawnedCreaturesId.Remove(NpcIndex)
+        Call SpawnNpc(npcType)
+    End If
 End Sub
 
 Private Sub IBaseScenario_NPcKillPlayer(ByVal NpcIndex As Integer, ByVal UserIndex As Integer, ByVal SourceType As e_DamageSourceType, ByVal SourceIndex As Integer)
@@ -324,6 +353,12 @@ Private Sub MatchComplete()
     For Each key In SpawnedCreaturesId.Keys
         Call QuitarNPC(key, eClearHunt)
     Next key
+    ' Plan 05.002 wave 5: empty the registry AFTER killing them. MatchComplete runs more than
+    ' once (end by score or time, then CancelLobby -> UpdateLobbyState(Closed)) and NpcList
+    ' indices are recycled (ReleaseNpc returns them to the IdNpcLibres heap). Without this the
+    ' second pass does QuitarNPC on NPCs of OTHER maps that inherited those indices: ReleaseNpc
+    ' only stops the double release of the SAME npc, via flags.NPCActive.
+    Call SpawnedCreaturesId.RemoveAll
     Exit Sub
 MatchComplete_Err:
     Call TraceError(Err.Number, Err.Description, "ScenarioHunt.MatchComplete ", Erl)
@@ -363,8 +398,11 @@ Private Sub BroadCastTimeUpdate()
     End If
     LastBroadCastTime = ElapsedTime
     Dim pendingTime As Long
-    'we add frame time here again so we round up
-    pendingTime = (MaxTime - ElapsedTime + frametime) / 1000
+    ' Plan 05.002 wave 5: this added `frametime` "to round up", but that was the MODULE level
+    ' variable, which nobody ever writes (IBaseScenario_Update declares its own local Dim
+    ' frametime that shadows it). It always added 0. The phantom term is removed so the code
+    ' says what it does.
+    pendingTime = (MaxTime - ElapsedTime) / 1000
     If pendingTime > MaxTime / 2000 Then
         Exit Sub
     ElseIf pendingTime >= 60 Then
@@ -408,7 +446,14 @@ Public Sub IBaseScenario_UserDie(ByVal UserIndex)
     ' reviving, the next one to inherit the slot was teleported to the arena, revived and had
     ' Strength/Agility overwritten. The field already existed and nobody used it.
     RespawnInfo.UserSlotIteration = UserList(UserIndex).VersionId
-    Call PlayerRespawn.Add(UserIndex, RespawnInfo)
+    ' Plan 05.002 wave 5: UserMod.DoDamageOrHeal does not check flags.Muerto and ModifyHealth
+    ' returns True every time MinHp <= 0, also on a corpse: a second hit (a poison tick, a
+    ' delayed blast) re-enters CustomScenarios.UserDie and the Add with a repeated key raised
+    ' 457. The re-death is ignored: the good entry is the FIRST one, which captured the
+    ' equipment before it was unequipped.
+    If Not PlayerRespawn.Exists(UserIndex) Then
+        Call PlayerRespawn.Add(UserIndex, RespawnInfo)
+    End If
 End Sub
 
 Private Sub Respawn(ByVal player As Integer)
@@ -485,7 +530,10 @@ Sub GiveRewards()
                 Teams(LobbyList(LobbyIndex).Players(i).team) = Teams(LobbyList(LobbyIndex).Players(i).team) & UserList(LobbyList(LobbyIndex).Players(i).User.ArrayIndex).name & " "
             End If
         Next i
-        For i = 1 To 3
+        ' Plan 05.002 wave 5: GetTeamRanking returns rank(0 To TeamCount), so UBound is the team
+        ' count, not 3. With 2 teams Ranking(3) is error 9, swallowed by GiveRewards_Err.
+        ' Rewards() is declared 1 To 3, so the cap stays at 3.
+        For i = 1 To IIf(UBound(Ranking) < 3, UBound(Ranking), 3)
             If LobbyList(LobbyIndex).AvailableInscriptionMoney > 0 Then
                 Reward = Rewards(i) / LobbyList(LobbyIndex).TeamSize
                 For j = 0 To LobbyList(LobbyIndex).RegisteredPlayers - 1
@@ -502,6 +550,10 @@ Sub GiveRewards()
     Else
         Ranking = Board.GetRanking(3)
         For i = 0 To UBound(Ranking) - 1
+            ' Plan 05.002 wave 5: GetRanking leaves 0 in the places that were not filled and
+            ' UserList starts at 1, so the broadcast read UserList(0) and raised error 9,
+            ' aborting the rest of the awards. The ranking comes ordered: the first hole ends it.
+            If Ranking(i).PlayerIndex <= 0 Then Exit For
             If LobbyList(LobbyIndex).AvailableInscriptionMoney > 0 Then
                 For j = 0 To LobbyList(LobbyIndex).RegisteredPlayers - 1
                     If IsValidUserRef(LobbyList(LobbyIndex).Players(j).User) Then

@@ -221,6 +221,11 @@ Public Sub InitializeLobby(ByRef instance As t_Lobby)
     instance.SummonCoordinates.Map = -1
     instance.TeamSize = -1
     instance.TeamType = eRandom
+    ' Plan 05.002 wave 5: without this SortType was inherited from the previous occupant of the
+    ' slot (a plain lobby could start with the eFixedTeamCount a Naval Boarding left behind).
+    instance.SortType = eFixedTeamSize
+    ' The slot is recycled: do not let it report the previous event's type.
+    instance.ScenearioType = 0
     instance.TeamSortDone = False
     instance.NextTeamId = 1
     instance.AvailableInscriptionMoney = 0
@@ -708,6 +713,63 @@ Public Sub UpdateWaitingForPlayers(ByVal frametime As Long, ByRef instance As t_
     End If
 End Sub
 
+Public Sub UpdateLobbiesWithoutScenario(ByVal frametime As Long)
+    ' Plan 05.002 wave 5. The lobby tick lived INSIDE the scenarios: the only callers of
+    ' UpdateWaitingForPlayers are the IBaseScenario_Update implementations. A Generic lobby has
+    ' no scenario (CustomScenarios.PrepareNewEvent assigns none), so nobody advanced it: it was
+    ' not cancelled after 5 minutes nor did it give its slot back, and since it stayed in
+    ' AcceptingPlayers ActiveEventType() counted it as an active event and blocked every later
+    ' public event until a GM ran /cancelarevento.
+    ' Auto-start by capacity is NOT enabled: a Generic is a MANUAL event started by the GM with
+    ' /lobby startevent. If it could start by itself it would move to InProgress, which this
+    ' sweep does not tick, and the zombie would change state instead of dying.
+    On Error GoTo UpdateLobbiesWithoutScenario_Err
+    Dim i   As Integer
+    Dim j   As Integer
+    Dim idx As Integer
+    ' BACKWARDS: ReleaseLobby compacts ActiveLobby by moving the last element into the hole.
+    For i = ActiveLobby.currentIndex To 0 Step -1
+        idx = ActiveLobby.IndexInfo(i)
+        If idx >= 0 And idx <= UBound(LobbyList) Then
+            If LobbyList(idx).Scenario Is Nothing Then
+                If LobbyList(idx).State = e_LobbyState.AcceptingPlayers Then
+                    ' UpdateWaitingForPlayers is NOT reused: it has TWO automatic starts and the
+                    ' expiry one (RegisteredPlayers >= MinPlayers) would take the manual lobby to
+                    ' InProgress, where this sweep does not look. Only what fits a manual event:
+                    ' announce while waiting, and cancel if it expired without people.
+                    If LobbyList(idx).IsPublic Then
+                        If UpdateTime(LobbyList(idx).BroadOpenEvent, frametime) Then
+                            Call BroadcastOpenLobby(LobbyList(idx))
+                        End If
+                    End If
+                    If WaitForPlayersTimeUp(LobbyList(idx)) Then
+                        ' Same notice the scenario path sends before cancelling (Msg1729).
+                        For j = 0 To LobbyList(idx).RegisteredPlayers - 1
+                            If IsValidUserRef(LobbyList(idx).Players(j).User) Then
+                                Call SendData(SendTarget.ToIndex, LobbyList(idx).Players(j).User.ArrayIndex, PrepareMessageLocaleMsg(MSG_EVENTO_CANCELADO_FALTA_JUGADORES, "", e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos)) 'Msg1729=Evento cancelado por falta de jugadores
+                            End If
+                        Next j
+                        Call CancelLobby(LobbyList(idx))
+                    End If
+                ElseIf LobbyList(idx).State = e_LobbyState.InProgress Then
+                    ' Watchdog: the GM started it with /lobby startevent and no scenario will
+                    ' end it. If the last registered player left nobody can close it and the
+                    ' slot would stay taken, blocking every public event.
+                    If LobbyList(idx).RegisteredPlayers <= 0 Then
+                        Call LogError("[Eventos] Lobby manual " & idx & " cerrado por watchdog: quedo en curso sin inscriptos.")
+                        Call CancelLobby(LobbyList(idx))
+                    End If
+                ElseIf LobbyList(idx).State >= e_LobbyState.Closed Then
+                    Call ReleaseLobby(idx)
+                End If
+            End If
+        End If
+    Next i
+    Exit Sub
+UpdateLobbiesWithoutScenario_Err:
+    Call TraceError(Err.Number, Err.Description, "ModLobby.UpdateLobbiesWithoutScenario", Erl)
+End Sub
+
 Public Sub BroadcastOpenLobby(ByRef instance As t_Lobby)
     If Not instance.IsGlobal Then Exit Sub
     Dim EventName As String: EventName = "Evento"
@@ -720,7 +782,7 @@ Public Sub BroadcastOpenLobby(ByRef instance As t_Lobby)
     End If
 End Sub
 
-Public Sub ForceReset(ByRef instance As t_Lobby)
+Public Sub ForceReset(ByRef instance As t_Lobby, ByVal LobbyIndex As Integer)
     On Error GoTo ForceReset_Err
     ' Plan 05.002 wave 2: it used to drop the players array without returning the players or
     ' refunding: they stayed trapped in the instance map and the gold was lost. Walk BACKWARDS
@@ -740,13 +802,31 @@ Public Sub ForceReset(ByRef instance As t_Lobby)
     instance.ClassFilter = -1
     If Not instance.Scenario Is Nothing Then
         Call instance.Scenario.Reset
+        ' Reset is a Sub with no return value and the implementations swallow their own
+        ' errors, so "I called it" proves nothing about it having unregistered. The
+        ' postcondition is verified: if the scenario is still in the tick the slot does NOT go
+        ' back to the pool. Leaking 1 of 201 lobbies is far cheaper than handing the same slot
+        ' to two events.
+        If CustomScenarios.IsScenarioInUpdateList(instance.Scenario) Then
+            Call LogError("ModLobby.ForceReset: el escenario del lobby " & LobbyIndex & " NO se desregistro del tick. El slot no se devuelve al pool.")
+            Set instance.Scenario = Nothing
+            Erase instance.Players
+            Exit Sub
+        End If
     End If
     Set instance.Scenario = Nothing
     Erase instance.Players
+    ' Wave 5: the slot goes back to the pool (it used to burn one of the 201 per use).
+    ' The order is mandatory: AFTER Scenario.Reset, the only thing that takes the scenario out
+    ' of CustomScenarioList and of the tick list. Otherwise the old scenario would keep ticking
+    ' over a LobbyIndex the pool may already have given to ANOTHER event.
+    Call ReleaseLobby(LobbyIndex)
     Exit Sub
 ForceReset_Err:
+    ' No Resume Next: with ReleaseLobby inside it stopped being harmless. If Scenario.Reset
+    ' failed, Resume Next would carry on and return to the pool a slot whose scenario never
+    ' unregistered, which is exactly the catastrophe the order above avoids.
     Call TraceError(Err.Number, Err.Description, "ModLobby.ForceReset", Erl)
-    Resume Next
 End Sub
 
 Public Sub RegisterDisconnectedUser(ByVal DisconnectedUserIndex As Integer)
@@ -827,7 +907,7 @@ Public Function SetTeamSize(ByRef instance As t_Lobby, ByVal TeamSize As Integer
         Exit Function
     End If
     If instance.State <> Initialized Then
-        reponse.Success = False
+        response.Success = False
         response.Message = MsgCantChangeGroupSizeNow
         SetTeamSize = response
         Exit Function
@@ -853,7 +933,7 @@ Public Function SetTeamCount(ByRef instance As t_Lobby, ByVal TeamCount As Integ
         Exit Function
     End If
     If instance.State <> Initialized Then
-        reponse.Success = False
+        response.Success = False
         response.Message = MsgCantChangeGroupSizeNow
         SetTeamCount = response
         Exit Function
@@ -894,6 +974,15 @@ Public Function HandleRemoteLobbyCommand(ByVal Command, ByVal Params As String, 
     Dim RetValue    As t_response
     Dim tUser       As t_UserReference
     Arguments = Split(Params, " ")
+    ' Plan 05.002 wave 5: HandleLobbyCommand always routes to GlobalLobbyIndex, which is -1
+    ' when there is no public event. With -1 every Case below does LobbyList(-1) and raises
+    ' error 9; the handler swallowed it and the function returned the True already assigned,
+    ' so the GM read "command processed" and nothing happened at all.
+    If LobbyIndex < 0 Or LobbyIndex > UBound(LobbyList) Then
+        Call WriteConsoleMsg(UserIndex, "There is no active event to operate on.", e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos)
+        HandleRemoteLobbyCommand = True
+        Exit Function
+    End If
     HandleRemoteLobbyCommand = True
     With UserList(UserIndex)
         Select Case Command
@@ -901,6 +990,14 @@ Public Function HandleRemoteLobbyCommand(ByVal Command, ByVal Params As String, 
                 Call SetSummonCoordinates(LobbyList(LobbyIndex), .pos.Map, .pos.x, .pos.y)
             Case e_LobbyCommandId.eEndEvent
                 Call CancelLobby(LobbyList(LobbyIndex))
+                ' Plan 05.002 wave 5: CancelLobby leaves the lobby Closed but does NOT give the
+                ' slot back. With a scenario CloseScenario returns it on the next tick (the
+                ' Closed branch of its Update), so release HERE only when there is none.
+                ' Releasing in both cases would be worse than the leak: the pool may reassign
+                ' the index before that tick, and the scenario's ReleaseLobby would then pull
+                ' a slot that already belongs to ANOTHER event out of ActiveLobby. Same
+                ' condition HandleCancelarEvento uses.
+                If LobbyList(LobbyIndex).Scenario Is Nothing Then Call ReleaseLobby(LobbyIndex)
             Case e_LobbyCommandId.eReturnAllSummoned
                 Call ModLobby.ReturnAllPlayers(LobbyList(LobbyIndex))
             Case e_LobbyCommandId.eReturnSinglePlayer
@@ -922,7 +1019,9 @@ Public Function HandleRemoteLobbyCommand(ByVal Command, ByVal Params As String, 
             Case e_LobbyCommandId.eListPlayers
                 Call ModLobby.ListPlayers(LobbyList(LobbyIndex), UserIndex)
             Case e_LobbyCommandId.eForceReset
-                Call ModLobby.ForceReset(LobbyList(LobbyIndex))
+                ' Wave 5: ForceReset also returns the slot to the pool, so it needs the INDEX
+                ' as well as the structure.
+                Call ModLobby.ForceReset(LobbyList(LobbyIndex), LobbyIndex)
                 Call WriteConsoleMsg(UserIndex, "Reset done.", e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos)
             Case e_LobbyCommandId.eSetTeamSize
                 Call ModLobby.SetTeamSize(LobbyList(LobbyIndex), Arguments(0), Arguments(1))
@@ -1006,16 +1105,25 @@ End Function
 
 Public Sub SortTeams(ByRef instance As t_Lobby)
     On Error GoTo SortTeams_Err
-    If instance.TeamSize < 1 Or (instance.MaxPlayers / instance.TeamSize) < 1 Then Exit Sub
+    ' Plan 05.002 wave 5: VB6 does NOT short-circuit Or, so the division was evaluated EVEN
+    ' with TeamSize = 0 and raised error 11 (swallowed by the handler: SortTeams did nothing
+    ' and left a spurious error in the log every time). Split in two so the division never
+    ' sees a 0 divisor.
+    If instance.TeamSize < 1 Then Exit Sub
+    If (instance.MaxPlayers \ instance.TeamSize) < 1 Then Exit Sub
     Dim currentIndex       As Integer
     Dim TeamCount          As Integer
     Dim MaxPossiblePlayers As Integer
-    TeamCount = instance.MaxPlayers / instance.TeamSize
+    ' These sums want to truncate down to the lower multiple, but `/` is floating point and
+    ' VB6 rounds to EVEN when storing it in an Integer: 7/2 = 3.5 -> 4, so MaxPossiblePlayers
+    ' ended up GREATER than the registered players, the kick loop expelled nobody and the
+    ' teams were uneven. `\` is integer division.
+    TeamCount = instance.MaxPlayers \ instance.TeamSize
     If instance.SortType = eFixedTeamSize Then
-        MaxPossiblePlayers = (instance.RegisteredPlayers / instance.TeamSize)
+        MaxPossiblePlayers = (instance.RegisteredPlayers \ instance.TeamSize)
         MaxPossiblePlayers = MaxPossiblePlayers * instance.TeamSize
     Else
-        MaxPossiblePlayers = instance.RegisteredPlayers / TeamCount
+        MaxPossiblePlayers = instance.RegisteredPlayers \ TeamCount
         MaxPossiblePlayers = MaxPossiblePlayers * TeamCount
     End If
     Dim i As Integer
@@ -1025,7 +1133,13 @@ Public Sub SortTeams(ByRef instance As t_Lobby)
         End If
         Call KickPlayer(instance, i)
     Next i
-    TeamCount = instance.RegisteredPlayers / instance.TeamSize
+    ' Plan 05.002 wave 5: this formula only holds in eFixedTeamSize, where TeamSize IS the team
+    ' size. In eFixedTeamCount -what Naval Boarding uses- TeamSize is MaxPlayers/N, so
+    ' recomputing here collapsed everything into ONE team unless the lobby was full.
+    If instance.SortType = e_SortType.eFixedTeamSize Then
+        TeamCount = instance.RegisteredPlayers \ instance.TeamSize
+    End If
+    If TeamCount < 1 Then TeamCount = 1
     currentIndex = GetHigherLvlWithoutTeam(instance)
     Dim CurrentAssignTeam As Integer
     Dim Direction         As Integer
@@ -1164,7 +1278,15 @@ Public Sub CreatePublicEvent(ByRef LobbySettings As t_NewScenearioSettings)
     End If
     Call InitializeLobby(LobbyList(GlobalLobbyIndex))
     Call ModLobby.SetupLobby(LobbyList(GlobalLobbyIndex), LobbySettings)
-    Call CustomScenarios.PrepareNewEvent(LobbySettings.ScenearioType, GlobalLobbyIndex)
+    ' Plan 05.002 wave 5: PrepareNewEvent now reports whether the lobby ended up with a LIVE
+    ' scenario (built and hooked to the tick). If not, the slot must go back: a lobby nobody
+    ' advances stays in AcceptingPlayers charging inscriptions and ActiveEventType() counts it
+    ' as active, blocking every later event.
+    If Not CustomScenarios.PrepareNewEvent(LobbySettings.ScenearioType, GlobalLobbyIndex) Then
+        Call LogError("CreatePublicEvent: PrepareNewEvent failed for type " & LobbySettings.ScenearioType & ", releasing lobby " & GlobalLobbyIndex & ".")
+        Call ReleaseLobby(GlobalLobbyIndex)
+        Exit Sub
+    End If
     Call OpenLobby(LobbyList(GlobalLobbyIndex), True)
 End Sub
 

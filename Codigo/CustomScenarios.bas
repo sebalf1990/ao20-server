@@ -86,12 +86,36 @@ GetMap_Err:
     Call TraceError(Err.Number, Err.Description, "CustomScenarios.GetMap " & mapIndex, Erl)
 End Function
 
-Public Sub SetCustomScenario(ByVal mapIndex As Integer, ByRef Scenario As IBaseScenario)
+Public Function SetCustomScenario(ByVal mapIndex As Integer, ByRef Scenario As IBaseScenario) As Boolean
+    ' Plan 05.002 wave 5. Dictionary.Add RAISES error 457 when the key already exists, and
+    ' this Sub had no handler: the error escaped into the Class_Initialize / SetLobbyIndex of
+    ' the scenario being registered and aborted the rest of its initialization. It now fails
+    ' soft and LOUD, and returns whether it registered so a caller can abort. The scenarios
+    ' call it with Call, so they keep compiling untouched.
+    On Error GoTo SetCustomScenario_Err:
+    If CustomScenarioList.Exists(mapIndex) Then
+        Call LogError("CustomScenarios.SetCustomScenario: el mapa " & mapIndex & " ya tiene un escenario registrado. No se pisa: el escenario nuevo se queda sin ese mapa.")
+        Call SendData(SendTarget.ToAdmins, 0, PrepareMessageConsoleMsg("[Eventos] El mapa " & mapIndex & " ya tiene un escenario registrado: el evento nuevo no puede usarlo. Revisa el log.", e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_INFO))
+        Exit Function
+    End If
     Call CustomScenarioList.Add(mapIndex, Scenario)
-End Sub
+    SetCustomScenario = True
+    Exit Function
+SetCustomScenario_Err:
+    Call TraceError(Err.Number, Err.Description, "CustomScenarios.SetCustomScenario " & mapIndex, Erl)
+End Function
 
 Public Sub RemoveCustomScenario(ByVal mapIndex As Integer)
+    ' Plan 05.002 wave 5. Dictionary.Remove RAISES error 32811 when the key is missing. In
+    ' every ClearMap this call is the FIRST line and RemoveUpdateScenario the LAST, so the
+    ' error jumped to the ClearMap handler and the tick slot was never released. That always
+    ' happens when the map was never registered (instance pool exhausted => MapNumber = -1).
+    On Error GoTo RemoveCustomScenario_Err:
+    If Not CustomScenarioList.Exists(mapIndex) Then Exit Sub
     Call CustomScenarioList.Remove(mapIndex)
+    Exit Sub
+RemoveCustomScenario_Err:
+    Call TraceError(Err.Number, Err.Description, "CustomScenarios.RemoveCustomScenario " & mapIndex, Erl)
 End Sub
 
 Public Function AddUpdateScenario(ByRef Scenario As IBaseScenario) As Integer
@@ -114,32 +138,79 @@ AddUpdateScenario_Err:
     Call TraceError(Err.Number, Err.Description, "CustomScenarios.AddUpdateScenario", Erl)
 End Function
 
-Public Sub RemoveUpdateScenario(ByRef Index As Integer)
-    Debug.Assert Index <= UBound(ScenarioUpdateList)
+Public Sub RemoveUpdateScenario(ByVal Index As Integer)
+    ' Plan 05.002 wave 5. Hardened, not rewritten: the linear sweep (with the Exit For that
+    ' main already has) keeps this idempotent. What was missing:
+    '  - an own handler and a REAL range check: Debug.Assert is compiled out in release, so
+    '    an out of range Index raised an unhandled error 9 and aborted the scenario close.
+    '  - an overflow guard when giving the slot back (same one InstanceManager.ReleaseInstance
+    '    had to learn).
+    ' Index is now ByVal: every caller already passes it parenthesized (by value).
+    On Error GoTo RemoveUpdateScenario_Err:
+    If Index < LBound(ScenarioUpdateList) Or Index > UBound(ScenarioUpdateList) Then
+        Call LogError("CustomScenarios.RemoveUpdateScenario: slot fuera de rango (" & Index & ")")
+        Exit Sub
+    End If
     Set ScenarioUpdateList(Index) = Nothing
     Dim i As Integer
     For i = 0 To ActiveUpdateSlots.currentIndex - 1
         If ActiveUpdateSlots.IndexInfo(i) = Index Then
             ActiveUpdateSlots.IndexInfo(i) = ActiveUpdateSlots.IndexInfo(ActiveUpdateSlots.currentIndex - 1)
             ActiveUpdateSlots.currentIndex = ActiveUpdateSlots.currentIndex - 1
-            AvailableUpdateSlots.currentIndex = AvailableUpdateSlots.currentIndex + 1
-            AvailableUpdateSlots.IndexInfo(AvailableUpdateSlots.currentIndex) = Index
+            If AvailableUpdateSlots.currentIndex < UBound(AvailableUpdateSlots.IndexInfo) Then
+                AvailableUpdateSlots.currentIndex = AvailableUpdateSlots.currentIndex + 1
+                AvailableUpdateSlots.IndexInfo(AvailableUpdateSlots.currentIndex) = Index
+            Else
+                Call LogError("CustomScenarios.RemoveUpdateScenario: el heap de slots disponibles esta lleno, se descarta el slot " & Index)
+            End If
             Exit For
         End If
     Next
+    Exit Sub
+RemoveUpdateScenario_Err:
+    Call TraceError(Err.Number, Err.Description, "CustomScenarios.RemoveUpdateScenario " & Index, Erl)
 End Sub
 
 Public Sub UpdateAll()
+    ' Plan 05.002 wave 5. TWO problems lived in this loop:
+    ' 1) A single On Error for the whole loop: the first scenario that raised aborted the tick
+    '    of ALL the following ones, and since the For always starts at 0 it starved them
+    '    forever (UpdateAll runs every 40 ms from modGameEvents.MaybeRunGameEvents).
+    ' 2) ActiveUpdateSlots was iterated WHILE the scenarios mutate it: they call
+    '    CloseScenario -> RemoveUpdateScenario from their own Update, and that compacts the
+    '    heap by swapping with the last element. VB6 evaluates the For bound once, so the stale
+    '    position was re-read and the moved scenario got two Update calls in the same tick.
+    ' So the slot list is COPIED before walking it, and each Update runs in its own Sub, the
+    ' only way in VB6 to get one handler per iteration without Resume Next.
     On Error GoTo UpdateAll_Err:
-    Dim i As Integer
-    For i = 0 To ActiveUpdateSlots.currentIndex - 1
-        If Not ScenarioUpdateList(ActiveUpdateSlots.IndexInfo(i)) Is Nothing Then
-            Call ScenarioUpdateList(ActiveUpdateSlots.IndexInfo(i)).Update
-        End If
-    Next
+    Dim i         As Integer
+    Dim SlotCount As Integer
+    Dim Slots()   As Integer
+    SlotCount = ActiveUpdateSlots.currentIndex
+    If SlotCount <= 0 Then Exit Sub
+    ReDim Slots(0 To SlotCount - 1) As Integer
+    For i = 0 To SlotCount - 1
+        Slots(i) = ActiveUpdateSlots.IndexInfo(i)
+    Next i
+    For i = 0 To SlotCount - 1
+        Call UpdateSingleScenario(Slots(i))
+    Next i
     Exit Sub
 UpdateAll_Err:
     Call TraceError(Err.Number, Err.Description, "CustomScenarios.UpdateAll", Erl)
+End Sub
+
+Private Sub UpdateSingleScenario(ByVal Slot As Integer)
+    ' The Is Nothing check is NOT redundant: it covers a scenario that was taken down during
+    ' this very tick, because RemoveUpdateScenario leaves the slot Nothing before compacting.
+    On Error GoTo UpdateSingleScenario_Err:
+    If Slot < LBound(ScenarioUpdateList) Or Slot > UBound(ScenarioUpdateList) Then Exit Sub
+    If ScenarioUpdateList(Slot) Is Nothing Then Exit Sub
+    Call ScenarioUpdateList(Slot).Update
+    Exit Sub
+UpdateSingleScenario_Err:
+    ' The error is NOT swallowed: it is logged with the slot to identify the scenario.
+    Call TraceError(Err.Number, Err.Description, "CustomScenarios.UpdateAll slot:" & Slot, Erl)
 End Sub
 
 Public Sub Reset(ByVal MapNumber As Integer)
@@ -300,9 +371,24 @@ UserCanDropItem_Err:
     Call TraceError(Err.Number, Err.Description, "CustomScenarios.UserCanDropItem", Erl)
 End Function
 
-Public Sub PrepareNewEvent(ByVal eventType As e_EventType, ByVal LobbyIndex As Integer)
+Public Function PrepareNewEvent(ByVal eventType As e_EventType, ByVal LobbyIndex As Integer) As Boolean
+    ' Plan 05.002 wave 5. Returns True only if the lobby ended up with a LIVE scenario
+    ' (built AND hooked to the tick). It used to be a Sub that verified nothing.
+    '  - e_EventType.Generic (0) never had a Case. The lobby kept Scenario = Nothing and,
+    '    since UpdateWaitingForPlayers is only called from the scenarios' Update, nobody
+    '    advanced it: it never started, never expired and never cancelled, and it sat in
+    '    AcceptingPlayers charging inscriptions while ActiveEventType() counted it as an
+    '    active event, blocking every later public event.
+    '  - The scenarios' Class_Initialize trap their own errors, so New ALWAYS returns an
+    '    object, well built or not. One that failed before AddUpdateScenario never ticks:
+    '    the same zombie lobby through another door.
+    ' So the POSTCONDITION (it is in the tick) is verified instead of trusting the New.
     On Error GoTo PrepareNewEvent_Err:
-    Debug.Assert LobbyIndex < UBound(LobbyList)
+    If LobbyIndex < LBound(LobbyList) Or LobbyIndex > UBound(LobbyList) Then
+        Call LogError("CustomScenarios.PrepareNewEvent: lobby fuera de rango (" & LobbyIndex & ").")
+        Exit Function
+    End If
+    Set LobbyList(LobbyIndex).Scenario = Nothing
     Select Case eventType
         Case e_EventType.NpcHunt
             Set LobbyList(LobbyIndex).Scenario = New ScenarioHunt
@@ -310,14 +396,50 @@ Public Sub PrepareNewEvent(ByVal eventType As e_EventType, ByVal LobbyIndex As I
             Set LobbyList(LobbyIndex).Scenario = New ScenarioDeathMatch
         Case e_EventType.NavalBattle
             Set LobbyList(LobbyIndex).Scenario = New ScenarioNavalBoarding
+        Case e_EventType.Generic
+            ' No scenario ON PURPOSE: this is the MANUAL event of the GM (/CREAREVENTO LOBBY),
+            ' started and ended by hand. ModLobby.UpdateLobbiesWithoutScenario advances it.
+            ' Nothing to verify, so it reports success.
+            PrepareNewEvent = True
+            Exit Function
+        Case Else
+            ' CaptureTheFlag does not come through here yet (it keeps its own singleton until
+            ' it is migrated to IBaseScenario), and any other value is a bug in the caller.
+            Call LogError("CustomScenarios.PrepareNewEvent: tipo de evento no soportado (" & eventType & ") para el lobby " & LobbyIndex & ".")
+            Exit Function
     End Select
-    If Not LobbyList(LobbyIndex).Scenario Is Nothing Then
-        LobbyList(LobbyIndex).Scenario.SetLobbyIndex (LobbyIndex)
+    If LobbyList(LobbyIndex).Scenario Is Nothing Then Exit Function
+    LobbyList(LobbyIndex).Scenario.SetLobbyIndex (LobbyIndex)
+    ' Postcondition: AddUpdateScenario is called from Class_Initialize. If it swallowed an
+    ' error (duplicate key in SetCustomScenario, instance pool exhausted, missing .ini) the
+    ' object exists but is NOT in the tick.
+    If Not IsScenarioInUpdateList(LobbyList(LobbyIndex).Scenario) Then
+        Call LogError("CustomScenarios.PrepareNewEvent: el escenario tipo " & eventType & " del lobby " & LobbyIndex & " no quedo registrado en el tick. Se descarta.")
+        Call SendData(SendTarget.ToAdmins, 0, PrepareMessageConsoleMsg("[Eventos] El escenario no pudo inicializarse (ver log). El evento no se abre.", e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_INFO))
+        Set LobbyList(LobbyIndex).Scenario = Nothing
+        Exit Function
     End If
-    Exit Sub
+    PrepareNewEvent = True
+    Exit Function
 PrepareNewEvent_Err:
     Call TraceError(Err.Number, Err.Description, "CustomScenarios.PrepareNewEvent", Erl)
-End Sub
+End Function
+
+Public Function IsScenarioInUpdateList(ByRef Scenario As IBaseScenario) As Boolean
+    ' Both sides are IBaseScenario, so Is compares the same interface pointer.
+    On Error GoTo IsScenarioInUpdateList_Err:
+    Dim i As Integer
+    If Scenario Is Nothing Then Exit Function
+    For i = 0 To ActiveUpdateSlots.currentIndex - 1
+        If ScenarioUpdateList(ActiveUpdateSlots.IndexInfo(i)) Is Scenario Then
+            IsScenarioInUpdateList = True
+            Exit Function
+        End If
+    Next i
+    Exit Function
+IsScenarioInUpdateList_Err:
+    Call TraceError(Err.Number, Err.Description, "CustomScenarios.IsScenarioInUpdateList", Erl)
+End Function
 
 Public Sub ClearMap(ByVal MapNumber As Integer)
     On Error GoTo ClearMap_Err:
