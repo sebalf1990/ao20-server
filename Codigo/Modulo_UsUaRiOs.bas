@@ -2881,6 +2881,24 @@ End Function
 
 Public Function CanHelpUser(ByVal UserIndex As Integer, ByVal targetUserIndex As Integer) As e_InteractionResult
     CanHelpUser = eInteractionOk
+    ' Plan 27.001 (05.002 wave 7): the only side gate below is CurrentTeam, and duels do NOT use
+    ' CurrentTeam (they use SalaReto + EquipoReto), so inside a duel you could heal, buff or
+    ' resurrect the rival. With a party formed it was the natural path, because
+    ' ApplyEffectOnParty only filters by CanHelpUser.
+    If UserList(UserIndex).flags.EnReto Or UserList(targetUserIndex).flags.EnReto Then
+        If UserList(UserIndex).flags.EnReto <> UserList(targetUserIndex).flags.EnReto Then
+            CanHelpUser = eDifferentTeam
+            Exit Function
+        End If
+        If UserList(UserIndex).flags.SalaReto <> UserList(targetUserIndex).flags.SalaReto Then
+            CanHelpUser = eDifferentTeam
+            Exit Function
+        End If
+        If UserList(UserIndex).flags.EquipoReto <> UserList(targetUserIndex).flags.EquipoReto Then
+            CanHelpUser = eDifferentTeam
+            Exit Function
+        End If
+    End If
     If UserList(UserIndex).flags.CurrentTeam > 0 And UserList(UserIndex).flags.CurrentTeam <> UserList(targetUserIndex).flags.CurrentTeam Then
         CanHelpUser = eDifferentTeam
         Exit Function
@@ -2927,6 +2945,73 @@ Public Function CanHelpUser(ByVal UserIndex As Integer, ByVal targetUserIndex As
     End Select
 End Function
 
+' Plan 27.001 (05.002 wave 7). SINGLE predicate for "the party protects these two". Every damage
+' gate used to carry its own copy of the party condition, and all of them exempted BEFORE looking
+' at the duel, the event or the arena: two rivals who grouped inside were mutually invulnerable
+' (in a 1v1 duel that forced a clock draw, and a draw moves ELO).
+' There are THREE different rules on purpose; a single rule breaks one of them:
+'  - DUEL: the party protects ONLY the real teammate (same SalaReto AND same EquipoReto). Ignoring
+'    the party altogether would enable friendly fire in a 2v2, which does not exist today: duels
+'    do not use CurrentTeam, so the party is their only protection.
+'  - EVENT: the scenario team decides. Ignoring the party is not enough either: in the FFA
+'    DeathMatch CurrentTeam is 0 for EVERYONE (SortTeams does not run with TeamSize = -1) and the
+'    CTF maps 275/277 have FriendlyFire = True, so the team check further down is inert.
+'  - OUTSIDE duel and event: historical behavior, unchanged.
+Public Function GrupoProtege(ByVal UserA As Integer, ByVal UserB As Integer) As Boolean
+    On Error GoTo GrupoProtege_Err
+    Dim mismoGrupo As Boolean
+    GrupoProtege = False
+    mismoGrupo = False
+    If UserA <= 0 Or UserB <= 0 Then Exit Function
+    mismoGrupo = (UserList(UserA).Grupo.Id > 0 And UserList(UserA).Grupo.Id = UserList(UserB).Grupo.Id)
+    If Not mismoGrupo Then Exit Function
+    If UserList(UserA).flags.EnReto Or UserList(UserB).flags.EnReto Then
+        If Not (UserList(UserA).flags.EnReto And UserList(UserB).flags.EnReto) Then Exit Function
+        If UserList(UserA).flags.SalaReto <> UserList(UserB).flags.SalaReto Then Exit Function
+        If UserList(UserA).flags.EquipoReto <> UserList(UserB).flags.EquipoReto Then Exit Function
+        GrupoProtege = True
+        Exit Function
+    End If
+    If CustomScenarios.IsUserInScenarioMap(UserA) Or CustomScenarios.IsUserInScenarioMap(UserB) Then
+        GrupoProtege = (UserList(UserA).flags.CurrentTeam > 0 And UserList(UserA).flags.CurrentTeam = UserList(UserB).flags.CurrentTeam)
+        Exit Function
+    End If
+    GrupoProtege = True
+    Exit Function
+GrupoProtege_Err:
+    Call TraceError(Err.Number, Err.Description, "UserMod.GrupoProtege", Erl)
+    ' On error keep the historical behavior (the party protects) so friendly fire is not enabled
+    ' by surprise. mismoGrupo is still False if the error hit before the membership was resolved,
+    ' so two strangers can never be protected.
+    GrupoProtege = mismoGrupo
+End Function
+
+' "These two share a party but are on opposite sides of the same agreed fight". It is the filter
+' for the information leaks of the party (radar, location on every step, chat). Outside events and
+' duels it ALWAYS returns False, so the party of the open world does not change at all.
+Public Function GrupoCruzaBandos(ByVal UserA As Integer, ByVal UserB As Integer) As Boolean
+    On Error GoTo GrupoCruzaBandos_Err
+    GrupoCruzaBandos = False
+    If UserA <= 0 Or UserB <= 0 Then Exit Function
+    If UserList(UserA).Grupo.Id <= 0 Then Exit Function
+    If UserList(UserA).Grupo.Id <> UserList(UserB).Grupo.Id Then Exit Function
+    If Not CustomScenarios.IsUserInMatch(UserA) Then Exit Function
+    If Not CustomScenarios.IsUserInMatch(UserB) Then Exit Function
+    If Not (UserList(UserA).flags.EnReto Or UserList(UserB).flags.EnReto) Then
+        ' Without teams dealt (cooperative hunt, FFA DeathMatch, CTF waiting room before the draw)
+        ' CurrentTeam is 0 for EVERYONE: there are no sides to cross and the party is the only
+        ' structure they have. Cutting radar, location and chat there would break the only
+        ' cooperative mode. This guard lives ONLY here: information is cut by ASSIGNED side,
+        ' damage is resolved by side (GrupoProtege).
+        If UserList(UserA).flags.CurrentTeam = 0 And UserList(UserB).flags.CurrentTeam = 0 Then Exit Function
+    End If
+    GrupoCruzaBandos = Not GrupoProtege(UserA, UserB)
+    Exit Function
+GrupoCruzaBandos_Err:
+    Call TraceError(Err.Number, Err.Description, "UserMod.GrupoCruzaBandos", Erl)
+    GrupoCruzaBandos = False
+End Function
+
 Public Function CanAttackUser(ByVal attackerIndex As Integer, _
                               ByVal AttackerVersionID As Integer, _
                               ByVal TargetIndex As Integer, _
@@ -2945,7 +3030,9 @@ Public Function CanAttackUser(ByVal attackerIndex As Integer, _
             Exit Function
         End If
     End If
-    If UserList(attackerIndex).Grupo.Id > 0 And UserList(TargetIndex).Grupo.Id > 0 And UserList(attackerIndex).Grupo.Id = UserList(TargetIndex).Grupo.Id Then
+    ' Plan 27.001 (05.002 wave 7): twin of the SistemaCombate.PuedeAtacar gate. This one covers
+    ' position AoE, DoTs, provoke and the generic UserCanAttack used by the scenario classes.
+    If GrupoProtege(attackerIndex, TargetIndex) Then
         CanAttackUser = eSameGroup
         Exit Function
     End If

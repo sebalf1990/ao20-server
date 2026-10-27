@@ -33,6 +33,16 @@ Option Explicit
 'destino: receptor de la transaccion
 Public Function IniciarComercioConUsuario(ByVal Origen As Integer, ByVal Destino As Integer) As Boolean
     On Error GoTo ErrHandler
+    ' Plan 27.001 (05.002 wave 7): secure trade has TWO doors. HandleCommerceStart validates the
+    ' request, but the acceptance (HandleResponderPregunta Case 4) enters here without revalidating
+    ' anything: one could ask in town, leave the question unanswered, enter the event or duel and
+    ' accept there. This is the choke point of both paths, so the gate lives here.
+    If CustomScenarios.IsUserInMatch(Origen) Or CustomScenarios.IsUserInMatch(Destino) Then
+        Call FinComerciarUsu(Origen, True)
+        Call FinComerciarUsu(Destino, True)
+        IniciarComercioConUsuario = False
+        Exit Function
+    End If
     'Si ambos pusieron /comerciar entonces
     If UserList(Origen).ComUsu.DestUsu.ArrayIndex = Destino And UserList(Destino).ComUsu.DestUsu.ArrayIndex = Origen Then
         If UserList(Origen).pos.Map <> UserList(Destino).pos.Map Then

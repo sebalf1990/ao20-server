@@ -470,6 +470,41 @@ Public Function IsEventActive() As Boolean
     IsEventActive = (ModLobby.ActiveEventType() <> ModLobby.NO_ACTIVE_EVENT)
 End Function
 
+' Plan 27.001 (05.002 wave 7): "the map this player stands on belongs to a scenario".
+' Deliberately NOT map numbers: EsMapaEvento() is a static list from MapasEspeciales.dat and events
+' run on instances with a runtime-assigned number, so a gate based on it is blind for 3 of 4 modes.
+' Not MapInfo(...).Seguro either: scenarios toggle it per phase (1 -> 0 -> 1) and the gate would
+' blink. The per-map registry is how the engine already routes death, flags and NPCs.
+Public Function IsUserInScenarioMap(ByVal UserIndex As Integer) As Boolean
+    On Error GoTo IsUserInScenarioMap_Err
+    IsUserInScenarioMap = False
+    If UserIndex <= 0 Then Exit Function
+    IsUserInScenarioMap = Not (GetMap(UserList(UserIndex).pos.Map) Is Nothing)
+    Exit Function
+IsUserInScenarioMap_Err:
+    Call TraceError(Err.Number, Err.Description, "CustomScenarios.IsUserInScenarioMap", Erl)
+    IsUserInScenarioMap = False
+End Function
+
+' Duel = per-user flag (a duel does not live in a scenario). Event = the map the player stands on.
+' The handler returns False on purpose: this is a gameplay restriction, not a security boundary. If
+' something blows up it is preferable to let people work or trade than to lock the whole server's
+' professions. The error is logged anyway.
+Public Function IsUserInMatch(ByVal UserIndex As Integer) As Boolean
+    On Error GoTo IsUserInMatch_Err
+    IsUserInMatch = False
+    If UserIndex <= 0 Then Exit Function
+    If UserList(UserIndex).flags.EnReto Then
+        IsUserInMatch = True
+        Exit Function
+    End If
+    IsUserInMatch = IsUserInScenarioMap(UserIndex)
+    Exit Function
+IsUserInMatch_Err:
+    Call TraceError(Err.Number, Err.Description, "CustomScenarios.IsUserInMatch", Erl)
+    IsUserInMatch = False
+End Function
+
 Public Sub UserDisconnected(ByVal UserIndex As Integer)
     Call RegisterDisconnectedUser(UserIndex)
 End Sub

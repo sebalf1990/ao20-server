@@ -1064,6 +1064,13 @@ Public Sub HerreroConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As I
     On Error GoTo HerreroConstruirItem_Err
     If Not IntervaloPermiteTrabajarConstruir(UserIndex) Then Exit Sub
     ' Plan 04.001: gate de ejecucion — eCraftBlacksmith llegaba directo sin validar profesion.
+    ' Plan 27.001 (05.002 wave 7): the 4 crafts had NO position, map or event gate. The gate lives
+    ' here and not in the handler so it also covers the server timer path.
+    If CustomScenarios.IsUserInMatch(UserIndex) And Not EsGM(UserIndex) Then
+        ' Msg702=Accion no permitida.
+        Call WriteLocaleMsg(UserIndex, MSG_NO_ACCION_PERMITIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+        Exit Sub
+    End If
     If Not TieneProfesionAprendida(UserIndex, e_Skill.Herreria) Then
         Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_ECONOMY, e_FontTypeNames.FONTTYPE_INFO)
         Exit Sub
@@ -1177,6 +1184,16 @@ Public Sub CarpinteroConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex A
     On Error GoTo CarpinteroConstruirItem_Err
     If Not IntervaloPermiteTrabajarConstruir(UserIndex) Then Exit Sub
     ' Plan 04.001: gate de ejecucion, no solo al equipar la herramienta.
+    ' Plan 27.001 (05.002 wave 7): carpentry crafts in the server timer (t_Extraer_Timer -> Trabajar),
+    ' so an order started in town kept producing after the player was summoned. The macro is also
+    ' cut, otherwise the player stays flagged as "working" and the timer keeps visiting him.
+    If CustomScenarios.IsUserInMatch(UserIndex) And Not EsGM(UserIndex) Then
+        ' Msg702=Accion no permitida.
+        Call WriteLocaleMsg(UserIndex, MSG_NO_ACCION_PERMITIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteMacroTrabajoToggle(UserIndex, False)
+        UserList(UserIndex).Counters.Trabajando = 0
+        Exit Sub
+    End If
     If Not TieneProfesionAprendida(UserIndex, e_Skill.Carpinteria) Then
         Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         Exit Sub
@@ -1250,6 +1267,14 @@ End Sub
 Public Sub AlquimistaConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As Integer)
     On Error GoTo AlquimistaConstruirItem_Err
     ' Plan 04.001: gate de ejecucion, no solo al equipar la herramienta.
+    ' Plan 27.001 (05.002 wave 7): no working inside a duel or an event. It goes at the top, next to
+    ' the profession gate: this Sub's error handler ends in Resume Next, so an Exit Sub placed among
+    ' the bounds checks below could be skipped.
+    If CustomScenarios.IsUserInMatch(UserIndex) And Not EsGM(UserIndex) Then
+        ' Msg702=Accion no permitida.
+        Call WriteLocaleMsg(UserIndex, MSG_NO_ACCION_PERMITIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+        Exit Sub
+    End If
     If Not TieneProfesionAprendida(UserIndex, e_Skill.Alquimia) Then
         Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         Exit Sub
@@ -1328,6 +1353,12 @@ Public Sub SastreConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As In
     On Error GoTo SastreConstruirItem_Err
     If Not IntervaloPermiteTrabajarConstruir(UserIndex) Then Exit Sub
     ' Plan 04.001: gate de ejecucion, no solo al equipar la herramienta.
+    ' Plan 27.001 (05.002 wave 7): no working inside a duel or an event (4th and last twin copy).
+    If CustomScenarios.IsUserInMatch(UserIndex) And Not EsGM(UserIndex) Then
+        ' Msg702=Accion no permitida.
+        Call WriteLocaleMsg(UserIndex, MSG_NO_ACCION_PERMITIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+        Exit Sub
+    End If
     If Not TieneProfesionAprendida(UserIndex, e_Skill.Sastreria) Then
         Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         Exit Sub

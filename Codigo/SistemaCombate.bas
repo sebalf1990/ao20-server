@@ -1634,7 +1634,9 @@ Public Function PuedeAtacar(ByVal attackerIndex As Integer, ByVal VictimIndex As
         PuedeAtacar = False
         Exit Function
     End If
-    If UserList(attackerIndex).Grupo.Id > 0 And UserList(VictimIndex).Grupo.Id > 0 And UserList(attackerIndex).Grupo.Id = UserList(VictimIndex).Grupo.Id Then
+    ' Plan 27.001 (05.002 wave 7): this used to exempt any shared party BEFORE looking at duel or
+    ' event, so rivals who grouped inside could not hit each other. GrupoProtege decides by SIDE.
+    If UserMod.GrupoProtege(attackerIndex, VictimIndex) Then
         'Msg1046= No podés atacar a un miembro de tu grupo.
         Call WriteLocaleMsg(attackerIndex, MSG_NO_PODES_ATACAR_A_UN_MIEMBRO_DE_TU_GRUPO, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
         PuedeAtacar = False

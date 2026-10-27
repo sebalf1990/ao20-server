@@ -263,7 +263,11 @@ Private Function CollectRadarPartyMembers(ByVal ObserverIndex As Integer, ByRef 
     Dim px As Byte, py As Byte
     For i = 1 To cantidad
         memberIndex = UserList(leaderIndex).Grupo.Miembros(i).ArrayIndex
-        If memberIndex > 0 And memberIndex <> ObserverIndex Then
+        ' Plan 27.001 (05.002 wave 7): the party radar showed the exact position of a rival who
+        ' shares a party inside an event or duel. GrupoCruzaBandos is False outside events.
+        ' IsInObserverParty is NOT touched on purpose: it keeps returning True for the member hidden
+        ' here, which is what stops CollectRadarClanMembers from showing him through the clan radar.
+        If memberIndex > 0 And memberIndex <> ObserverIndex And Not UserMod.GrupoCruzaBandos(ObserverIndex, memberIndex) Then
             If UserList(memberIndex).flags.UserLogged Then
                 If UserList(memberIndex).pos.Map = userMap Then
                     Dim hidden As Boolean

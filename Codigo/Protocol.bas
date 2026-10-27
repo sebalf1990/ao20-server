@@ -4837,9 +4837,16 @@ Private Sub HandleGrupoMsg(ByVal UserIndex As Integer)
         If LenB(chat) <> 0 Then
             If .Grupo.EnGrupo = True Then
                 Dim i As Byte
+                Dim destinoIndex As Integer
                 For i = 1 To UserList(.Grupo.Lider.ArrayIndex).Grupo.CantidadMiembros
-                    Call WriteConsoleMsg(UserList(.Grupo.Lider.ArrayIndex).Grupo.Miembros(i).ArrayIndex, GetUserDisplayName(UserIndex) & "> " & chat, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Amarillo_Verdoso)
-                    Call WriteChatOverHead(UserList(.Grupo.Lider.ArrayIndex).Grupo.Miembros(i).ArrayIndex, "NOCONSOLA*" & chat, UserList(UserIndex).Char.charindex, &HFF8000)
+                    destinoIndex = UserList(.Grupo.Lider.ArrayIndex).Grupo.Miembros(i).ArrayIndex
+                    ' Plan 27.001 (05.002 wave 7): party chat was a private channel that crossed teams
+                    ' inside the event. The grouped rival no longer hears it. The > 0 guard also avoids
+                    ' writing to slot 0 if a dangling member is left.
+                    If destinoIndex > 0 And Not UserMod.GrupoCruzaBandos(UserIndex, destinoIndex) Then
+                        Call WriteConsoleMsg(destinoIndex, GetUserDisplayName(UserIndex) & "> " & chat, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Amarillo_Verdoso)
+                        Call WriteChatOverHead(destinoIndex, "NOCONSOLA*" & chat, UserList(UserIndex).Char.charindex, &HFF8000)
+                    End If
                 Next i
             Else
                 ' Msg758=Grupo> No estas en ningun grupo.
@@ -5141,6 +5148,17 @@ Private Sub HandleCommerceStart(ByVal UserIndex As Integer)
             If .pos.Map <> UserList(.flags.TargetUser.ArrayIndex).pos.Map Or Distancia(UserList(.flags.TargetUser.ArrayIndex).pos, .pos) > 3 Then
                 Call FinComerciarUsu(.flags.TargetUser.ArrayIndex, True)
                 Call WriteLocaleMsg(UserIndex, MSG_SACERDOTE_PUEDE_CURARTE_DEBIDO_DEMASIADO_LEJOS, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
+                Exit Sub
+            End If
+            ' Plan 27.001 (05.002 wave 7): the check below demands a SAFE map, so it was INVERTED for
+            ' this purpose. The duel rooms, the whole hunt, the DeathMatch waiting room and the CTF
+            ' hall are Seguro = 1, so the old gate let everything through: two duelists side by side
+            ' passed gold and items without leaving the room. Player state beats map state; Seguro is
+            ' not used as the new criterion because scenarios toggle it per phase.
+            If CustomScenarios.IsUserInMatch(UserIndex) Or CustomScenarios.IsUserInMatch(.flags.TargetUser.ArrayIndex) Then
+                Call FinComerciarUsu(.flags.TargetUser.ArrayIndex, True)
+                Call FinComerciarUsu(UserIndex, True)
+                Call WriteLocaleMsg(UserIndex, MSG_NO_PODES_COMERCIAR_USUARIO_MOMENTO, e_TextChannel.TEXTCHANNEL_ECONOMY, e_FontTypeNames.FONTTYPE_New_Naranja)
                 Exit Sub
             End If
             'Check if map is not safe
@@ -8715,6 +8733,15 @@ Public Function HandleStartAutomatedAction(ByVal UserIndex As Integer)
     x = reader.ReadInt8()
     y = reader.ReadInt8()
     skill = reader.ReadInt8()
+    ' Plan 27.001 (05.002 wave 7): no working inside a duel or an event (staff bypass).
+    ' VERIFIED TRAP: the gate does NOT go in HandleWorkLeftClick Case Talar / Case Mineria. There it
+    ' stays inert, because Trabajar() has a Select Case with a single Case (Carpinteria). Real
+    ' chopping and mining run through here (StartAutomatedAction -> RunAutomatedActions).
+    If CustomScenarios.IsUserInMatch(UserIndex) And Not EsGM(UserIndex) Then
+        ' Msg702=Accion no permitida.
+        Call WriteLocaleMsg(UserIndex, MSG_NO_ACCION_PERMITIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+        Exit Function
+    End If
     'Gating profesiones aprendibles para acciones automatizadas (espejo de HandleWork)
     If IsFeatureEnabled("professions_learnable") Then
         If skill = e_Skill.Pescar Or skill = e_Skill.Talar Or skill = e_Skill.Mineria Then

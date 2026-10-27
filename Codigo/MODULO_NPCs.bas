@@ -2276,7 +2276,9 @@ Public Function UserCanAttackNpc(ByVal UserIndex As Integer, ByVal NpcIndex As I
         End If
     End If
     If IsPet Then
-        If UserList(NpcList(NpcIndex).MaestroUser.ArrayIndex).Grupo.Id = UserList(UserIndex).Grupo.Id And UserList(UserIndex).Grupo.Id > 0 Then
+        ' Plan 27.001 (05.002 wave 7): third copy of the same hole. It must be compared against the
+        ' OWNER, who has a side; the IsPet above already guarantees MaestroUser is a live reference.
+        If UserMod.GrupoProtege(NpcList(NpcIndex).MaestroUser.ArrayIndex, UserIndex) Then
             UserCanAttackNpc.Result = eSameGroup
             Exit Function
         End If

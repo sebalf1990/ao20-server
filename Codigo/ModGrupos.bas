@@ -451,7 +451,10 @@ Public Sub CompartirUbicacion(ByVal UserIndex As Integer)
         Next a
         For i = 1 To Lider.Grupo.CantidadMiembros
             If Lider.Grupo.Miembros(i).ArrayIndex <> UserIndex Then
-                If UserList(Lider.Grupo.Miembros(i).ArrayIndex).pos.Map = .pos.Map Then
+                ' Plan 27.001 (05.002 wave 7): this leaked the teammate position on EVERY step. Same
+                ' leak as the radar through another channel. When the sides cross it falls to the Else
+                ' below, which already sends location 0 ("I do not know where he is").
+                If UserList(Lider.Grupo.Miembros(i).ArrayIndex).pos.Map = .pos.Map And Not UserMod.GrupoCruzaBandos(UserIndex, Lider.Grupo.Miembros(i).ArrayIndex) Then
                     Call WriteUbicacion(Lider.Grupo.Miembros(i).ArrayIndex, indexpj, UserIndex)
                     'Si va al mapa del compañero
                     Call WriteUbicacion(UserIndex, i, Lider.Grupo.Miembros(i).ArrayIndex)

@@ -3502,7 +3502,10 @@ Public Sub ResurrectWithItem(ByVal UserIndex As Integer)
             Exit Sub
         End If
         If CanHelpResult <> eInteractionOk Then
+            ' Plan 27.001 (05.002 wave 7): the Exit Sub was missing. The refusal was sent and the
+            ' flow went on to ResurrectUser: the player was told he could not, and revived anyway.
             Call SendHelpInteractionMessage(UserIndex, CanHelpResult)
+            Exit Sub
         End If
         Dim costoVidaResu As Long
         costoVidaResu = UserList(TargetUser).Stats.ELV * 1.5 + .Stats.MinHp * 0.5
