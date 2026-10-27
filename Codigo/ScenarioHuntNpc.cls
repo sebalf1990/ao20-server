@@ -89,6 +89,8 @@ End Sub
 
 Private Sub Class_Initialize()
     On Error GoTo Hunt_Initialize_Err:
+    ' Plan 27.001: prime the frame clock; Update runs before StartGame and 0 would overflow.
+    LastFrameTime = GetTickCountRaw()
     Dim validNpcCount As Integer
     Dim ScenarioIni   As clsIniManager
     Set ScenarioIni = New clsIniManager
@@ -298,7 +300,7 @@ Private Sub IBaseScenario_Update()
     Dim nowRaw    As Long
     Dim frametime As Long
     nowRaw = GetTickCountRaw()
-    frametime = CLng(TicksElapsed(LastFrameTime, nowRaw))
+    frametime = TicksElapsedLong(LastFrameTime, nowRaw)
     LastFrameTime = nowRaw
     If LobbyList(LobbyIndex).State = e_LobbyState.InProgress Then
         If StartTimer.Occurrences < 10 Then

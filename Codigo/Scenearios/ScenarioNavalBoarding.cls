@@ -143,6 +143,8 @@ Dim LobbyIndex           As Integer
 
 Friend Sub Class_Initialize()
     On Error GoTo NavalBoarding_Initialize_Err:
+    ' Plan 27.001: prime the frame clock; Update runs before StartGame and 0 would overflow.
+    LastFrameTime = GetTickCountRaw()
     Debug.Assert FileExist(DatPath & configPath)
     Dim ScenarioIni     As clsIniManager
     Dim WpCount         As Byte
@@ -576,7 +578,7 @@ Public Sub IBaseScenario_Update()
     Dim nowRaw    As Long
     Dim frametime As Long
     nowRaw = GetTickCountRaw()
-    frametime = CLng(TicksElapsed(LastFrameTime, nowRaw))
+    frametime = TicksElapsedLong(LastFrameTime, nowRaw)
     LastFrameTime = nowRaw
     If LobbyList(LobbyIndex).State = e_LobbyState.InProgress Then
         If CountdownTimer.Occurrences < 10 Then

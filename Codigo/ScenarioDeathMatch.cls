@@ -100,6 +100,8 @@ Dim m_Closed                   As Boolean
 Private Sub Class_Initialize()
     On Error GoTo DeathMatch_Initialize_Err:
     m_Closed = False
+    ' Plan 27.001: prime the frame clock; Update runs before StartGame and 0 would overflow.
+    LastFrameTime = GetTickCountRaw()
     Debug.Assert FileExist(DatPath & configPath)
     Dim ScenarioIni As clsIniManager
     Dim OriginalMap As Integer
@@ -493,7 +495,7 @@ Public Sub IBaseScenario_Update()
     Dim nowRaw    As Long
     Dim frametime As Long
     nowRaw = GetTickCountRaw()
-    frametime = CLng(TicksElapsed(LastFrameTime, nowRaw))
+    frametime = TicksElapsedLong(LastFrameTime, nowRaw)
     LastFrameTime = nowRaw
     If LobbyList(LobbyIndex).State = e_LobbyState.InProgress Then
         If CountdownTimer.Occurrences < 10 Then

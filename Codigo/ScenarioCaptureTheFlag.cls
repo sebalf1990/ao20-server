@@ -252,7 +252,7 @@ Private Sub IBaseScenario_Update()
     Dim nowRaw    As Long
     Dim frametime As Long
     nowRaw = GetTickCountRaw()
-    frametime = CLng(TicksElapsed(LastFrameTime, nowRaw))
+    frametime = TicksElapsedLong(LastFrameTime, nowRaw)
     LastFrameTime = nowRaw
     ' Death queue at engine pace (40 ms) so the warp to the waiting room feels immediate.
     If MuertesPendientes > 0 Then Call ProcesarMuertesPendientes

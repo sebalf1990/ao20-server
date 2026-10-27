@@ -147,6 +147,19 @@ Public Function TicksElapsed(ByVal startTick As Long, ByVal currentTick As Long)
     TicksElapsed = elapsed
 End Function
 
+' Plan 27.001: same as TicksElapsed but saturated to the Long range. CLng() of a Double above
+' 2^31-1 raises error 6 (Overflow); a scenario clock that was never primed (start tick 0) yields
+' milliseconds-since-boot, which passes 2^31 after 24.8 days of Windows uptime.
+Public Function TicksElapsedLong(ByVal startTick As Long, ByVal currentTick As Long) As Long
+    Dim elapsed As Double
+    elapsed = TicksElapsed(startTick, currentTick)
+    If elapsed > 2147483647# Then
+        TicksElapsedLong = 2147483647
+    Else
+        TicksElapsedLong = CLng(elapsed)
+    End If
+End Function
+
 Public Function TickAfter(ByVal a As Long, ByVal b As Long) As Boolean
     ' Modular timestamp ordering is only unambiguous for intervals under 2^31 ms.
     TickAfter = (TicksElapsed(b, a) < HALF_TICKS32)
