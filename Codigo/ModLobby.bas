@@ -994,6 +994,22 @@ Public Sub StartLobby(ByRef instance As t_Lobby, ByVal UserIndex As Integer)
         If UserIndex >= 0 Then Call WriteConsoleMsg(UserIndex, "The event is not open for registration yet.", e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos)
         Exit Sub
     End If
+    ' Plan 27.001 (port of 05.002 wave 5): minimum players for a MANUAL start. /lobby startevent
+    ' went straight to InProgress with 0 or 1 registered. Without a clock (CTF) or with the mode
+    ' clock burning, that leaves a lobby nobody ends and ActiveEventType() blocks every later
+    ' public event. The floor of 2 is the same ValidateLobbySettings enforces on creation.
+    ' Only the GM path (UserIndex >= 0) is gated: the automatic one (UserIndex < 0) already
+    ' decides by its own rules (UpdateWaitingForPlayers checks MinPlayers or a full lobby), and
+    ' blocking it here silently would leave the lobby retrying every tick without ever cancelling.
+    If UserIndex >= 0 Then
+        Dim RequiredPlayers As Integer
+        RequiredPlayers = instance.MinPlayers
+        If RequiredPlayers < 2 Then RequiredPlayers = 2
+        If instance.RegisteredPlayers < RequiredPlayers Then
+            Call WriteConsoleMsg(UserIndex, "Cannot start: " & instance.RegisteredPlayers & " registered and " & RequiredPlayers & " needed.", e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos)
+            Exit Sub
+        End If
+    End If
     If (instance.TeamSize > 1 Or instance.TeamType = eFixedTeamCount) And instance.TeamType = eRandom Then
         Call SortTeams(instance)
     End If
