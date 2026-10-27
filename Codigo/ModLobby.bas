@@ -298,6 +298,12 @@ Private Sub ClearUserSocket(ByRef instance As t_Lobby, ByVal Index As Integer)
     instance.Players(i).IsSummoned = False
     instance.Players(i).ReturnOnReconnect = False
     instance.Players(i).team = -1
+    ' Plan 27.001 (05.002 wave 5/7): the slot is REUSED. Without clearing the origin, the guard in
+    ' SummonPlayer (`.SummonedFrom.Map = 0`) is false for the next occupant and ReturnPlayer sends
+    ' him back to the previous player's spot.
+    instance.Players(i).SummonedFrom.Map = 0
+    instance.Players(i).SummonedFrom.x = 0
+    instance.Players(i).SummonedFrom.y = 0
     Call ClearUserRef(instance.Players(i).User)
     instance.Players(i).UserId = 0
     instance.RegisteredPlayers = instance.RegisteredPlayers - 1
@@ -483,6 +489,16 @@ Public Sub SummonPlayer(ByRef instance As t_Lobby, ByVal User As Integer)
         If Not .IsSummoned And .SummonedFrom.Map = 0 Then
             .SummonedFrom = UserList(.User.ArrayIndex).pos
         End If
+        ' Plan 27.001 (05.002 wave 7): ReturnPlayer clears CurrentTeam but SummonPlayer did not
+        ' restore it, so /lobby returnplayer + summonsingleplayer put the player back into the event
+        ' with team 0 (outside the CTF respawn queue, flag never dropped on death, friendly fire
+        ' reaching him). RegisterReconnectedUserOnLobby already did this by hand. Compared
+        ' explicitly: .team is Integer (-1 after ClearUserSocket) and flags.CurrentTeam is Byte.
+        If .team > 0 And .team < 256 Then
+            UserList(.User.ArrayIndex).flags.CurrentTeam = CByte(.team)
+        Else
+            UserList(.User.ArrayIndex).flags.CurrentTeam = 0
+        End If
         If Not instance.Scenario Is Nothing Then
             Call instance.Scenario.WillSummonPlayer(.User.ArrayIndex)
         End If
@@ -512,10 +528,14 @@ Public Sub ReturnPlayer(ByRef instance As t_Lobby, ByVal User As Integer)
             Call LogUserRefError(.User, "ReturnPlayer")
             Exit Sub
         End If
+        ' Plan 27.001 (05.002 wave 7): the Exit Sub below used to hide the team cleanup. If
+        ' SummonPlayer failed midway the player kept the CurrentTeam AddPlayer wrote and no lobby
+        ' close cleared it (CanHelpUser then refuses to let him help anyone until he logs out).
+        ' The team is player state, not warp state.
+        UserList(.User.ArrayIndex).flags.CurrentTeam = 0
         If Not .IsSummoned Then
             Exit Sub
         End If
-        UserList(.User.ArrayIndex).flags.CurrentTeam = 0
         Call WarpToLegalPos(.User.ArrayIndex, .SummonedFrom.Map, .SummonedFrom.x, .SummonedFrom.y, True, True)
         .IsSummoned = False
     End With
@@ -898,8 +918,12 @@ End Sub
 
 Public Sub RegisterReconnectedUser(ByVal DisconnectedUserIndex As Integer)
     Dim i As Integer
+    ' Plan 27.001 (05.002 wave 4/7, row 4.07): it iterated LobbyList(i) instead of
+    ' LobbyList(ActiveLobby.IndexInfo(i)), i.e. the first N pool slots and not the N active lobbies
+    ' (same bug wave 2 fixed in the disconnect path). A reconnected player was never relinked, so
+    ' the refund of his bet reached nobody.
     For i = 0 To ActiveLobby.currentIndex
-        Call RegisterReconnectedUserOnLobby(LobbyList(i), DisconnectedUserIndex)
+        Call RegisterReconnectedUserOnLobby(LobbyList(ActiveLobby.IndexInfo(i)), DisconnectedUserIndex)
     Next i
 End Sub
 
