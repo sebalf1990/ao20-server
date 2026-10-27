@@ -40,6 +40,9 @@ End Type
 
 Public Retos          As t_Retos
 Private ListaDeEspera As New Dictionary
+' Sala -> clave del enfrentamiento registrado en IniciarReto (solo si se registro uno).
+' Permite deshacer el registro si el reto se cancela en la cuenta regresiva.
+Private ClavesSalas As New Dictionary
 Private HistorialRetos(0 To MAX_HISTORIAL_RETOS - 1) As t_HistorialReto
 
 Public Sub CargarInfoRetos()
@@ -389,7 +392,11 @@ Private Sub IniciarReto(ByVal Oferente As Integer, ByVal Sala As Integer)
         If .TamañoInicialDer > 0 Then .EloPromedioDer = EloSumaDer \ CLng(.TamañoInicialDer)
         ' Recien aca se registra el enfrentamiento para el enfriamiento: una solicitud que
         ' se cancela o que nunca arranca no gasta uno de los retos permitidos.
-        If .EloHabilitado Then Call RegistrarEnfrentamiento(ClaveEnfrentamiento(Oferente))
+        If ClavesSalas.Exists(Sala) Then Call ClavesSalas.Remove(Sala)
+        If .EloHabilitado Then
+            ClavesSalas.Add Sala, ClaveEnfrentamiento(Oferente)
+            Call RegistrarEnfrentamiento(ClavesSalas.Item(Sala))
+        End If
         Dim tUser As t_UserReference
         For i = 0 To UBound(.Jugadores)
             tUser = .Jugadores(i)
@@ -799,10 +806,12 @@ ErrHandler:
 End Sub
 
 Public Sub AbandonarReto(ByVal UserIndex As Integer, Optional ByVal Desconexion As Boolean)
-    Dim Sala As Integer, Equipo As e_EquipoReto
+    Dim Sala As Integer, Equipo As e_EquipoReto, EnConteo As Boolean
     With UserList(UserIndex)
         Sala = .flags.SalaReto
         Equipo = .flags.EquipoReto
+        ' Cuenta regresiva activa = la ronda todavia no empezo (llega a 0 con el "YA!").
+        EnConteo = (.Counters.CuentaRegresiva > 0)
         .Counters.CuentaRegresiva = -1
         .flags.EnReto = False
     End With
@@ -827,6 +836,13 @@ Public Sub AbandonarReto(ByVal UserIndex As Integer, Optional ByVal Desconexion 
                     If .TamañoEquipoDer <= 0 Then Call TerminarTiempoAgarrarItems(Sala)
                 End If
             End If
+            Exit Sub
+        End If
+        ' Plan 27.001 ola 6: irse durante la cuenta regresiva de la PRIMERA ronda cancela el
+        ' reto sin tocar el ELO y devuelve la apuesta a cada uno. Despues de empezar, paga el
+        ' que se va (rama de abajo).
+        If EnConteo And Not .Finalizado And .Ronda = 1 And .Puntaje = 0 Then
+            Call CancelarRetoEnConteo(Sala, UserIndex, Desconexion)
             Exit Sub
         End If
         ' El que se va paga la derrota, y se le cobra ACA, antes de cualquier bifurcacion:
@@ -873,6 +889,48 @@ Public Sub AbandonarReto(ByVal UserIndex As Integer, Optional ByVal Desconexion 
             End If
         Next
     End With
+End Sub
+
+' Cancela el reto de la sala durante la cuenta regresiva: sin ELO, sin ganador, cada jugador
+' recupera exactamente su apuesta (sin impuesto) y el enfrentamiento no cuenta para el
+' enfriamiento. Se libera la sala AL FINAL: SalaLiberada puede arrancar el reto de la cola
+' y pisar .Jugadores.
+Private Sub CancelarRetoEnConteo(ByVal Sala As Integer, ByVal Abandona As Integer, ByVal Desconexion As Boolean)
+    On Error GoTo ErrHandler
+    Dim i As Integer, Idx As Integer, texto As String
+    With Retos.Salas(Sala)
+        ' Mismo guard que FinalizarReto: la apuesta se devuelve una sola vez.
+        If .Finalizado Then Exit Sub
+        .Finalizado = True
+        If Desconexion Then
+            texto = "El reto fue cancelado: " & UserList(Abandona).name & " se desconecto antes de empezar."
+        Else
+            texto = "El reto fue cancelado: " & UserList(Abandona).name & " se fue antes de empezar."
+        End If
+        For i = 0 To UBound(.Jugadores)
+            If IsValidUserRef(.Jugadores(i)) Then
+                Idx = .Jugadores(i).ArrayIndex
+                UserList(Idx).Stats.GLD = UserList(Idx).Stats.GLD + .Apuesta
+                Call WriteUpdateGold(Idx)
+                Call RevivirYLimpiar(Idx)
+                UserList(Idx).Counters.CuentaRegresiva = -1
+                UserList(Idx).flags.EnReto = False
+                Call DevolverPosAnterior(Idx)
+                If Not (Desconexion And Idx = Abandona) Then
+                    Call WriteConsoleMsg(Idx, texto, e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos)
+                End If
+            End If
+        Next i
+        If ClavesSalas.Exists(Sala) Then
+            Call DeshacerEnfrentamiento(ClavesSalas.Item(Sala))
+            Call ClavesSalas.Remove(Sala)
+        End If
+    End With
+    Call SalaLiberada(Sala)
+    Exit Sub
+ErrHandler:
+    Call TraceError(Err.Number, Err.Description, "ModRetos.CancelarRetoEnConteo", Erl)
+    Call SalaLiberada(Sala)
 End Sub
 
 Private Sub SalaLiberada(ByVal Sala As Integer)
@@ -1266,6 +1324,23 @@ Private Sub RegistrarEnfrentamiento(ByVal Clave As String)
     HistorialRetos(Libre).Clave = Clave
     HistorialRetos(Libre).Repeticiones = 1
     HistorialRetos(Libre).UltimoTick = Ahora
+End Sub
+
+' Deshace UN registro de RegistrarEnfrentamiento (reto cancelado antes de empezar).
+Private Sub DeshacerEnfrentamiento(ByVal Clave As String)
+    Dim i As Integer
+    If LenB(Clave) = 0 Then Exit Sub
+    For i = 0 To MAX_HISTORIAL_RETOS - 1
+        If HistorialRetos(i).Clave = Clave Then
+            If HistorialRetos(i).Repeticiones > 1 Then
+                HistorialRetos(i).Repeticiones = HistorialRetos(i).Repeticiones - 1
+            Else
+                HistorialRetos(i).Clave = vbNullString
+                HistorialRetos(i).Repeticiones = 0
+            End If
+            Exit Sub
+        End If
+    Next i
 End Sub
 
 ' Solo tiene sentido frenar el win-trading donde hay rating en juego. Si alguno no llega al
