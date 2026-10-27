@@ -538,6 +538,15 @@ Public Sub ReturnPlayer(ByRef instance As t_Lobby, ByVal User As Integer)
         ' SummonPlayer failed midway the player kept the CurrentTeam AddPlayer wrote and no lobby
         ' close cleared it (CanHelpUser then refuses to let him help anyone until he logs out).
         ' The team is player state, not warp state.
+        ' CTF: a carrier must drop the flag while CurrentTeam is still set (TirarBanderaDe exits
+        ' early with team 0) and leave jugando_captura clean.
+        If Not instance.Scenario Is Nothing Then
+            If TypeOf instance.Scenario Is ScenarioCaptureTheFlag Then
+                Dim ctf As ScenarioCaptureTheFlag
+                Set ctf = instance.Scenario
+                Call ctf.OnPlayerRemoved(.User.ArrayIndex)
+            End If
+        End If
         UserList(.User.ArrayIndex).flags.CurrentTeam = 0
         If Not .IsSummoned Then
             Exit Sub

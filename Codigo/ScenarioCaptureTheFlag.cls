@@ -96,6 +96,10 @@ Private MuertesPendientes                    As Integer
 ' holds the flag, so it needs its own termination rule when nobody is left.
 Private Const CAPTURA_SEGUNDOS_SIN_JUGADORES As Integer = 120
 Private SegundosSinJugadores                 As Integer
+' Watchdog for a start that failed: the lobby is InProgress but ArrancarEvento swallowed an error
+' and RoundState never left EsperandoInicio.
+Private Const CAPTURA_SEGUNDOS_ARRANQUE_MAX  As Integer = 60
+Private SegundosEsperandoInicio              As Integer
 
 Private Sub Class_Initialize()
     colorEquipo(1) = "azul"
@@ -221,10 +225,10 @@ Private Sub IBaseScenario_WillSummonPlayer(ByVal UserIndex As Integer)
     LobbyList(LobbyIndex).SummonCoordinates = SpawnPos
     UserList(UserIndex).flags.jugando_captura = 1
     UserList(UserIndex).flags.tiene_bandera = 0
-    ' NOT reset here: jugando_captura_timer / jugando_captura_muertes. This also runs on reconnect
-    ' (RegisterReconnectedUserOnLobby -> SummonPlayer), and resetting them there turned a relog
-    ' into a free wipe of the accumulated death penalty. The per-round reset lives in
-    ' IniciarRondaNueva.
+    ' jugando_captura_timer / jugando_captura_muertes are NOT touched here; the per-round reset
+    ' lives in IniciarRondaNueva. Note this also runs on reconnect, but TCP.ResetUserFlags already
+    ' zeroes the timer at login, so a relog never kept the death penalty; OnUserReconnect is the
+    ' one that re-arms the timer so a player coming back mid-round is sent to his base.
     Exit Sub
 ErrHandler:
     Call TraceError(Err.Number, Err.Description, "ScenarioCaptureTheFlag.WillSummonPlayer", Erl)
@@ -266,9 +270,18 @@ Private Sub IBaseScenario_Update()
     ' Termination watchdog. If the last player drops, TickEnJuego iterates invalid references and
     ' nothing ever happens: the lobby stays InProgress forever, the slot never goes back to the
     ' pool and ActiveEventType() keeps reporting a public event, so no other one can be opened
-    ' until a restart. The guard does NOT look at RoundState beyond Terminado on purpose: if
-    ' ArrancarEvento swallowed an error RoundState stays EsperandoInicio with the lobby already
-    ' InProgress, which is exactly one of the hung cases this exists to kill.
+    ' until a restart. This guard only covers the empty-lobby case; a start that failed with
+    ' players still connected (ArrancarEvento swallowed an error, RoundState stays EsperandoInicio
+    ' with the lobby InProgress) is covered by the separate check right below.
+    If RoundState = EsperandoInicio And LobbyList(LobbyIndex).State = e_LobbyState.InProgress Then
+        SegundosEsperandoInicio = SegundosEsperandoInicio + 1
+        If SegundosEsperandoInicio >= CAPTURA_SEGUNDOS_ARRANQUE_MAX Then
+            Call LogError("[Evento] CTF cancelled: the round did not start " & CAPTURA_SEGUNDOS_ARRANQUE_MAX & "s after the lobby went InProgress.")
+            ' Same path as the watchdog below: refund + Closed, CloseScenario releases on next tick.
+            Call ModLobby.CancelLobby(LobbyList(LobbyIndex))
+            Exit Sub
+        End If
+    End If
     If RoundState <> Terminado And LobbyList(LobbyIndex).State = e_LobbyState.InProgress Then
         If JugadoresConectados() = 0 Then
             SegundosSinJugadores = SegundosSinJugadores + 1
@@ -418,6 +431,12 @@ Private Sub IBaseScenario_OnUserReconnect(ByVal UserIndex As Integer)
     If RoundState = EnJuego Or RoundState = IniciaRonda Then
         UserList(UserIndex).flags.jugando_captura = 1
         Call EnviarUsuarioSala(UserIndex)
+        ' Mid-round the waiting room is a dead end: TickEnJuego only sends a player to his base
+        ' when jugando_captura_timer counts down to 0, and ResetUserFlags zeroed it at login.
+        ' Arm it like a death respawn (CAPTURA_TIEMPO_MUERTE) so he is returned to his base.
+        If RoundState = EnJuego Then
+            UserList(UserIndex).flags.jugando_captura_timer = CAPTURA_TIEMPO_MUERTE
+        End If
     End If
     Exit Sub
 ErrHandler:
@@ -510,6 +529,8 @@ Private Sub IniciarRondaNueva()
             Call EnviarUsuarioSala(ui)
         End If
     Next i
+    ' Players no longer hold flags: remove any flag left on the floor before restoring the two.
+    Call EliminarBanderasDelMapa
     Call RestaurarBandera(1)
     Call RestaurarBandera(2)
     Exit Sub
@@ -671,9 +692,34 @@ Private Sub LimpiarEscenario()
             UserList(ui).flags.jugando_captura_muertes = 0
         End If
     Next ui
+    Call EliminarBanderasDelMapa
     Exit Sub
 ErrHandler:
     Call TraceError(Err.Number, Err.Description, "ScenarioCaptureTheFlag.LimpiarEscenario", Erl)
+End Sub
+
+Private Sub EliminarBanderasDelMapa()
+    ' Removes every flag object (both teams) lying on the CTF maps this scenario owns: the
+    ' restored ones at the bases and the ones dropped by dead/disconnected carriers. Without it a
+    ' stray flag survives the round (duplicate flag) or the event (stray flag in the world).
+    On Error GoTo ErrHandler
+    Dim i As Integer
+    Dim x As Integer
+    Dim y As Integer
+    For i = 1 To WORLD_MAP_COUNT
+        If MapRegistered(i) Then
+            For y = YMinMapSize To YMaxMapSize
+                For x = XMinMapSize To XMaxMapSize
+                    If MapData(x, y, WorldMaps(i)).ObjInfo.ObjIndex = OBJ_CAPTURA_BANDERA_1 Or MapData(x, y, WorldMaps(i)).ObjInfo.ObjIndex = OBJ_CAPTURA_BANDERA_2 Then
+                        Call EraseObj(MapData(x, y, WorldMaps(i)).ObjInfo.amount, WorldMaps(i), x, y)
+                    End If
+                Next x
+            Next y
+        End If
+    Next i
+    Exit Sub
+ErrHandler:
+    Call TraceError(Err.Number, Err.Description, "ScenarioCaptureTheFlag.EliminarBanderasDelMapa", Erl)
 End Sub
 
 Private Sub SacarBanderasDe(ByVal UserIndex As Integer)
@@ -915,6 +961,19 @@ ErrHandler:
 End Sub
 
 ' =============== Public API for the flag call sites ===============
+
+' Called by ModLobby.ReturnPlayer BEFORE it clears CurrentTeam (GM kick / returnplayer / returnall):
+' TirarBanderaDe needs the team to know which flag the player may carry.
+Public Sub OnPlayerRemoved(ByVal UserIndex As Integer)
+    On Error GoTo ErrHandler
+    Call TirarBanderaDe(UserIndex)
+    UserList(UserIndex).flags.jugando_captura = 0
+    UserList(UserIndex).flags.tiene_bandera = 0
+    UserList(UserIndex).flags.jugando_captura_timer = 0
+    Exit Sub
+ErrHandler:
+    Call TraceError(Err.Number, Err.Description, "ScenarioCaptureTheFlag.OnPlayerRemoved", Erl)
+End Sub
 ' Called from InvUsuario through ModCaptura.GetCapturaEscenario (CustomScenarios.GetMap + TypeOf).
 
 Public Function TomaBandera(ByVal UserIndex As Integer, ByVal ObjIndex As Integer) As Boolean
