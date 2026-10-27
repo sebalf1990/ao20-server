@@ -1915,7 +1915,11 @@ Sub UserDie(ByVal UserIndex As Integer)
         Call ClearAttackerNpc(UserIndex)
         '<< Guardar o matar mascotas >>
         Call HandleUserPetsOnDeath(UserIndex)
-        If MapData(.pos.x, .pos.y, .pos.Map).trigger <> e_Trigger.ZONAPELEA And MapInfo(.pos.Map).DropItems Then
+        ' Plan 05.002 wave 9: no inventory drop on an event map. The live scenario is
+        ' queried (same helper as wave 7) instead of writing MapInfo().DropItems, so there is
+        ' no state to restore if the scenario dies without Reset/CloseScenario.
+        ' The DropItems = False assignments in DeathMatch/Hunt/Boarding stay as a fallback.
+        If MapData(.pos.x, .pos.y, .pos.Map).trigger <> e_Trigger.ZONAPELEA And MapInfo(.pos.Map).DropItems And Not CustomScenarios.IsUserInScenarioMap(UserIndex) Then
             If (.flags.Privilegios And e_PlayerType.User) <> 0 Then
                 If .flags.PendienteDelSacrificio = 0 Then
                     Call TirarTodosLosItems(UserIndex)

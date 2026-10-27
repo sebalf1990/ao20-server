@@ -381,7 +381,7 @@ Private Sub SpawnNpc(ByVal npcType As Integer)
         NpcList(NpcId).Contadores.IntervaloRespawn = 0
         Call SpawnedCreaturesId.Add(NpcId, 0)
     Else
-        Call SendData(SendTarget.ToAdmins, 0, PrepareMessageLocaleMsg(MSG_NO_PUDO_SPAWNEAR_NPC_REVISAR, npcType, e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos)) ' Msg1792=No se pudo spawnear el npc ¬1, revisar.
+        Call SendData(SendTarget.ToAdmins, 0, PrepareMessageLocaleMsg(MSG_NPC_SPAWN_FAILED, npcType, e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos)) ' Msg1786=No se pudo spawnear el npc ¬1, revisar.
         Call TraceError(Err.Number, "failed to spawn Npc " & npcType, "ScenarioHunt.SpawnNpc ", Erl)
     End If
 End Sub

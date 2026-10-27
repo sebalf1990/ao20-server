@@ -6459,6 +6459,17 @@ Public Sub HandleParticipar(ByVal UserIndex As Integer)
                 Call WriteLocaleMsg(UserIndex, MsgCantJoinPrivateLobby, e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos)
             End If
             Exit Sub
+        Else
+            ' Plan 05.002 wave 9: without this Else /PARTICIPAR answered nothing when the lobby
+            ' was not taking registrations.
+            If LobbyList(RoomId).State > AcceptingPlayers Then
+                'Msg925=Ya se ha cerrado la inscripcion para el evento.
+                Call WriteLocaleMsg(UserIndex, MSG_HA_CERRADO_INSCRIPCION_EVENTO, e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_INFO)
+            Else
+                ' UnInitilized/Initialized: the slot exists but has not opened yet.
+                Call WriteLocaleMsg(UserIndex, MSG_NO_EVENTOS_ACTUALMENTE_HAY_NINGUN_EVENTO_CURSO, e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos)
+            End If
+            Exit Sub
         End If
     End With
     Exit Sub
