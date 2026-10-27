@@ -1134,28 +1134,30 @@ End Sub
 
 Private Sub Automatic_Event_Timer()
     On Error GoTo Evento_Timer_Err
-    'validacion para captura la bandera que es unico
-    'EventoActivo es el flag de eventos-multiplicador; IsEventActive() es el de
-    'lobby/escenario (DeathMatch/Captura/etc). Sin el segundo, se podia lanzar un
-    'auto-evento encima de uno de escenario ya en curso.
-    If EventoActivo Or IsEventActive() Then Exit Sub
     Dim CurrentDay    As Byte
     Dim CurrentHour   As Byte
     Dim EventOfTheDay As Integer
     Dim nowRaw        As Long
+    Dim MotivoFallo   As String
+    ' Plan 05.002 wave 8: retry brake, 10 minutes. See the block below.
+    Const AUTOEVENT_RETRY_MS As Long = 600000
     CurrentDay = Weekday(Date) 'domingo=1 , lunes=2, martes=3, miercoles=4, jueves=5, viernes=6, sabado=7
     CurrentHour = Hour(Time) 'number between 0 and 23
     'si no es la hora de activar el evento salimos
     If SvrConfig.GetValue("AUTOEVENTHOURCALENDAR_Horarios") <> CurrentHour Then
         Exit Sub
     End If
-    If AlreadyDidAutoEventToday Then
-        '3600000 = 1 hora en milisegundos
-        nowRaw = GetTickCountRaw()
-        If TicksElapsed(LastAutoEventAttempt, nowRaw) > 3600000 Then
-            AlreadyDidAutoEventToday = False
-        End If
-        Exit Sub
+    ' Plan 05.002 wave 8: the day gate compares DATES. The old block reset a Boolean when 1
+    ' hour had passed since the last attempt: it never compared days, it worked because the
+    ' calendar window is exactly 1 hour long, and it spent the first tick of the day just
+    ' resetting (the event went out at HH:01, not HH:00).
+    If LastAutoEventDate = Date Then Exit Sub
+    ' Retry brake. The date is now marked ONLY if the event really opened, so a failed attempt
+    ' leaves the door open to retry inside the same time window (up to 6 attempts). Without a
+    ' brake it would retry every minute and repeat the same log and admin notice 60 times a day.
+    nowRaw = GetTickCountRaw()
+    If LastAutoEventAttempt <> 0 Then
+        If TicksElapsed(LastAutoEventAttempt, nowRaw) < AUTOEVENT_RETRY_MS Then Exit Sub
     End If
     Select Case CurrentDay
         Case 1 'domingo
@@ -1213,6 +1215,13 @@ Private Sub Automatic_Event_Timer()
             LobbySettings.InscriptionFee = SvrConfig.GetValue("AUTODEATHMATCH_InscriptionFee")
             LobbySettings.Description = SvrConfig.GetValue("AUTODEATHMATCH_Description")
         Case e_EventType.NavalBattle
+            ' Plan 05.002 wave 8: Naval Battle left the calendar (Configuracion.ini is set to
+            ' 3 = DeathMatch all seven days) because it was NEVER tested with players. The Case
+            ' stays whole on purpose: scheduling it again must be changing one number in the
+            ' .ini, not rewriting these lines from memory. But if someone does, leave an
+            ' explicit trace that it is launching the least tested mode.
+            Call LogError("[AutoEvento] The calendar scheduled Naval Battle, which was never tested with players. See plan 05.002 wave 8.")
+            Call SendData(SendTarget.ToAdmins, 0, PrepareMessageConsoleMsg("[Eventos] Atencion: el auto-evento de hoy es la Batalla Naval, un modo sin pruebas.", e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_INFO))
             LobbySettings.ScenearioType = e_EventType.NavalBattle
             LobbySettings.MinLevel = SvrConfig.GetValue("AUTONAVALBATTLE_MinLevel")
             LobbySettings.MaxLevel = SvrConfig.GetValue("AUTONAVALBATTLE_MaxLevel")
@@ -1225,17 +1234,61 @@ Private Sub Automatic_Event_Timer()
             LobbySettings.Description = SvrConfig.GetValue("AUTONAVALBATTLE_Description")
     End Select
     LobbySettings.Password = ""
-    ' Plan 05.002 wave 3: the event type is no longer stored in a scalar, it is derived.
-    If LobbySettings.ScenearioType = e_EventType.CaptureTheFlag Then
-        Call HandleIniciarCaptura(LobbySettings)
-    Else
-        Call CreatePublicEvent(LobbySettings)
+    ' Plan 05.002 wave 8: this check was at the very TOP and silent. Up there it runs once a
+    ' minute, so logging it would flood the log; here it only runs inside the calendar's time
+    ' window, and it is the MOST likely failure mode in production: the day's auto event does
+    ' not go out because an earlier event was left open.
+    ' EventoActivo is the multiplier-event flag; IsEventActive() is the lobby/scenario one
+    ' (DeathMatch/Capture/etc). Without the second, an auto event could launch on top of a
+    ' scenario already running.
+    If EventoActivo Or IsEventActive() Then
+        Call RegistrarAutoEventoFallido("there is already an event running (multiplier=" & EventoActivo & ", scenario=" & IsEventActive() & "). It is retried inside the time window.")
+        Exit Sub
     End If
-    AlreadyDidAutoEventToday = True
+    ' Plan 05.002 wave 3: the event type is no longer stored in a scalar, it is derived.
+    ' Plan 05.002 wave 8: CreatePublicEvent is now a Function and returns the concrete reason.
+    ' Before, the day was marked as done NO MATTER WHAT: if creation fell through any early
+    ' exit, that day had no auto event and no trace of why.
+    If LobbySettings.ScenearioType = e_EventType.CaptureTheFlag Then
+        ' Capture the Flag is still the legacy singleton (it does not go through
+        ' CreatePublicEvent until the wave 4 migration). HandleIniciarCaptura is a Sub with no
+        ' result, but on rejection it leaves InstanciaCaptura as Nothing (IsEventActive was
+        ' false just above, so it was Nothing before the call).
+        Call HandleIniciarCaptura(LobbySettings)
+        If InstanciaCaptura Is Nothing Then
+            Call RegistrarAutoEventoFallido("Capture the Flag settings rejected (fee " & LobbySettings.InscriptionFee & ", players " & LobbySettings.MaxPlayers & ", levels " & LobbySettings.MinLevel & "-" & LobbySettings.MaxLevel & ").")
+            Exit Sub
+        End If
+    ElseIf Not CreatePublicEvent(LobbySettings, MotivoFallo) Then
+        Call RegistrarAutoEventoFallido(MotivoFallo)
+        Exit Sub
+    End If
+    LastAutoEventDate = Date
     LastAutoEventAttempt = GetTickCountRaw()
+    Call LogInfoServidor("[AutoEvento] Opened OK: type " & EventOfTheDay & ", day " & CurrentDay & ", hour " & CurrentHour & ".")
     Exit Sub
 Evento_Timer_Err:
     Call TraceError(Err.Number, Err.Description, "frmMain.Evento_Timer", Erl)
+End Sub
+
+' Plan 05.002 wave 8 (observability). An auto event that does not start must leave a trace:
+' until now it failed silently and the day was marked as done anyway.
+' Why LogError and not LogInfoServidor, if this is an operational event and not a code error:
+' LogThis writes to the Windows Event Log, and ONLY Warning/Error messages go into the circular
+' buffer, which is the only thing readable from the game ("remote errors"). An info log would
+' be invisible exactly to whoever is standing in the world wondering why the event did not go
+' out. The reason arrives CONCRETE from the caller, not generic.
+' Marking LastAutoEventAttempt is part of the contract: it is the brake that avoids repeating
+' this log and admin notice every minute of the time window. It goes FIRST, before any call
+' that can raise an error, so the brake is set anyway.
+Private Sub RegistrarAutoEventoFallido(ByVal Motivo As String)
+    On Error GoTo RegistrarAutoEventoFallido_Err
+    LastAutoEventAttempt = GetTickCountRaw()
+    Call LogError("[AutoEvento] Could not open: " & Motivo)
+    Call SendData(SendTarget.ToAdmins, 0, PrepareMessageConsoleMsg("[Eventos] El auto-evento del dia no pudo abrirse: " & Motivo, e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_INFO))
+    Exit Sub
+RegistrarAutoEventoFallido_Err:
+    Call TraceError(Err.Number, Err.Description, "frmMain.RegistrarAutoEventoFallido", Erl)
 End Sub
 
 Private Sub Form_MouseMove(Button As Integer, Shift As Integer, x As Single, y As Single)

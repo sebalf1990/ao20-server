@@ -142,8 +142,14 @@ Public GlobalLobbyIndex         As Integer
 ' went stale (CTF stomp, ghost lobby, /PARTICIPAR misrouted). The active public event
 ' type is now DERIVED from the live structures (see ActiveEventType).
 Public Const NO_ACTIVE_EVENT As Integer = -1
+' Plan 05.002 wave 8: this used to be 'AlreadyDidAutoEventToday As Boolean', reset with a
+' 1 hour stopwatch over LastAutoEventAttempt. It never compared days anywhere: the name said
+' "Today" but it worked by accident, because the calendar's time window is exactly 1 hour long,
+' same as the reset threshold. Now it holds the DATE of the last auto event that REALLY opened,
+' which is what the name always promised.
+' LastAutoEventAttempt stays, with another role: retry brake inside the time window.
 Public LastAutoEventAttempt     As Long
-Public AlreadyDidAutoEventToday As Boolean
+Public LastAutoEventDate        As Date
 Const LobbyCount = 200
 Public LobbyList(0 To LobbyCount) As t_Lobby
 Private AvailableLobby            As t_IndexHeap
@@ -1331,10 +1337,19 @@ ActiveEventType_Err:
     ActiveEventType = NO_ACTIVE_EVENT
 End Function
 
-Public Sub CreatePublicEvent(ByRef LobbySettings As t_NewScenearioSettings)
+Public Function CreatePublicEvent(ByRef LobbySettings As t_NewScenearioSettings, Optional ByRef FailReason As String) As Boolean
+    ' Plan 05.002 wave 8: this was a Sub returning NOTHING, with several early exits. The
+    ' auto event scheduler marked the day as done on the next line no matter what, so a failed
+    ' creation cost the whole day's auto event, silently. It now returns success and, through
+    ' FailReason, the CONCRETE reason with the values that caused it (a generic "could not be
+    ' created" diagnoses nothing).
+    ' The other call site (initEventLobby -> GM /CREAREVENTO path) is NOT touched: it keeps
+    ' 'Call CreatePublicEvent(LobbySettings)'. VB6 discards the return value of a Function
+    ' called with Call, and the second parameter is Optional.
     ' R3: validar ANTES de reservar el lobby (GetAvailableLobby lo consume); si no, fuga de lobby
     If Not ValidateLobbySettings(LobbySettings) Then
-        Exit Sub
+        FailReason = "invalid settings for type " & LobbySettings.ScenearioType & " (levels " & LobbySettings.MinLevel & "-" & LobbySettings.MaxLevel & ", players " & LobbySettings.MinPlayers & "-" & LobbySettings.MaxPlayers & ")."
+        Exit Function
     End If
     ' Plan 05.002 wave 3 (owner decision 2: ONE public event at a time, formalized).
     ' GlobalLobbyIndex used to be overwritten without checking, leaving the previous lobby
@@ -1342,12 +1357,16 @@ Public Sub CreatePublicEvent(ByRef LobbySettings As t_NewScenearioSettings)
     If ActiveEventType() <> NO_ACTIVE_EVENT Then
         Call LogError("CreatePublicEvent: a public event is already active (type " & ActiveEventType() & "), not creating another.")
         Call SendData(SendTarget.ToAdmins, 0, PrepareMessageConsoleMsg("[Eventos] Ya hay un evento publico en curso: cancelalo antes de abrir otro.", e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_INFO))
-        Exit Sub
+        FailReason = "a public event is already active (type " & ActiveEventType() & ")."
+        Exit Function
     End If
     GlobalLobbyIndex = GetAvailableLobby()
+    ' Plan 05.002 wave 8: this exit was SILENT on both paths (scheduler and GM). The pool ran
+    ' out and nobody knew. LogError (not LogInfoServidor) so it reaches the in-game buffer.
     If GlobalLobbyIndex < 0 Then
-        LogInfoServidor "CreatePublicEvent GlobalLobbyIndex < 0"
-        Exit Sub
+        Call LogError("CreatePublicEvent: lobby pool exhausted (" & LobbiesEnUso() & " in use), event not created.")
+        FailReason = "no free lobbies in the pool (" & LobbiesEnUso() & " in use)."
+        Exit Function
     End If
     Call InitializeLobby(LobbyList(GlobalLobbyIndex))
     Call ModLobby.SetupLobby(LobbyList(GlobalLobbyIndex), LobbySettings)
@@ -1358,10 +1377,12 @@ Public Sub CreatePublicEvent(ByRef LobbySettings As t_NewScenearioSettings)
     If Not CustomScenarios.PrepareNewEvent(LobbySettings.ScenearioType, GlobalLobbyIndex) Then
         Call LogError("CreatePublicEvent: PrepareNewEvent failed for type " & LobbySettings.ScenearioType & ", releasing lobby " & GlobalLobbyIndex & ".")
         Call ReleaseLobby(GlobalLobbyIndex)
-        Exit Sub
+        FailReason = "the scenario of type " & LobbySettings.ScenearioType & " was not registered in the tick (details in the PrepareNewEvent log)."
+        Exit Function
     End If
     Call OpenLobby(LobbyList(GlobalLobbyIndex), True)
-End Sub
+    CreatePublicEvent = True
+End Function
 
 Public Sub initEventLobby(ByVal UserIndex As Integer, ByVal eventType As Integer, LobbySettings As t_NewScenearioSettings)
     ' Plan 05.002 ola 1. El gate de privilegios vive en HandleStartEvent, que es la UNICA
