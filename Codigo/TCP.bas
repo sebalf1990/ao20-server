@@ -1049,6 +1049,13 @@ Sub ResetUserFlags(ByVal UserIndex As Integer)
         .CurrentTeam = 0
         .jugando_captura_timer = 0
         .jugando_captura_muertes = 0
+        ' Plan 05.002 wave 2: the rest of the event flags are cleared HERE, with the CTF ones.
+        ' Otherwise they stayed stuck on the recycled UserList slot: the next player landing there
+        ' inherited the flag drawn over their head, a challenge team or a challenge room.
+        .tiene_bandera = 0
+        .EquipoReto = 0
+        .SalaReto = 0
+        .EnTorneo = False
     End With
     Exit Sub
 ResetUserFlags_Err:

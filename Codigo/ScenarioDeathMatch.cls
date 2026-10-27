@@ -566,7 +566,11 @@ Private Sub RespawnPlayers()
     Keys = PlayerRespawn.Keys
     For Each key In Keys
         Set RespawnInfo = PlayerRespawn.Item(key)
-        If TicksElapsed(RespawnInfo.RespawnTime, currentTime) > PlayerRespawnTime Then
+        ' Plan 05.002 wave 2 (class B): if the slot is no longer the same player, the entry is
+        ' orphaned (died and disconnected). Drop it without touching whoever inherits the slot.
+        If UserList(key).VersionId <> RespawnInfo.UserSlotIteration Then
+            Call PlayerRespawn.Remove(key)
+        ElseIf TicksElapsed(RespawnInfo.RespawnTime, currentTime) > PlayerRespawnTime Then
             Call Respawn(key)
             For i = 0 To RespawnInfo.EquipedElementCount - 1
                 Call EquiparInvItem(key, RespawnInfo.GetActiveSlot(i))
@@ -651,6 +655,11 @@ Public Sub IBaseScenario_UserDie(ByVal UserIndex)
             RespawnInfo.Agility = .Stats.UserAtributos(2)
         End If
     End With
+    ' Plan 05.002 wave 2 (class B): store the slot IDENTITY, not just its number. The UserList
+    ' slot is recycled between players: without this, if the dead player disconnects before
+    ' reviving, the next one to inherit the slot was teleported to the arena, revived and had
+    ' Strength/Agility overwritten. The field already existed and nobody used it.
+    RespawnInfo.UserSlotIteration = UserList(UserIndex).VersionId
     Call PlayerRespawn.Add(UserIndex, RespawnInfo)
 End Sub
 

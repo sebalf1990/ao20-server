@@ -526,7 +526,8 @@ Public Sub CancelLobby(ByRef instance As t_Lobby)
     If instance.InscriptionPrice > 0 Then
         Dim i As Integer
         For i = 0 To instance.RegisteredPlayers - 1
-            Call GiveGoldToPlayer(instance, i, instance.InscriptionPrice)
+            ' Refunds disconnected players too (see GiveGoldToPlayer).
+            Call RefundPlayer(instance, i)
         Next i
     End If
     Call ReturnAllPlayers(instance)
@@ -538,7 +539,13 @@ CancelLobby_Err:
 End Sub
 
 Public Function GiveGoldToPlayer(ByRef instance As t_Lobby, ByVal UserSlotIndex As Integer, ByVal amount As Long) As Boolean
+    ' Plan 05.002 wave 2 (class A). This is the ONLY door through which gold leaves an event:
+    ' the cancel refund and the prize payout of all scenarios use it. It used to pay only if
+    ' the user reference was still alive, so a disconnected player silently lost both the
+    ' inscription and the prize. Now, if offline, the gold is credited in the database by
+    ' UserId, which is a stable identity (the UserList slot is recycled between players).
     On Error GoTo GiveMoneyToPlayer_Err
+    If amount <= 0 Then Exit Function
     If amount > instance.AvailableInscriptionMoney Then
         Call LogError("Instance is trying to give gold to " & instance.Players(UserSlotIndex).UserId & " but there is not enought gold collected")
         Exit Function
@@ -547,11 +554,43 @@ Public Function GiveGoldToPlayer(ByRef instance As t_Lobby, ByVal UserSlotIndex 
         Call AddGold(instance.Players(UserSlotIndex).User.ArrayIndex, amount)
         instance.AvailableInscriptionMoney = instance.AvailableInscriptionMoney - amount
         GiveGoldToPlayer = True
+    ElseIf instance.Players(UserSlotIndex).UserId > 0 Then
+        ' Offline: written to the database. Safe precisely because the user is NOT logged in;
+        ' if they were, the logout save would overwrite the value with the in-memory one.
+        If Execute("UPDATE user SET gold = gold + ? WHERE id = ?;", amount, instance.Players(UserSlotIndex).UserId) Then
+            instance.AvailableInscriptionMoney = instance.AvailableInscriptionMoney - amount
+            Call LogInfoServidor("[Evento] Oro acreditado offline: user_id=" & instance.Players(UserSlotIndex).UserId & " monto=" & amount)
+            GiveGoldToPlayer = True
+        End If
     End If
     Exit Function
 GiveMoneyToPlayer_Err:
     Call TraceError(Err.Number, Err.Description, "ModLobby.GiveGoldToPlayer", Erl)
 End Function
+
+Public Sub RefundPlayer(ByRef instance As t_Lobby, ByVal UserSlotIndex As Integer)
+    ' Plan 05.002 wave 2: refund the inscription of ONE slot. Every exit path that must refund
+    ' goes through here, so it is not reimplemented in each flow.
+    On Error GoTo RefundPlayer_Err
+    If instance.InscriptionPrice <= 0 Then Exit Sub
+    Call GiveGoldToPlayer(instance, UserSlotIndex, instance.InscriptionPrice)
+    Exit Sub
+RefundPlayer_Err:
+    Call TraceError(Err.Number, Err.Description, "ModLobby.RefundPlayer", Erl)
+End Sub
+
+Public Sub RemovePlayerFromEvent(ByRef instance As t_Lobby, ByVal UserSlotIndex As Integer, ByVal Refund As Boolean)
+    ' Plan 05.002 wave 2 (class A): the exit of ONE player from an event, in a single place.
+    ' NOTE: ClearUserSocket compacts the array and decrements RegisteredPlayers, so whoever
+    ' iterates over several slots must do it BACKWARDS.
+    On Error GoTo RemovePlayerFromEvent_Err
+    If Refund Then Call RefundPlayer(instance, UserSlotIndex)
+    Call ReturnPlayer(instance, UserSlotIndex)
+    Call ClearUserSocket(instance, UserSlotIndex)
+    Exit Sub
+RemovePlayerFromEvent_Err:
+    Call TraceError(Err.Number, Err.Description, "ModLobby.RemovePlayerFromEvent", Erl)
+End Sub
 
 Public Sub ListPlayers(ByRef instance As t_Lobby, ByVal UserIndex As Integer)
     On Error GoTo ListPlayers_Err
@@ -673,6 +712,13 @@ End Sub
 
 Public Sub ForceReset(ByRef instance As t_Lobby)
     On Error GoTo ForceReset_Err
+    ' Plan 05.002 wave 2: it used to drop the players array without returning the players or
+    ' refunding: they stayed trapped in the instance map and the gold was lost. Walk BACKWARDS
+    ' because ClearUserSocket compacts the array.
+    Dim p As Integer
+    For p = instance.RegisteredPlayers - 1 To 0 Step -1
+        Call RemovePlayerFromEvent(instance, p, True)
+    Next p
     instance.MinLevel = 1
     instance.MaxLevel = 47
     instance.MaxPlayers = 0
@@ -694,9 +740,12 @@ ForceReset_Err:
 End Sub
 
 Public Sub RegisterDisconnectedUser(ByVal DisconnectedUserIndex As Integer)
+    ' Plan 05.002 wave 2: it iterated LobbyList(i) using the heap COUNTER as if it were the lobby
+    ' index. They only match while the active lobbies are {0..currentIndex} with no holes; once
+    ' one in the middle is released, the loop touched the wrong lobbies and skipped the real one.
     Dim i As Integer
     For i = 0 To ActiveLobby.currentIndex
-        Call RegisterDisconnectedUserOnLobby(LobbyList(i), DisconnectedUserIndex)
+        Call RegisterDisconnectedUserOnLobby(LobbyList(ActiveLobby.IndexInfo(i)), DisconnectedUserIndex)
     Next i
 End Sub
 
@@ -882,6 +931,25 @@ Public Function HandleRemoteLobbyCommand(ByVal Command, ByVal Params As String, 
                 Else
                     Call WriteConsoleMsg(UserIndex, "Failed to update insription price", e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos)
                 End If
+            Case e_LobbyCommandId.eKickPlayer
+                ' Decision A7 (27.001): the client already sends it; KickPlayer refunds the inscription.
+                If UBound(Arguments) < 0 Then
+                    HandleRemoteLobbyCommand = False
+                    Call WriteConsoleMsg(UserIndex, "Usage: KICK <player index>.", e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos)
+                    Exit Function
+                End If
+                If Not IsNumeric(Arguments(0)) Then
+                    HandleRemoteLobbyCommand = False
+                    Call WriteConsoleMsg(UserIndex, "Invalid player index: " & Arguments(0), e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos)
+                    Exit Function
+                End If
+                If Val(Arguments(0)) < 0 Or Val(Arguments(0)) > LobbyList(LobbyIndex).RegisteredPlayers - 1 Then
+                    HandleRemoteLobbyCommand = False
+                    Call WriteConsoleMsg(UserIndex, "Player index out of range (0.." & LobbyList(LobbyIndex).RegisteredPlayers - 1 & ").", e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos)
+                    Exit Function
+                End If
+                Call ModLobby.KickPlayer(LobbyList(LobbyIndex), CInt(Val(Arguments(0))))
+                Call WriteConsoleMsg(UserIndex, "Player kicked.", e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos)
             Case Else
                 HandleRemoteLobbyCommand = False
                 Exit Function
@@ -966,9 +1034,10 @@ SortTeams_Err:
 End Sub
 
 Public Function KickPlayer(ByRef instance As t_Lobby, ByVal Index As Integer) As t_response
+    ' Plan 05.002 wave 2: kicking refunds the inscription. SortTeams kicks the leftovers so the
+    ' team split is exact; without the refund the player was charged for an event never played.
     On Error GoTo KickPlayer_Err
-    Call ReturnPlayer(instance, Index)
-    Call ClearUserSocket(instance, Index)
+    Call RemovePlayerFromEvent(instance, Index, True)
     Exit Function
 KickPlayer_Err:
     Call TraceError(Err.Number, Err.Description, "ModLobby.KickPlayer", Erl)
