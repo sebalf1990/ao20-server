@@ -255,7 +255,7 @@ End Sub
 '
 ' @param    Main The name of the main section in which we will be searching.
 ' @param    key The key of the value we are looking for.
-' @param    DefaultValue Default value if key is not found.
+' @param    DefaultValue Default value if the key, its section, or the whole file is not found.
 ' @returns  The value asociated with the given key under the requeted main section of the INI file or a null string if it's not found.
 Public Function GetValue(ByVal Main As String, ByVal key As String, Optional ByVal DefaultValue As String = "") As String
     On Error GoTo GetValue_Err
@@ -273,6 +273,9 @@ Public Function GetValue(ByVal Main As String, ByVal key As String, Optional ByV
         Else
             GetValue = DefaultValue
         End If
+    Else
+        'Section missing (or file never loaded): the default applies as well
+        GetValue = DefaultValue
     End If
     Exit Function
 GetValue_Err:

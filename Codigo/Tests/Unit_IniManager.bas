@@ -7,6 +7,8 @@ Private Const TEMP_INI_DUMP_FILE As String = "test_temp_ini_dump.ini"
 
 Public Function test_suite_ini_manager() As Boolean
     Call UnitTesting.RunTest("test_ini_parse_and_getvalue", test_ini_parse_and_getvalue())
+    Call UnitTesting.RunTest("test_ini_getvalue_missing_section_default", test_ini_getvalue_missing_section_default())
+    Call UnitTesting.RunTest("test_ini_getvalue_unloaded_file_default", test_ini_getvalue_unloaded_file_default())
     Call UnitTesting.RunTest("test_ini_keyexists_true", test_ini_keyexists_true())
     Call UnitTesting.RunTest("test_ini_keyexists_false", test_ini_keyexists_false())
     Call UnitTesting.RunTest("test_ini_changevalue_existing", test_ini_changevalue_existing())
@@ -63,6 +65,42 @@ Private Function test_ini_parse_and_getvalue() As Boolean
     Exit Function
 Err_Handler:
     test_ini_parse_and_getvalue = False
+End Function
+
+' Plan 24.001 T1: a missing section returns the caller's default; without default it returns "".
+Private Function test_ini_getvalue_missing_section_default() As Boolean
+    On Error GoTo Err_Handler
+    Dim filePath As String
+    filePath = write_temp_ini("[SECTION1]" & vbCrLf & "Key1=Value1")
+    
+    Dim ini As New clsIniManager
+    Call ini.Initialize(filePath)
+    
+    If ini.GetValue("NOSUCHSECTION", "Key1", "7") <> "7" Then Exit Function
+    If ini.GetValue("NOSUCHSECTION", "Key1") <> "" Then Exit Function
+    ' Existing section: present key wins, absent key falls back to the default
+    If ini.GetValue("SECTION1", "Key1", "7") <> "Value1" Then Exit Function
+    If ini.GetValue("SECTION1", "Nope", "7") <> "7" Then Exit Function
+    
+    test_ini_getvalue_missing_section_default = True
+    Exit Function
+Err_Handler:
+    test_ini_getvalue_missing_section_default = False
+End Function
+
+' Plan 24.001 T1: an instance whose file never loaded returns the default.
+' (Initialize on a missing path trips Debug.Assert in the IDE, so the instance is left unloaded.)
+Private Function test_ini_getvalue_unloaded_file_default() As Boolean
+    On Error GoTo Err_Handler
+    Dim ini As New clsIniManager
+    
+    If ini.GetValue("ANY", "Key", "5") <> "5" Then Exit Function
+    If ini.GetValue("ANY", "Key") <> "" Then Exit Function
+    
+    test_ini_getvalue_unloaded_file_default = True
+    Exit Function
+Err_Handler:
+    test_ini_getvalue_unloaded_file_default = False
 End Function
 
 ' Req 6.2: KeyExists returns True for an existing section.
