@@ -24,6 +24,7 @@ Private m_LastPhoenixSpawnAttempt As Long
 Public IsPhoenixAlive As Boolean
 Public Const PHOENIX_NPC_INDEX = 1373
 Private Const PHOENIX_BROADCAST_MSG_ID = 2159
+Private Const PHOENIX_SPAWN_TRIES = 10
 Private PhoenixSpawnPosition As t_WorldPos
 
 Public Sub MaybeSpawnFenix()
@@ -36,26 +37,23 @@ Public Sub MaybeSpawnFenix()
     Dim PerformanceTimer As Long
     Call PerformanceTestStart(PerformanceTimer)
     If Not IsPhoenixAlive Then
-        ' Fenix (plan 02.001 Ola 6): spawn en un mapa random que NO sea dungeon (como el oficial)
-        Dim cand As Integer, intentos As Integer, m As Integer
+        ' Plan 28.002: mapa al azar de PhoenixMapPool.dat (como el oficial), que genera tools/fenix_pool.py
+        ' (no seguro, no dungeon, menos de 50% de agua). Si un mapa no da tile legal, se prueba otro en la misma pasada.
+        Dim intentos As Integer
         Dim nIndex As Integer
-        cand = 0
-        For intentos = 1 To 50
-            m = RandomNumber(1, NumMaps)
-            If MapInfo(m).zone <> "DUNGEON" Then
-                cand = m
-                Exit For
+        For intentos = 1 To PHOENIX_SPAWN_TRIES
+            PhoenixSpawnPosition.Map = PhoenixMapPool(RandomNumber(LBound(PhoenixMapPool), UBound(PhoenixMapPool)))
+            If PhoenixSpawnPosition.Map >= 1 And PhoenixSpawnPosition.Map <= NumMaps Then
+                ' Solo marcar vivo si el spawn ubico al Fenix (ClosestLegalPos devuelve 0 si no hay tile valido)
+                nIndex = SpawnNpc(PHOENIX_NPC_INDEX, PhoenixSpawnPosition, 1, False, False, 0, SND_WARP)
+                If nIndex <> 0 Then
+                    Call modSendData.SendData(ToAll, 0, PrepareMessageLocaleMsg(PHOENIX_BROADCAST_MSG_ID, vbNullString, e_TextChannel.TEXTCHANNEL_FACTION, e_FontTypeNames.FONTTYPE_CITIZEN))
+                    Call modSendData.SendData(ToAll, 0, PrepareMessagePlayWave(e_SoundEffects.PhoenixRebirth, NO_3D_SOUND, NO_3D_SOUND, False, 0))
+                    IsPhoenixAlive = True
+                    Exit For
+                End If
             End If
         Next intentos
-        If cand = 0 Then Exit Sub
-        PhoenixSpawnPosition.Map = cand
-        ' Solo marcar vivo si el spawn ubico al Fenix (ClosestLegalPos devuelve 0 si no hay tile valido)
-        nIndex = SpawnNpc(PHOENIX_NPC_INDEX, PhoenixSpawnPosition, 1, False, False, 0, SND_WARP)
-        If nIndex <> 0 Then
-            Call modSendData.SendData(ToAll, 0, PrepareMessageLocaleMsg(PHOENIX_BROADCAST_MSG_ID, vbNullString, e_TextChannel.TEXTCHANNEL_FACTION, e_FontTypeNames.FONTTYPE_CITIZEN))
-            Call modSendData.SendData(ToAll, 0, PrepareMessagePlayWave(e_SoundEffects.PhoenixRebirth, NO_3D_SOUND, NO_3D_SOUND, False, 0))
-            IsPhoenixAlive = True
-        End If
     End If
     Call PerformTimeLimitCheck(PerformanceTimer, "ModPhoenix.MaybeSpawnFenix", 100)
     Exit Sub
