@@ -39,7 +39,11 @@ set "STAMP=!HERE!build-stamp.txt"
 echo ============================================================
 echo  AO20 - build del servidor
 echo ============================================================
-echo  flags : !AO20_FLAGS!
+REM --- flags reales: el CondComp del .vbp (el /d de AO20_FLAGS lo ignora VB6) ---
+set "CONDCOMP=(sin CondComp en el .vbp)"
+for /f "tokens=* delims=" %%C in ('findstr /B /C:"CondComp" "!PROJ!"') do set "CONDCOMP=%%C"
+echo  flags reales : !CONDCOMP!
+echo  /d ignorado  : !AO20_FLAGS!
 echo.
 
 if not exist "!VB6!" goto :sin_compilador
@@ -76,7 +80,8 @@ REM --- stamp auditable ------------------------------------------------------
 echo [2/2] Escribiendo build-stamp.txt...
 > "!STAMP!" echo # AO20 build stamp - lo genera build_tmp.bat, no editar a mano
 >> "!STAMP!" echo fecha          = %DATE% %TIME%
->> "!STAMP!" echo flags          = !AO20_FLAGS!
+>> "!STAMP!" echo flags          = !CONDCOMP!
+>> "!STAMP!" echo flags_d_ignorados = !AO20_FLAGS!
 >> "!STAMP!" echo proyecto       = !PROJ!
 >> "!STAMP!" echo vb6_exit_code  = !VB6_RC!
 >> "!STAMP!" echo build_ok       = !OK!
