@@ -151,16 +151,19 @@ Public Function LoadSettings(ByVal Filename As String) As Long
     mSettings.Add "CardDropBonus1", CSng(val(reader.GetValue("COLLECTIBLECARDS", "CardDropBonus1", "1.5")))
     mSettings.Add "CardDropBonusLvl2", CLng(val(reader.GetValue("COLLECTIBLECARDS", "CardDropBonusLvl2", "10")))
     mSettings.Add "CardDropBonus2", CSng(val(reader.GetValue("COLLECTIBLECARDS", "CardDropBonus2", "2")))
+    ' OBSOLETO desde el plan 2026-10-29 E1: el anti-speedhack ya no lo usa (ver [ANTITRAMPA]). Se sigue
+    ' leyendo para no romper instalaciones que lo tengan.
     mSettings.Add "MaximoSpeedHack", CInt(val(reader.GetValue("ANTICHEAT", "MaximoSpeedHack")))
     ' Antitrampa (plan 2026-10-29 E1, modAntitrampa.bas). Con la seccion ausente valen los defaults.
     mSettings.Add "AntitrampaAccion", CStr(reader.GetValue("ANTITRAMPA", "Accion", "avisar_gm"))
     mSettings.Add "AntitrampaSpeedToleranciaPct", CLng(val(reader.GetValue("ANTITRAMPA", "SpeedToleranciaPct", "85")))
-    mSettings.Add "AntitrampaSpeedCreditoMaxMs", CLng(val(reader.GetValue("ANTITRAMPA", "SpeedCreditoMaxMs", "2500")))
+    mSettings.Add "AntitrampaSpeedCreditoMaxMs", CLng(val(reader.GetValue("ANTITRAMPA", "SpeedCreditoMaxMs", "5000")))
     mSettings.Add "AntitrampaSpeedRechazosEvento", CLng(val(reader.GetValue("ANTITRAMPA", "SpeedRechazosEvento", "5")))
     mSettings.Add "AntitrampaSpeedVentanaMs", CLng(val(reader.GetValue("ANTITRAMPA", "SpeedVentanaMs", "10000")))
     mSettings.Add "AntitrampaIntervaloRechazosEvento", CLng(val(reader.GetValue("ANTITRAMPA", "IntervaloRechazosEvento", "20")))
     mSettings.Add "AntitrampaIntervaloVentanaMs", CLng(val(reader.GetValue("ANTITRAMPA", "IntervaloVentanaMs", "10000")))
-    mSettings.Add "AntitrampaContadorVentanaMs", CLng(val(reader.GetValue("ANTITRAMPA", "ContadorVentanaMs", "10000")))
+    mSettings.Add "AntitrampaLogCadaMs", CLng(val(reader.GetValue("ANTITRAMPA", "LogCadaMs", "5000")))
+    mSettings.Add "AntitrampaStallMs", CLng(val(reader.GetValue("ANTITRAMPA", "StallMs", "1000")))
     mSettings.Add "AntitrampaAvisoGmCadaMs", CLng(val(reader.GetValue("ANTITRAMPA", "AvisoGmCadaMs", "60000")))
     mSettings.Add "FISHING_REQUIRED_PERCENT", CInt(val(reader.GetValue("PESCA", "MinAgua")))
     mSettings.Add "FISHING_TILES_ON_MAP", CInt(val(reader.GetValue("PESCA", "MaxZonas")))

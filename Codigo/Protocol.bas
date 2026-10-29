@@ -2224,8 +2224,8 @@ Private Sub HandleWalk(ByVal UserIndex As Integer)
                 PasoCosto = AntitrampaCostoPaso(UserIndex, currentTick)
                 If PasoCosto < 0 Then
                     Call WritePosUpdate(UserIndex)
-                    ' Si la politica es expulsar, el slot ya quedo liberado: no tocarlo mas.
-                    Call AntitrampaPasoRechazado(UserIndex, currentTick)
+                    ' True = politica expulsar: el slot ya quedo liberado, no tocarlo mas.
+                    If AntitrampaPasoRechazado(UserIndex, currentTick) Then Exit Sub
                     Exit Sub
                 End If
             End If

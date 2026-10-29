@@ -3099,14 +3099,14 @@ End Type
 
 ' Estado por jugador de modAntitrampa.bas (plan 2026-10-29 E1). Se resetea con AntitrampaResetUser.
 Public Type t_AntitrampaUser
-    SpeedRechazos As Integer
+    SpeedRechazos As Long
     SpeedVentanaInicio As Long
-    IntervaloRechazos(0 To 6) As Integer   ' indice = e_AntitrampaIntervalo
+    IntervaloRechazos(0 To 6) As Integer   ' indice = e_AntitrampaIntervalo (tope 32000 en el modulo)
     IntervaloVentanaInicio As Long
-    ContadorRepetidos As Integer
-    ContadorVentanaInicio As Long
+    UltimoLog(0 To 2) As Long              ' tick de la ultima linea por tipo (speedhack, intervalo, contador)
+    SinLog(0 To 2) As Long                 ' eventos no escritos por el limite de log, por tipo
     UltimoAvisoGm As Long
-    EventosSinAvisar As Integer
+    EventosSinAvisar As Long
 End Type
 
 Public Type t_UserCounters

@@ -691,6 +691,8 @@ Sub Main()
     #End If
     While (True)
         GlobalFrameTime = GetTickCountRaw()
+        ' Antes de leer la red: si la vuelta anterior se trabo, el anti-speedhack perdona la rafaga.
+        Call AntitrampaTickLoop
         Dim PerformanceTimer As Long
         Call PerformanceTestStart(PerformanceTimer)
         #If PYMMO = 1 Then
