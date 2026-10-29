@@ -2025,6 +2025,7 @@ Private Sub HandleTalk(ByVal UserIndex As Integer)
             If (.flags.Privilegios And (e_PlayerType.SemiDios Or e_PlayerType.Dios Or e_PlayerType.Admin)) Then
                 If HandleProfesionChatCommand(UserIndex, chat) Then Exit Sub
                 If HandleLogLevelChatCommand(UserIndex, chat) Then Exit Sub
+                If HandleAntitrampaChatCommand(UserIndex, chat) Then Exit Sub
             End If
         End If
         '[Consejeros & GMs]
@@ -2215,29 +2216,22 @@ Private Sub HandleWalk(ByVal UserIndex As Integer)
             End If
             Dim currentTick As Long
             currentTick = GetTickCountRaw()
-            'Prevent SpeedHack (refactored by WyroX)
-            If Not EsGM(UserIndex) And .Char.speeding > 0 Then
-                Dim ElapsedTimeStep As Double, MinTimeStep As Long, DeltaStep As Single
-                ElapsedTimeStep = TicksElapsed(.Counters.LastStep, currentTick)
-                ' Minimum expected time between steps, adjusted by current speed.
-                ' Uses the walk packet interval so units match ElapsedTimeStep and MaximoSpeedHack.
-                MinTimeStep = CLng(PacketTimerThreshold(PacketNames.Walk) / .Char.speeding)
-                DeltaStep = (MinTimeStep - ElapsedTimeStep)
-                If DeltaStep > 0 Then
-                    .Counters.SpeedHackCounter = .Counters.SpeedHackCounter + DeltaStep
-                    If .Counters.SpeedHackCounter > SvrConfig.GetValue("MaximoSpeedHack") Then
-                        Call WritePosUpdate(UserIndex)
-                        Exit Sub
-                    End If
-                Else
-                    .Counters.SpeedHackCounter = .Counters.SpeedHackCounter + DeltaStep * 5
-                    If .Counters.SpeedHackCounter < 0 Then .Counters.SpeedHackCounter = 0
+            ' Anti-speedhack (plan 2026-10-29 E1, modAntitrampa): credito tolerante a rafagas basado en
+            ' IntervaloCaminar / velocidad. Antes dependia de PacketRatePolicy [Walk] Limit=0 y de
+            ' speeding > 0, asi que nunca corria. Paso rechazado = WritePosUpdate + conteo + evento.
+            Dim PasoCosto As Double
+            If Not EsGM(UserIndex) Then
+                PasoCosto = AntitrampaCostoPaso(UserIndex, currentTick)
+                If PasoCosto < 0 Then
+                    Call WritePosUpdate(UserIndex)
+                    ' Si la politica es expulsar, el slot ya quedo liberado: no tocarlo mas.
+                    Call AntitrampaPasoRechazado(UserIndex, currentTick)
+                    Exit Sub
                 End If
             End If
             'Move user
             If MoveUserChar(UserIndex, Heading) Then
-                ' Save current step for anti-sh
-                .Counters.LastStep = currentTick
+                Call AntitrampaPasoAceptado(UserIndex, PasoCosto)
                 Call ResetUserAutomatedActions(UserIndex)
                 If UserList(UserIndex).Grupo.EnGrupo Then
                     Call CompartirUbicacion(UserIndex)
@@ -2258,9 +2252,8 @@ Private Sub HandleWalk(ByVal UserIndex As Integer)
                     'Msg1122= Has cancelado el viaje a casa.
                     Call WriteLocaleMsg(UserIndex, MSG_CANCELADO_VIAJE_CASA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                 End If
-                ' Si no pudo moverse
+                ' Si no pudo moverse (no gasta credito del anti-speedhack)
             Else
-                .Counters.LastStep = 0
                 Call WritePosUpdate(UserIndex)
             End If
         Else    'paralized
@@ -2631,6 +2624,8 @@ Private Sub HandleDrop(ByVal UserIndex As Integer)
         TargetX = reader.ReadInt8()
         TargetY = reader.ReadInt8()
         Packet_ID = PacketNames.Drop
+        ' Solo registro (plan 2026-10-29 E1, H6): nunca bloquea.
+        Call AntitrampaContador(UserIndex, PacketNames.Drop, PacketCounter, "Drop")
         If Slot < 1 Or Slot > UserList(UserIndex).CurrentInventorySlots Then
             If Slot <> GOLD_SLOT Then
                 Exit Sub
@@ -2778,6 +2773,8 @@ Private Sub HandleCastSpell(ByVal UserIndex As Integer)
     PacketCounter = reader.ReadInt32
     Dim Packet_ID As Long
     Packet_ID = PacketNames.CastSpell
+    ' Solo registro (plan 2026-10-29 E1, H6): nunca bloquea.
+    Call AntitrampaContador(UserIndex, PacketNames.CastSpell, PacketCounter, "CastSpell")
     Call UseSpellSlot(UserIndex, Spell)
     Exit Sub
 HandleCastSpell_Err:
@@ -2851,6 +2848,9 @@ Private Sub HandleWork(ByVal UserIndex As Integer)
         Skill = reader.ReadInt8()
         Dim PacketCounter As Long
         PacketCounter = reader.ReadInt32
+        ' Solo registro (plan 2026-10-29 E1, H6): TS_Work contra SU slot (PacketNames.Work). La rama de
+        ' Ocultarse sigue validando contra el slot Hide como antes (anti-macro sin cambios).
+        Call AntitrampaContador(UserIndex, PacketNames.Work, PacketCounter, "Work")
         If UserList(UserIndex).flags.Muerto = 1 Then
             'Msg77=¡¡Estás muerto!!.
             Call WriteLocaleMsg(UserIndex, MSG_MUERTO, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
@@ -3632,6 +3632,8 @@ Dim eSkinType                   As e_OBJType
 
         PacketCounter = reader.ReadInt32
         Packet_ID = PacketNames.EquipItem
+        ' Solo registro (plan 2026-10-29 E1, H6): nunca bloquea.
+        Call AntitrampaContador(UserIndex, PacketNames.EquipItem, PacketCounter, "EquipItem")
 
         'Dead users can't equip items
         If .flags.Muerto = 1 Then

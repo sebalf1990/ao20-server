@@ -771,6 +771,7 @@ Sub ResetContadores(ByVal UserIndex As Integer)
         .timeFx = 0
         .timeGuildChat = 0
     End With
+    Call AntitrampaResetUser(UserIndex)
     Exit Sub
 ResetContadores_Err:
     Call TraceError(Err.Number, Err.Description, "TCP.ResetContadores", Erl)

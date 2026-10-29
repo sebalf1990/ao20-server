@@ -3097,6 +3097,18 @@ Public Type t_ControlHechizos
     HechizosCasteados As Long
 End Type
 
+' Estado por jugador de modAntitrampa.bas (plan 2026-10-29 E1). Se resetea con AntitrampaResetUser.
+Public Type t_AntitrampaUser
+    SpeedRechazos As Integer
+    SpeedVentanaInicio As Long
+    IntervaloRechazos(0 To 6) As Integer   ' indice = e_AntitrampaIntervalo
+    IntervaloVentanaInicio As Long
+    ContadorRepetidos As Integer
+    ContadorVentanaInicio As Long
+    UltimoAvisoGm As Long
+    EventosSinAvisar As Integer
+End Type
+
 Public Type t_UserCounters
     TiempoDeInmunidad As Byte
     TiempoDeInmunidadParalisisNoMagicas As Byte
@@ -3126,9 +3138,11 @@ Public Type t_UserCounters
     Ceguera As Integer
     Estupidez As Integer
     Mimetismo As Integer
-    ' Anticheat
+    ' Anticheat: SpeedHackCounter = credito del anti-speedhack en ms; LastStep = tick del ultimo
+    ' paquete de caminar (modAntitrampa.AntitrampaCostoPaso)
     SpeedHackCounter As Single
     LastStep As Long
+    Antitrampa As t_AntitrampaUser
     Invisibilidad As Integer
     DisabledInvisibility As Integer
     TiempoOculto As Integer

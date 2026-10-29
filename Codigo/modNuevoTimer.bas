@@ -66,6 +66,9 @@ Public Function IntervaloPermiteLanzarSpell(ByVal UserIndex As Integer, Optional
                 .Counters.TimerMagiaGolpe = nowRaw
             End If
             IntervaloPermiteLanzarSpell = True
+        Else
+            ' Solo se cuenta (plan 2026-10-29 E1, H4): no cambia que se rechaza.
+            Call AntitrampaRechazoIntervalo(UserIndex, eAtiHechizo)
         End If
     End With
     Exit Function
@@ -84,6 +87,9 @@ Public Function IntervaloPermiteAtacar(ByVal UserIndex As Integer, Optional ByVa
                 .Counters.TimerGolpeUsar = nowRaw
             End If
             IntervaloPermiteAtacar = True
+        Else
+            ' Solo se cuenta (plan 2026-10-29 E1, H4): no cambia que se rechaza.
+            Call AntitrampaRechazoIntervalo(UserIndex, eAtiAtacar)
         End If
     End With
     Exit Function
@@ -98,6 +104,9 @@ Public Function IntervaloPermiteTirar(ByVal UserIndex As Integer, Optional ByVal
         If TicksElapsed(.Counters.TimerTirar, nowRaw) >= IntervaloTirar Then
             If Actualizar Then .Counters.TimerTirar = nowRaw
             IntervaloPermiteTirar = True
+        Else
+            ' Solo se cuenta (plan 2026-10-29 E1, H4): no cambia que se rechaza.
+            Call AntitrampaRechazoIntervalo(UserIndex, eAtiTirar)
         End If
     End With
     Exit Function
@@ -113,6 +122,9 @@ Public Function IntervaloPermiteMagiaGolpe(ByVal UserIndex As Integer, Optional 
         If TicksElapsed(.Counters.TimerLanzarSpell, nowRaw) >= IntervaloMagiaGolpe Then
             If Actualizar Then .Counters.TimerMagiaGolpe = nowRaw
             IntervaloPermiteMagiaGolpe = True
+        Else
+            ' Solo se cuenta (plan 2026-10-29 E1, H4): no cambia que se rechaza.
+            Call AntitrampaRechazoIntervalo(UserIndex, eAtiCombo)
         End If
     End With
     Exit Function
@@ -127,6 +139,9 @@ Public Function IntervaloPermiteGolpeMagia(ByVal UserIndex As Integer, Optional 
         If TicksElapsed(.Counters.TimerGolpeMagia, nowRaw) >= IntervaloGolpeMagia Then
             If Actualizar Then .Counters.TimerGolpeMagia = nowRaw
             IntervaloPermiteGolpeMagia = True
+        Else
+            ' Solo se cuenta (plan 2026-10-29 E1, H4): no cambia que se rechaza.
+            Call AntitrampaRechazoIntervalo(UserIndex, eAtiCombo)
         End If
     End With
     Exit Function
@@ -141,6 +156,9 @@ Public Function IntervaloPermiteGolpeUsar(ByVal UserIndex As Integer, Optional B
         If TicksElapsed(.Counters.TimerGolpeUsar, nowRaw) >= IntervaloGolpeUsar Then
             If Actualizar Then .Counters.TimerGolpeUsar = nowRaw
             IntervaloPermiteGolpeUsar = True
+        Else
+            ' Solo se cuenta (plan 2026-10-29 E1, H4): no cambia que se rechaza.
+            Call AntitrampaRechazoIntervalo(UserIndex, eAtiCombo)
         End If
     End With
     Exit Function
@@ -183,6 +201,9 @@ Public Function IntervaloPermiteUsar(ByVal UserIndex As Integer, Optional ByVal 
         If TicksElapsed(.Counters.TimerUsar, nowRaw) >= IntervaloUserPuedeUsarU Then
             If Actualizar Then .Counters.TimerUsar = nowRaw
             IntervaloPermiteUsar = True
+        Else
+            ' Solo se cuenta (plan 2026-10-29 E1, H4): no cambia que se rechaza.
+            Call AntitrampaRechazoIntervalo(UserIndex, eAtiUsar)
         End If
     End With
     Exit Function
@@ -196,6 +217,9 @@ Public Function IntervaloPermiteUsarClick(ByVal UserIndex As Integer, Optional B
         If TicksElapsed(.Counters.TimerUsarClick, nowRaw) >= IntervaloUserPuedeUsarClic Then
             If Actualizar Then .Counters.TimerUsarClick = nowRaw
             IntervaloPermiteUsarClick = True
+        Else
+            ' Solo se cuenta (plan 2026-10-29 E1, H4): no cambia que se rechaza.
+            Call AntitrampaRechazoIntervalo(UserIndex, eAtiUsarClick)
         End If
     End With
 End Function
@@ -212,6 +236,9 @@ Public Function IntervaloPermiteUsarArcos(ByVal UserIndex As Integer, Optional B
                 .Counters.TimerLanzarSpell = nowRaw
             End If
             IntervaloPermiteUsarArcos = True
+        Else
+            ' Solo se cuenta (plan 2026-10-29 E1, H4): no cambia que se rechaza.
+            Call AntitrampaRechazoIntervalo(UserIndex, eAtiArco)
         End If
     End With
     Exit Function
