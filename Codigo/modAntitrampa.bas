@@ -523,6 +523,8 @@ Public Function HandleAntitrampaChatCommand(ByVal UserIndex As Integer, ByVal ch
     On Error GoTo HandleAntitrampaChatCommand_Err
     Dim partes() As String
     partes = Split(Trim$(chat), " ")
+    ' Split de "" devuelve un arreglo vacio (UBound = -1): partes(0) daria error 9.
+    If UBound(partes) < 0 Then Exit Function
     If UCase$(Trim$(partes(0))) <> "~ANTITRAMPA" Then Exit Function
     HandleAntitrampaChatCommand = True
     If UBound(partes) >= 1 Then
