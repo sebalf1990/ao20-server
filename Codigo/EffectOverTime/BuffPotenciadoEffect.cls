@@ -19,7 +19,7 @@ Attribute VB_Exposed = False
 '    Fuerza/Agilidad (pociones, hechizos) hacia el panel moderno de buffs del
 '    cliente como un unico icono.
 '
-'    Plan: ia/plans/2026/mayo/25.003.unificar-buff-potenciado-panel-buffs.md
+'    Plan: ia/archivo/plans/2026/2026-05-25-unificar-buff-potenciado-panel-buffs.md
 '
 Option Explicit
 Implements IBaseEffectOverTime
