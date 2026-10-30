@@ -147,6 +147,7 @@ Public AssistDamageValidTime             As Long 'valid time for damage to count
 Public AssistHelpValidTime               As Long 'valid time for helpful spell to count as assist
 Public HideAfterHitTime                  As Long 'required time to hide again after a hit remove us from this state
 Public FactionReKillTime                 As Long 'required time between killing the same user to get factions points
+Public KillsMismaParejaPorDia            As Long 'plan 2026-10-29 E1b: kills que cuentan por dia por pareja asesino->victima (0 = sin tope)
 Public AirHitReductParalisisTime         As Integer 'you can hit to the air to reduce inmo/paralisis time
 Public PorcentajePescaSegura             As Integer 'Porcentaje de reducción a la pesca en zona segura
 Public DivineBloodHealingMultiplierBonus As Single

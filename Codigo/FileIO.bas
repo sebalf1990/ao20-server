@@ -1076,6 +1076,15 @@ Sub LoadBalance()
     AssistHelpValidTime = val(BalanceIni.GetValue("EXTRA", "AssistHelpValidTime"))
     HideAfterHitTime = val(BalanceIni.GetValue("EXTRA", "HideAfterHitTime"))
     FactionReKillTime = val(BalanceIni.GetValue("EXTRA", "FactionReKillTime"))
+    ' Plan 2026-10-29 E1b (modAntitrampa): tope diario de kills por pareja. Sin la clave vale 3 (decision
+    ' del duenio), no 0: val("") daria "sin tope" en silencio.
+    Dim killsParejaTexto As String
+    killsParejaTexto = Trim$(BalanceIni.GetValue("EXTRA", "KillsMismaParejaPorDia"))
+    If LenB(killsParejaTexto) = 0 Then
+        KillsMismaParejaPorDia = 3
+    Else
+        KillsMismaParejaPorDia = CLng(val(killsParejaTexto))
+    End If
     AirHitReductParalisisTime = val(BalanceIni.GetValue("EXTRA", "AirHitReductParalisisTime"))
     PorcentajePescaSegura = val(BalanceIni.GetValue("EXTRA", "PorcentajePescaSegura"))
     DivineBloodHealingMultiplierBonus = val(BalanceIni.GetValue("EXTRA", "DivineBloodHealingMultiplierBonus"))

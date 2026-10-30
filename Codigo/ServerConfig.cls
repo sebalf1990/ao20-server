@@ -165,6 +165,9 @@ Public Function LoadSettings(ByVal Filename As String) As Long
     mSettings.Add "AntitrampaLogCadaMs", CLng(val(reader.GetValue("ANTITRAMPA", "LogCadaMs", "5000")))
     mSettings.Add "AntitrampaStallMs", CLng(val(reader.GetValue("ANTITRAMPA", "StallMs", "1000")))
     mSettings.Add "AntitrampaAvisoGmCadaMs", CLng(val(reader.GetValue("ANTITRAMPA", "AvisoGmCadaMs", "60000")))
+    ' E1b anti-farmeo de kills: IPs de tunel extra (coma) y, SOLO para pruebas, loopback como IP publica.
+    mSettings.Add "AntitrampaKillIPsTunel", CStr(reader.GetValue("ANTITRAMPA", "KillIPsTunel", ""))
+    mSettings.Add "AntitrampaKillIncluirLoopback", CLng(val(reader.GetValue("ANTITRAMPA", "KillIncluirLoopback", "0")))
     mSettings.Add "FISHING_REQUIRED_PERCENT", CInt(val(reader.GetValue("PESCA", "MinAgua")))
     mSettings.Add "FISHING_TILES_ON_MAP", CInt(val(reader.GetValue("PESCA", "MaxZonas")))
     mSettings.Add "FISHING_POOL_ID", CInt(val(reader.GetValue("PESCA", "FishingID")))

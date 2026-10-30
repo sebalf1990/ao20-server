@@ -894,15 +894,20 @@ Sub ActStats(ByVal VictimIndex As Integer, ByVal attackerIndex As Integer)
     On Error GoTo ActStats_Err
     Dim DaExp       As Integer
     Dim EraCriminal As Byte
+    Dim killCuenta  As Boolean
     DaExp = CInt(UserList(VictimIndex).Stats.ELV * 2)
-    If UserList(attackerIndex).Stats.ELV < STAT_MAXELV Then
+    ' Plan 2026-10-29 E1b (modAntitrampa): si la muerte no cuenta (misma IP/PC, o la pareja ya paso el tope
+    ' del dia) tampoco da experiencia ni suma a UsuariosMatados. ContarMuerte ya la registro en el log.
+    killCuenta = (LenB(AntitrampaKillMotivoMismoOrigen(attackerIndex, VictimIndex)) = 0)
+    If killCuenta Then killCuenta = Not AntitrampaKillParejaExcedida(attackerIndex, VictimIndex)
+    If killCuenta And UserList(attackerIndex).Stats.ELV < STAT_MAXELV Then
         UserList(attackerIndex).Stats.Exp = UserList(attackerIndex).Stats.Exp + DaExp
         If UserList(attackerIndex).Stats.Exp > MAXEXP Then UserList(attackerIndex).Stats.Exp = MAXEXP
         Call WriteUpdateExp(attackerIndex)
         Call CheckUserLevel(attackerIndex)
     End If
     Call WriteLocaleMsg(attackerIndex, MSG_HAS_MATADO_A, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT, GetUserDisplayName(VictimIndex))
-    Call WriteLocaleMsg(attackerIndex, MSG_GANADO_PUNTOS_EXPERIENCIA, e_TextChannel.TEXTCHANNEL_PROGRESSION, e_FontTypeNames.FONTTYPE_EXP, DaExp)
+    If killCuenta Then Call WriteLocaleMsg(attackerIndex, MSG_GANADO_PUNTOS_EXPERIENCIA, e_TextChannel.TEXTCHANNEL_PROGRESSION, e_FontTypeNames.FONTTYPE_EXP, DaExp)
     Call WriteLocaleMsg(VictimIndex, MSG_TE_HA_MATADO, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT, GetUserDisplayName(attackerIndex))
     If Not PeleaSegura(VictimIndex, attackerIndex) Then
         EraCriminal = Status(attackerIndex)
@@ -913,7 +918,7 @@ Sub ActStats(ByVal VictimIndex As Integer, ByVal attackerIndex As Integer)
         End If
     End If
     Call UserMod.UserDie(VictimIndex)
-    If TriggerZonaPelea(attackerIndex, attackerIndex) <> TRIGGER6_PERMITE Then
+    If killCuenta And TriggerZonaPelea(attackerIndex, attackerIndex) <> TRIGGER6_PERMITE Then
         If UserList(attackerIndex).Stats.UsuariosMatados < MAXUSERMATADOS Then
             UserList(attackerIndex).Stats.UsuariosMatados = UserList(attackerIndex).Stats.UsuariosMatados + 1
         End If
@@ -2056,6 +2061,14 @@ Sub ContarMuerte(ByVal Muerto As Integer, ByVal Atacante As Integer)
     If PeleaSegura(Atacante, Muerto) Then Exit Sub
     'Si se llevan más de 10 niveles no le cuento la muerte.
     If CInt(UserList(Atacante).Stats.ELV) - CInt(UserList(Muerto).Stats.ELV) > 10 Then Exit Sub
+    ' Plan 2026-10-29 E1b (modAntitrampa): misma IP publica real o misma PC = la muerte no suma kills ni
+    ' puntos de faccion. Se registra (solo log).
+    Dim motivoAntifarmeo As String
+    motivoAntifarmeo = AntitrampaKillMotivoMismoOrigen(Atacante, Muerto)
+    If LenB(motivoAntifarmeo) > 0 Then
+        Call AntitrampaKillRegistrar(Atacante, Muerto, motivoAntifarmeo, vbNullString)
+        Exit Sub
+    End If
     Dim AttackerStatus As e_Facciones
     AttackerStatus = Status(Atacante)
     If Status(Muerto) = e_Facciones.Criminal Or Status(Muerto) = e_Facciones.Caos Or Status(Muerto) = e_Facciones.concilio Then
@@ -2065,6 +2078,8 @@ Sub ContarMuerte(ByVal Muerto As Integer, ByVal Atacante As Integer)
         End If
         If Not AlreadyKilledBy(Muerto, Atacante) Then
             Call RegisterRecentKiller(Muerto, Atacante)
+            ' E1b: tope diario por pareja asesino->victima (registra kill_tope_diario al pasarlo).
+            If Not AntitrampaKillParejaCuenta(Atacante, Muerto) Then Exit Sub
             If UserList(Atacante).Faccion.CriminalesMatados < MAXUSERMATADOS Then
                 UserList(Atacante).Faccion.CriminalesMatados = UserList(Atacante).Faccion.CriminalesMatados + 1
             End If
@@ -2076,6 +2091,7 @@ Sub ContarMuerte(ByVal Muerto As Integer, ByVal Atacante As Integer)
     ElseIf Status(Muerto) = e_Facciones.Ciudadano Or Status(Muerto) = e_Facciones.Armada Or Status(Muerto) = e_Facciones.consejo Then
         If Not AlreadyKilledBy(Muerto, Atacante) Then
             Call RegisterRecentKiller(Muerto, Atacante)
+            If Not AntitrampaKillParejaCuenta(Atacante, Muerto) Then Exit Sub
             If UserList(Atacante).Faccion.ciudadanosMatados < MAXUSERMATADOS Then
                 UserList(Atacante).Faccion.ciudadanosMatados = UserList(Atacante).Faccion.ciudadanosMatados + 1
             End If

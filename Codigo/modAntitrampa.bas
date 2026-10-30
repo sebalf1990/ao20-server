@@ -36,6 +36,19 @@ Attribute VB_Name = "modAntitrampa"
 ' 5. Politica (Configuracion.ini [ANTITRAMPA] Accion, o en caliente con ~ANTITRAMPA, solo Dios/Admin):
 '    log | avisar_gm | expulsar. Nunca banea. Solo el speedhack aplica la politica; 3 y 4 solo registran.
 '    El anti-macro de verifyTimeStamp NO pasa por aca (decision del duenio 2026-08-08).
+' 6. Anti-farmeo de kills (etapa E1b, duenio 2026-10-29: "no cuentan las muertes entre misma IP/PC, mas
+'    el tope diario por pareja"). Lo consultan ContarMuerte y ActStats (Modulo_UsUaRiOs.bas):
+'    - Misma IP PUBLICA real (o misma PC cuando exista E4) = la muerte no suma kills, puntos de faccion ni
+'      experiencia; evento `kill_misma_ip`. Nunca cuentan como "misma IP": loopback, privadas, link-local,
+'      CGNAT, IPv6 y las de KillIPsTunel (detras de playit todos llegan como 127.0.0.1, H12). El toggle
+'      kill_regla_misma_ip apaga esta regla. KillIncluirLoopback=1 (o ~ANTITRAMPA kills loopback si) trata
+'      127.x como publica: SOLO para la sonda antitrampa_kills.
+'    - Tope por pareja asesino->victima (Id de personaje): KillsMismaParejaPorDia (Balance.dat [EXTRA],
+'      default 3, 0 = sin tope) muertes que cuentan por dia; la siguiente no suma (`kill_tope_diario`). En
+'      memoria: se vacia al cambiar la fecha (00:00) y con un reinicio (aceptado, plan). FactionReKillTime
+'      (10 min) se sigue aplicando antes: solo las muertes que ya contaban gastan tope.
+'    Solo registro (no son trampas en si): sin aviso a GMs ni politica. Ante un error propio cuenta (falla
+'    abierto: nunca le saca un kill a nadie por un bug de este modulo).
 Option Explicit
 
 Public Enum e_AntitrampaAccion
@@ -66,6 +79,7 @@ Private Const FLUSH_MS As Long = 1000
 Private Const FLUSH_LINEAS As Long = 64
 Private Const LOG_ARBOL As String = "Antitrampa"
 Private Const CONTADOR_TOPE As Long = 1000000
+Private Const KILL_TOGGLE_IP As String = "kill_regla_misma_ip"
 
 Private m_Accion As e_AntitrampaAccion
 Private m_ToleranciaPct As Long
@@ -85,6 +99,11 @@ Private m_UltimoFlush As Long
 Private m_CarpetaLista As Boolean
 Private m_UltimoFrame As Long
 
+Private m_KillIncluirLoopback As Boolean
+Private m_KillIPsTunel As String              ' ",ip1,ip2," en minuscula ("," = vacia)
+Private m_KillsPareja As Dictionary          ' "asesinoId>victimaId" -> muertes del dia que llegaron al tope
+Private m_KillsFecha As String               ' yyyymmdd de m_KillsPareja
+
 Private Sub CargarDefaults()
     ' Si Configuracion.ini falla, el modulo queda con los valores del plan (falla abierto, no muerto).
     m_Accion = eAntitrampaAvisarGm
@@ -97,6 +116,8 @@ Private Sub CargarDefaults()
     m_LogCadaMs = 5000
     m_AvisoGmCadaMs = 60000
     m_StallMs = 1000
+    m_KillIncluirLoopback = False
+    m_KillIPsTunel = ","
 End Sub
 
 ' Lee la configuracion. La llama General.Main despues de cargar Configuracion.ini.
@@ -114,12 +135,16 @@ Public Sub InitAntitrampa()
     m_LogCadaMs = SvrConfig.GetValue("AntitrampaLogCadaMs")
     m_AvisoGmCadaMs = SvrConfig.GetValue("AntitrampaAvisoGmCadaMs")
     m_StallMs = SvrConfig.GetValue("AntitrampaStallMs")
+    m_KillIncluirLoopback = (SvrConfig.GetValue("AntitrampaKillIncluirLoopback") <> 0)
+    m_KillIPsTunel = NormalizarListaIps(SvrConfig.GetValue("AntitrampaKillIPsTunel"))
     If m_SpeedRechazosEvento < 1 Then m_SpeedRechazosEvento = 1
     If m_IntervaloRechazosEvento < 1 Then m_IntervaloRechazosEvento = 1
     If m_StallMs < 100 Then m_StallMs = 100
     Call LogThis(0, "Antitrampa: accion=" & AccionTexto(m_Accion) & " tolerancia=" & m_ToleranciaPct & "% credito_max_ms=" & m_CreditoMaxMs & _
             " speed_rechazos=" & m_SpeedRechazosEvento & "/" & m_SpeedVentanaMs & "ms intervalo_rechazos=" & m_IntervaloRechazosEvento & "/" & _
-            m_IntervaloVentanaMs & "ms log_cada_ms=" & m_LogCadaMs & " stall_ms=" & m_StallMs, vbLogEventTypeInformation)
+            m_IntervaloVentanaMs & "ms log_cada_ms=" & m_LogCadaMs & " stall_ms=" & m_StallMs & " kills_tope_pareja=" & _
+            KillsMismaParejaPorDia & " kills_ips_tunel=" & CantidadIpsTunel() & " kills_loopback=" & m_KillIncluirLoopback, _
+            vbLogEventTypeInformation)
     Exit Sub
 InitAntitrampa_Err:
     Call CargarDefaults
@@ -504,6 +529,8 @@ End Sub
 
 ' ---------------------------------------------------------------------------------------------
 ' Comando de GM "~ANTITRAMPA [log|avisar_gm|expulsar]" (viaja como chat, igual que ~LOGLEVEL).
+' "~ANTITRAMPA kills [nuevo_dia | loopback si|no]": estado de la regla de kills (E1b); nuevo_dia vacia el
+' tope diario (lo mismo que pasa a las 00:00); loopback es solo para pruebas y vuelve al .ini al reiniciar.
 ' Consultar: SemiDios/Dios/Admin (el gate de Protocol.HandleTalk). Cambiar: solo Dios/Admin.
 ' ---------------------------------------------------------------------------------------------
 
@@ -528,6 +555,12 @@ Public Function HandleAntitrampaChatCommand(ByVal UserIndex As Integer, ByVal ch
     If UCase$(Trim$(partes(0))) <> "~ANTITRAMPA" Then Exit Function
     HandleAntitrampaChatCommand = True
     If UBound(partes) >= 1 Then
+        If LCase$(Trim$(partes(1))) = "kills" Then
+            Call ComandoKills(UserIndex, partes)
+            Exit Function
+        End If
+    End If
+    If UBound(partes) >= 1 Then
         If (UserList(UserIndex).flags.Privilegios And (e_PlayerType.Dios Or e_PlayerType.Admin)) = 0 Then
             Call WriteConsoleMsg(UserIndex, "Antitrampa: solo Dios/Admin pueden cambiar la accion.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         Else
@@ -547,3 +580,208 @@ Public Function HandleAntitrampaChatCommand(ByVal UserIndex As Integer, ByVal ch
 HandleAntitrampaChatCommand_Err:
     Call TraceError(Err.Number, Err.Description, "modAntitrampa.HandleAntitrampaChatCommand", Erl)
 End Function
+
+' ---------------------------------------------------------------------------------------------
+' Anti-farmeo de kills (E1b)
+' ---------------------------------------------------------------------------------------------
+
+Private Function NormalizarListaIps(ByVal lista As String) As String
+    Dim partes() As String, i As Long, salida As String
+    salida = ","
+    partes = Split(Replace$(lista, " ", vbNullString), ",")
+    ' Split de "" devuelve UBound = -1: el For no entra.
+    For i = 0 To UBound(partes)
+        If LenB(partes(i)) > 0 Then salida = salida & LCase$(partes(i)) & ","
+    Next i
+    NormalizarListaIps = salida
+End Function
+
+Private Function CantidadIpsTunel() As Long
+    CantidadIpsTunel = Len(m_KillIPsTunel) - Len(Replace$(m_KillIPsTunel, ",", vbNullString)) - 1
+    If CantidadIpsTunel < 0 Then CantidadIpsTunel = 0
+End Function
+
+' True solo si la IP identifica a una conexion propia: IPv4 publica que no esta en KillIPsTunel. Loopback
+' (salvo KillIncluirLoopback), 0/8, 10/8, 100.64/10 (CGNAT), 169.254/16, 172.16/12, 192.168/16 e IPv6 no:
+' varios jugadores distintos pueden llegar con la misma.
+Public Function AntitrampaIpEsPublica(ByVal ip As String) As Boolean
+    On Error GoTo AntitrampaIpEsPublica_Err
+    Dim partes() As String, i As Long, octeto As Long, primero As Long, segundo As Long
+    ip = LCase$(Trim$(ip))
+    If LenB(ip) = 0 Then Exit Function
+    If InStr(1, m_KillIPsTunel, "," & ip & ",", vbBinaryCompare) > 0 Then Exit Function
+    ' IPv6 o "ip:puerto": Aurora.Network hoy entrega IPv4 pelada; lo demas no se compara.
+    If InStr(ip, ":") > 0 Then Exit Function
+    partes = Split(ip, ".")
+    If UBound(partes) <> 3 Then Exit Function
+    For i = 0 To 3
+        If LenB(partes(i)) = 0 Or Not IsNumeric(partes(i)) Then Exit Function
+        octeto = CLng(val(partes(i)))
+        If octeto < 0 Or octeto > 255 Then Exit Function
+    Next i
+    primero = CLng(val(partes(0)))
+    segundo = CLng(val(partes(1)))
+    Select Case primero
+        Case 127
+            AntitrampaIpEsPublica = m_KillIncluirLoopback
+        Case 0, 10
+            AntitrampaIpEsPublica = False
+        Case 100
+            AntitrampaIpEsPublica = Not (segundo >= 64 And segundo <= 127)
+        Case 169
+            AntitrampaIpEsPublica = (segundo <> 254)
+        Case 172
+            AntitrampaIpEsPublica = Not (segundo >= 16 And segundo <= 31)
+        Case 192
+            AntitrampaIpEsPublica = (segundo <> 168)
+        Case Else
+            AntitrampaIpEsPublica = True
+    End Select
+    Exit Function
+AntitrampaIpEsPublica_Err:
+    AntitrampaIpEsPublica = False
+    Call TraceError(Err.Number, Err.Description, "modAntitrampa.AntitrampaIpEsPublica", Erl)
+End Function
+
+' Gancho para E4 (guardian): cuando el server conozca un id de PC por conexion, compararlo aca y devolver True
+' si coinciden (evento kill_misma_pc). Hoy el server no conoce ningun id de maquina (H8): nunca coincide.
+Private Function KillMismaPc(ByVal asesino As Integer, ByVal victima As Integer) As Boolean
+    KillMismaPc = False
+End Function
+
+' Evento por el que la muerte NO cuenta por mismo origen ("kill_misma_pc" / "kill_misma_ip"), o "" si cuenta.
+' No registra nada: ContarMuerte registra, ActStats solo pregunta.
+Public Function AntitrampaKillMotivoMismoOrigen(ByVal asesino As Integer, ByVal victima As Integer) As String
+    On Error GoTo AntitrampaKillMotivoMismoOrigen_Err
+    Dim ipAsesino As String
+    If KillMismaPc(asesino, victima) Then
+        AntitrampaKillMotivoMismoOrigen = "kill_misma_pc"
+        Exit Function
+    End If
+    If Not IsFeatureEnabled(KILL_TOGGLE_IP) Then Exit Function
+    ipAsesino = LCase$(Trim$(UserList(asesino).ConnectionDetails.IP))
+    If ipAsesino <> LCase$(Trim$(UserList(victima).ConnectionDetails.IP)) Then Exit Function
+    If Not AntitrampaIpEsPublica(ipAsesino) Then Exit Function
+    AntitrampaKillMotivoMismoOrigen = "kill_misma_ip"
+    Exit Function
+AntitrampaKillMotivoMismoOrigen_Err:
+    AntitrampaKillMotivoMismoOrigen = vbNullString
+    Call TraceError(Err.Number, Err.Description, "modAntitrampa.AntitrampaKillMotivoMismoOrigen", Erl)
+End Function
+
+' Una linea en el log antitrampa a nombre del asesino, con la victima en el detalle. Solo log.
+Public Sub AntitrampaKillRegistrar(ByVal asesino As Integer, ByVal victima As Integer, ByVal evento As String, ByVal extra As String)
+    On Error GoTo AntitrampaKillRegistrar_Err
+    Dim detalle As String
+    With UserList(victima)
+        detalle = "victima_pj=" & .Id & " victima_nick=" & .name & " victima_cuenta=" & .AccountID & " victima_ip=" & .ConnectionDetails.IP
+    End With
+    If LenB(extra) > 0 Then detalle = detalle & " " & extra
+    Call AntitrampaRegistrar(asesino, evento, "log", detalle)
+    Exit Sub
+AntitrampaKillRegistrar_Err:
+    Call TraceError(Err.Number, Err.Description, "modAntitrampa.AntitrampaKillRegistrar", Erl)
+End Sub
+
+' Vacia el tope si cambio la fecha desde la ultima consulta (el reset de las 00:00 es perezoso).
+Private Sub RevisarDiaKills()
+    Dim hoy As String
+    hoy = Format$(Date, "yyyymmdd")
+    If m_KillsPareja Is Nothing Then Set m_KillsPareja = New Dictionary
+    If hoy <> m_KillsFecha Then
+        Call m_KillsPareja.RemoveAll
+        m_KillsFecha = hoy
+    End If
+End Sub
+
+Private Function ClavePareja(ByVal asesino As Integer, ByVal victima As Integer) As String
+    ClavePareja = CStr(UserList(asesino).Id) & ">" & CStr(UserList(victima).Id)
+End Function
+
+' La llama ContarMuerte cuando la muerte ya contaria por todas las demas reglas (FactionReKillTime incluido):
+' la suma al tope de la pareja y devuelve True si sigue dentro del tope del dia; si no, registra
+' kill_tope_diario y devuelve False.
+Public Function AntitrampaKillParejaCuenta(ByVal asesino As Integer, ByVal victima As Integer) As Boolean
+    On Error GoTo AntitrampaKillParejaCuenta_Err
+    Dim clave As String, cantidad As Long
+    If KillsMismaParejaPorDia <= 0 Then
+        AntitrampaKillParejaCuenta = True
+        Exit Function
+    End If
+    Call RevisarDiaKills
+    clave = ClavePareja(asesino, victima)
+    If m_KillsPareja.Exists(clave) Then cantidad = m_KillsPareja.Item(clave)
+    If cantidad < CONTADOR_TOPE Then cantidad = cantidad + 1
+    m_KillsPareja.Item(clave) = cantidad
+    If cantidad <= KillsMismaParejaPorDia Then
+        AntitrampaKillParejaCuenta = True
+    Else
+        Call AntitrampaKillRegistrar(asesino, victima, "kill_tope_diario", "kills_hoy=" & cantidad & " tope=" & KillsMismaParejaPorDia)
+    End If
+    Exit Function
+AntitrampaKillParejaCuenta_Err:
+    AntitrampaKillParejaCuenta = True
+    Call TraceError(Err.Number, Err.Description, "modAntitrampa.AntitrampaKillParejaCuenta", Erl)
+End Function
+
+' True si la pareja ya paso el tope del dia (para ActStats: sin experiencia ni UsuariosMatados). No cuenta.
+Public Function AntitrampaKillParejaExcedida(ByVal asesino As Integer, ByVal victima As Integer) As Boolean
+    On Error GoTo AntitrampaKillParejaExcedida_Err
+    Dim clave As String
+    If KillsMismaParejaPorDia <= 0 Then Exit Function
+    Call RevisarDiaKills
+    clave = ClavePareja(asesino, victima)
+    If m_KillsPareja.Exists(clave) Then AntitrampaKillParejaExcedida = (m_KillsPareja.Item(clave) > KillsMismaParejaPorDia)
+    Exit Function
+AntitrampaKillParejaExcedida_Err:
+    AntitrampaKillParejaExcedida = False
+    Call TraceError(Err.Number, Err.Description, "modAntitrampa.AntitrampaKillParejaExcedida", Erl)
+End Function
+
+Private Function SiNo(ByVal valor As Boolean) As String
+    If valor Then
+        SiNo = "si"
+    Else
+        SiNo = "no"
+    End If
+End Function
+
+' "~ANTITRAMPA kills [nuevo_dia | loopback si|no]" (ver HandleAntitrampaChatCommand).
+Private Sub ComandoKills(ByVal UserIndex As Integer, ByRef partes() As String)
+    On Error GoTo ComandoKills_Err
+    Dim opcion As String, valor As String
+    If UBound(partes) >= 2 Then opcion = LCase$(Trim$(partes(2)))
+    If UBound(partes) >= 3 Then valor = LCase$(Trim$(partes(3)))
+    Call RevisarDiaKills
+    If LenB(opcion) > 0 Then
+        If (UserList(UserIndex).flags.Privilegios And (e_PlayerType.Dios Or e_PlayerType.Admin)) = 0 Then
+            Call WriteConsoleMsg(UserIndex, "Antitrampa: solo Dios/Admin pueden cambiar la regla de kills.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+            Exit Sub
+        End If
+        Select Case opcion
+            Case "nuevo_dia"
+                Call m_KillsPareja.RemoveAll
+                Call LogAudit("ANTITRAMPA", "GM " & UserList(UserIndex).name & " vacio el tope diario de kills (como a las 00:00)")
+            Case "loopback"
+                Select Case valor
+                    Case "si"
+                        m_KillIncluirLoopback = True
+                    Case "no"
+                        m_KillIncluirLoopback = False
+                    Case Else
+                        Call WriteConsoleMsg(UserIndex, "Uso: ~ANTITRAMPA kills [nuevo_dia | loopback si|no]", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+                        Exit Sub
+                End Select
+                Call LogAudit("ANTITRAMPA", "GM " & UserList(UserIndex).name & " puso kills loopback=" & SiNo(m_KillIncluirLoopback) & " (hasta el proximo reinicio)")
+            Case Else
+                Call WriteConsoleMsg(UserIndex, "Uso: ~ANTITRAMPA kills [nuevo_dia | loopback si|no]", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+                Exit Sub
+        End Select
+    End If
+    Call WriteConsoleMsg(UserIndex, "Antitrampa kills: regla_ip=" & SiNo(IsFeatureEnabled(KILL_TOGGLE_IP)) & " loopback_cuenta=" & SiNo(m_KillIncluirLoopback) & _
+            " ips_tunel=" & CantidadIpsTunel() & " tope_por_pareja=" & KillsMismaParejaPorDia & " parejas_hoy=" & m_KillsPareja.Count, _
+            e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+    Exit Sub
+ComandoKills_Err:
+    Call TraceError(Err.Number, Err.Description, "modAntitrampa.ComandoKills", Erl)
+End Sub
