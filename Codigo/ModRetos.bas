@@ -388,6 +388,16 @@ Private Sub IniciarReto(ByVal Oferente As Integer, ByVal Sala As Integer)
                 .EloHabilitado = False
             End If
         Next i
+        ' Plan 2026-10-29 E1b (duenio: "aplica la regla de misma IP tambien al ELO de retos"): si dos
+        ' RIVALES comparten IP publica real o PC (misma regla, exclusiones y toggle que los kills,
+        ' modAntitrampa) el reto se juega igual pero el ELO no se mueve para nadie. La apuesta no cambia.
+        .EloMismoOrigen = False
+        If .EloHabilitado Then
+            If RetoRivalesMismoOrigen(Sala) Then
+                .EloHabilitado = False
+                .EloMismoOrigen = True
+            End If
+        End If
         If .TamañoInicialIzq > 0 Then .EloPromedioIzq = EloSumaIzq \ CLng(.TamañoInicialIzq)
         If .TamañoInicialDer > 0 Then .EloPromedioDer = EloSumaDer \ CLng(.TamañoInicialDer)
         ' Recien aca se registra el enfrentamiento para el enfriamiento: una solicitud que
@@ -1186,6 +1196,8 @@ Private Sub AplicarEloReto(ByVal Sala As Integer, ByVal Sa As Double)
     Dim i As Integer, DeltaIzq As Long, DeltaDer As Long
     With Retos.Salas(Sala)
         If Not .EloHabilitado Then
+            ' El aviso habla del nivel minimo: con ELO apagado por misma IP/PC seria un motivo falso.
+            If .EloMismoOrigen Then Exit Sub
             For i = 0 To UBound(.Jugadores)
                 If IsValidUserRef(.Jugadores(i)) Then
                     Call SendData(SendTarget.ToIndex, .Jugadores(i).ArrayIndex, PrepareMessageLocaleMsg(MSG_PARTICIPANTE_RETO_TIENE_NIVEL_MENOR_ELO_PERMANECE, CStr(Retos.NivelMinimoELO), e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos))
@@ -1374,4 +1386,34 @@ Private Function RetoOtorgaElo(ByVal Oferente As Integer) As Boolean
         Next i
     End With
     RetoOtorgaElo = True
+End Function
+
+' Plan 2026-10-29 E1b: True si algun par de RIVALES (equipo izquierdo = indices pares, derecho = impares)
+' comparte IP publica real o PC segun modAntitrampa; registra reto_misma_ip / reto_misma_pc una vez. En un
+' reto por equipos basta un par: el ELO de un equipo es un promedio, asi que un solo jugador propio en el
+' bando rival alcanza para pasarse rating. Companieros de equipo con la misma IP no importan.
+Private Function RetoRivalesMismoOrigen(ByVal Sala As Integer) As Boolean
+    On Error GoTo ErrHandler
+    Dim i As Integer, j As Integer, motivo As String
+    With Retos.Salas(Sala)
+        For i = 0 To UBound(.Jugadores) Step 2
+            If IsValidUserRef(.Jugadores(i)) Then
+                For j = 1 To UBound(.Jugadores) Step 2
+                    If IsValidUserRef(.Jugadores(j)) Then
+                        motivo = AntitrampaKillMotivoMismoOrigen(.Jugadores(i).ArrayIndex, .Jugadores(j).ArrayIndex)
+                        If LenB(motivo) > 0 Then
+                            Call AntitrampaRetoRegistrar(.Jugadores(i).ArrayIndex, .Jugadores(j).ArrayIndex, Replace$(motivo, "kill_", "reto_"), _
+                                    "sala=" & Sala & " jugadores=" & (UBound(.Jugadores) + 1) & " apuesta=" & .Apuesta)
+                            RetoRivalesMismoOrigen = True
+                            Exit Function
+                        End If
+                    End If
+                Next j
+            End If
+        Next i
+    End With
+    Exit Function
+ErrHandler:
+    RetoRivalesMismoOrigen = False
+    Call TraceError(Err.Number, Err.Description, "ModRetos.RetoRivalesMismoOrigen", Erl)
 End Function

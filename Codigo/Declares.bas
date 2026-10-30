@@ -2371,6 +2371,9 @@ Public Type t_SalaReto
     ' sumaba el ELO de los que seguian en la sala AL TERMINAR, asi que un abandono cambiaba
     ' retroactivamente la fuerza del rival. Con la foto el rating no depende de quien se fue.
     EloHabilitado As Boolean
+    ' Plan 2026-10-29 E1b: el ELO se apago porque dos rivales comparten IP publica real o PC (sin aviso
+    ' a los jugadores; queda reto_misma_ip en el log antitrampa).
+    EloMismoOrigen As Boolean
     EloPromedioIzq As Long
     EloPromedioDer As Long
     TamañoInicialIzq As Byte

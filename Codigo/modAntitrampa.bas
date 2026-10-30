@@ -42,7 +42,9 @@ Attribute VB_Name = "modAntitrampa"
 '      experiencia; evento `kill_misma_ip`. Nunca cuentan como "misma IP": loopback, privadas, link-local,
 '      CGNAT, IPv6 y las de KillIPsTunel (detras de playit todos llegan como 127.0.0.1, H12). El toggle
 '      kill_regla_misma_ip apaga esta regla. KillIncluirLoopback=1 (o ~ANTITRAMPA kills loopback si) trata
-'      127.x como publica: SOLO para la sonda antitrampa_kills.
+'      127.x como publica: SOLO para las sondas antitrampa_kills / antitrampa_retos.
+'    - Retos (duenio 2026-10-29): la misma regla de origen entre RIVALES apaga el ELO del reto entero
+'      (ModRetos.RetoRivalesMismoOrigen, evento `reto_misma_ip`); la apuesta no cambia.
 '    - Tope por pareja asesino->victima (Id de personaje): KillsMismaParejaPorDia (Balance.dat [EXTRA],
 '      default 3, 0 = sin tope) muertes que cuentan por dia; la siguiente no suma (`kill_tope_diario`). En
 '      memoria: se vacia al cambiar la fecha (00:00) y con un reinicio (aceptado, plan). FactionReKillTime
@@ -681,6 +683,20 @@ Public Sub AntitrampaKillRegistrar(ByVal asesino As Integer, ByVal victima As In
     Exit Sub
 AntitrampaKillRegistrar_Err:
     Call TraceError(Err.Number, Err.Description, "modAntitrampa.AntitrampaKillRegistrar", Erl)
+End Sub
+
+' Igual para un reto (ModRetos): el rival en el detalle. Solo log.
+Public Sub AntitrampaRetoRegistrar(ByVal jugador As Integer, ByVal rival As Integer, ByVal evento As String, ByVal extra As String)
+    On Error GoTo AntitrampaRetoRegistrar_Err
+    Dim detalle As String
+    With UserList(rival)
+        detalle = "rival_pj=" & .Id & " rival_nick=" & .name & " rival_cuenta=" & .AccountID & " rival_ip=" & .ConnectionDetails.IP
+    End With
+    If LenB(extra) > 0 Then detalle = detalle & " " & extra
+    Call AntitrampaRegistrar(jugador, evento, "log", detalle)
+    Exit Sub
+AntitrampaRetoRegistrar_Err:
+    Call TraceError(Err.Number, Err.Description, "modAntitrampa.AntitrampaRetoRegistrar", Erl)
 End Sub
 
 ' Vacia el tope si cambio la fecha desde la ultima consulta (el reset de las 00:00 es perezoso).
