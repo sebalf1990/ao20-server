@@ -411,6 +411,7 @@ Private Sub IniciarReto(ByVal Oferente As Integer, ByVal Sala As Integer)
         For i = 0 To UBound(.Jugadores)
             tUser = .Jugadores(i)
             ' Le cobramos
+            Call VigiaFuente(tUser.ArrayIndex, "reto")  ' E2 vigia (modVigia)
             UserList(tUser.ArrayIndex).Stats.GLD = UserList(tUser.ArrayIndex).Stats.GLD - Apuesta
             Call WriteUpdateGold(tUser.ArrayIndex)
             Call WriteLocaleMsg(tUser.ArrayIndex, MSG_OTORGAS_MONEDAS_ORO_POZO_RETO, e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos, ApuestaStr) ' Msg1966=Otorgas ¬1 monedas de oro al pozo del reto.
@@ -585,6 +586,7 @@ Public Sub FinalizarReto(ByVal Sala As Integer, Optional ByVal TiempoAgotado As 
             For i = 0 To UBound(.Jugadores)
                 tUser = .Jugadores(i)
                 If IsValidUserRef(tUser) Then
+                    Call VigiaFuente(tUser.ArrayIndex, "reto")  ' E2 vigia (modVigia)
                     UserList(tUser.ArrayIndex).Stats.GLD = UserList(tUser.ArrayIndex).Stats.GLD + Oro
                     Call WriteUpdateGold(tUser.ArrayIndex)
                     Call WriteLocaleMsg(tUser.ArrayIndex, MSG_HAS_GANADO_MONEDAS_DE_ORO, e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos, OroStr) ' Has ganado X monedas de oro
@@ -629,6 +631,7 @@ Public Sub FinalizarReto(ByVal Sala As Integer, Optional ByVal TiempoAgotado As 
                 If IsValidUserRef(tUser) Then
                     Call RevivirYLimpiar(tUser.ArrayIndex)
                     If UserList(tUser.ArrayIndex).flags.EquipoReto = Ganador Then
+                        Call VigiaFuente(tUser.ArrayIndex, "reto")  ' E2 vigia (modVigia)
                         UserList(tUser.ArrayIndex).Stats.GLD = UserList(tUser.ArrayIndex).Stats.GLD + Oro
                         Call WriteUpdateGold(tUser.ArrayIndex)
                         Call WriteLocaleMsg(tUser.ArrayIndex, MSG_HAS_GANADO_MONEDAS_DE_ORO, e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos, OroStr) ' Has ganado X monedas de oro
@@ -923,6 +926,7 @@ Private Sub CancelarRetoEnConteo(ByVal Sala As Integer, ByVal Abandona As Intege
         For i = 0 To UBound(.Jugadores)
             If IsValidUserRef(.Jugadores(i)) Then
                 Idx = .Jugadores(i).ArrayIndex
+                Call VigiaFuente(Idx, "reto")  ' E2 vigia (modVigia)
                 UserList(Idx).Stats.GLD = UserList(Idx).Stats.GLD + .Apuesta
             End If
         Next i

@@ -19,6 +19,7 @@ Attribute VB_Name = "ModMining"
 Option Explicit
 
 Public Sub MineMinerals(ByVal UserIndex As Integer)
+    Call VigiaFuente(UserIndex, "trabajo")  ' E2 vigia (modVigia)
     With UserList(UserIndex)
         If Not DecreaseUserStamina(UserIndex, ModAutomatedActions.MIN_STA_REQUIRED) Then
             Exit Sub

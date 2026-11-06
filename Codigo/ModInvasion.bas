@@ -216,6 +216,7 @@ Sub FinalizarInvasion(ByVal Index As Integer)
                         If IsValidUserRef(tUser) Then
                             ' Le damos el oro
                             Call WriteConsoleMsg(tUser.ArrayIndex, PremioStr, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Amarillo_Oscuro)
+                            Call VigiaFuente(tUser.ArrayIndex, "evento")  ' E2 vigia (modVigia)
                             UserList(tUser.ArrayIndex).Stats.GLD = UserList(tUser.ArrayIndex).Stats.GLD + OroGanado
                             Call WriteUpdateGold(tUser.ArrayIndex)
                         End If

@@ -70,6 +70,7 @@ End Function
 
 Public Sub ReturnCraftingItems(ByVal UserIndex As Integer)
     On Error GoTo ReturnCraftingItems_Err:
+    Call VigiaFuente(UserIndex, "trabajo")  ' E2 vigia (modVigia)
     Dim i As Integer, TmpObj As t_Obj
     With UserList(UserIndex)
         For i = 1 To UBound(.CraftInventory)
@@ -114,6 +115,7 @@ End Function
 
 Public Sub DoCraftItem(ByVal UserIndex As Integer)
     On Error GoTo DoCraftItem_Err:
+    Call VigiaFuente(UserIndex, "trabajo")  ' E2 vigia (modVigia)
     With UserList(UserIndex)
         If Not .CraftResult Is Nothing Then
             If .CraftResult.precio > .Stats.GLD Then

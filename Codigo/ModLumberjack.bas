@@ -19,6 +19,7 @@ Attribute VB_Name = "ModLumberjack"
 Option Explicit
 
 Public Sub ChopWood(ByVal UserIndex As Integer)
+    Call VigiaFuente(UserIndex, "trabajo")  ' E2 vigia (modVigia)
     With UserList(UserIndex)
         If Not DecreaseUserStamina(UserIndex, ModAutomatedActions.MIN_STA_REQUIRED) Then
             Exit Sub

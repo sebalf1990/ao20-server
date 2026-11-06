@@ -175,6 +175,13 @@ Public Function LoadSettings(ByVal Filename As String) As Long
     mSettings.Add "DenunciasMismoObjetivoPorHora", CLng(val(reader.GetValue("ANTITRAMPA", "DenunciasMismoObjetivoPorHora", "1")))
     mSettings.Add "DenunciaAvisoGmCadaMs", CLng(val(reader.GetValue("ANTITRAMPA", "DenunciaAvisoGmCadaMs", "60000")))
     mSettings.Add "DenunciasPorDiaGlobal", CLng(val(reader.GetValue("ANTITRAMPA", "DenunciasPorDiaGlobal", "200")))
+    ' E2 vigia (modVigia.bas): agregado de oro/items, ventanas de ritmo y de ruta.
+    mSettings.Add "VigiaAgregadoMs", CLng(val(reader.GetValue("ANTITRAMPA", "VigiaAgregadoMs", "60000")))
+    mSettings.Add "VigiaRitmoVentanaMs", CLng(val(reader.GetValue("ANTITRAMPA", "VigiaRitmoVentanaMs", "300000")))
+    mSettings.Add "VigiaRitmoPausaMs", CLng(val(reader.GetValue("ANTITRAMPA", "VigiaRitmoPausaMs", "2000")))
+    mSettings.Add "VigiaRitmoMinN", CLng(val(reader.GetValue("ANTITRAMPA", "VigiaRitmoMinN", "20")))
+    mSettings.Add "VigiaRutaVentanaMs", CLng(val(reader.GetValue("ANTITRAMPA", "VigiaRutaVentanaMs", "300000")))
+    mSettings.Add "VigiaRutaMinPasos", CLng(val(reader.GetValue("ANTITRAMPA", "VigiaRutaMinPasos", "20")))
     mSettings.Add "FISHING_REQUIRED_PERCENT", CInt(val(reader.GetValue("PESCA", "MinAgua")))
     mSettings.Add "FISHING_TILES_ON_MAP", CInt(val(reader.GetValue("PESCA", "MaxZonas")))
     mSettings.Add "FISHING_POOL_ID", CInt(val(reader.GetValue("PESCA", "FishingID")))

@@ -611,6 +611,7 @@ Private Function PayOutGold(ByRef instance As t_Lobby, ByVal UserSlotIndex As In
         Exit Function
     End If
     If IsValidUserRef(instance.Players(UserSlotIndex).User) Then
+        Call VigiaFuente(instance.Players(UserSlotIndex).User.ArrayIndex, "evento")  ' E2 vigia (modVigia)
         Call AddGold(instance.Players(UserSlotIndex).User.ArrayIndex, amount)
         instance.AvailableInscriptionMoney = instance.AvailableInscriptionMoney - amount
         PayOutGold = True

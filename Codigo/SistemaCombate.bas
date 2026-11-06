@@ -2049,6 +2049,7 @@ Private Sub CalcularDarOroGrupal(ByVal UserIndex As Integer, ByVal GiveGold As L
             If UserList(Index).flags.Muerto = 0 Then
                 If UserList(UserIndex).pos.Map = UserList(Index).pos.Map Then
                     If OroDar > 0 Then
+                        Call VigiaFuente(Index, "npc_muerte")  ' E2 vigia (modVigia)
                         UserList(Index).Stats.GLD = UserList(Index).Stats.GLD + OroDar
                         If UserList(Index).ChatCombate = 1 Then
                             Call WriteLocaleMsg(Index, MSG_GROUP_GOLD_REWARD, e_TextChannel.TEXTCHANNEL_GROUP, e_FontTypeNames.FONTTYPE_New_GRUPO, PonerPuntos(OroDar)) ' Msg1780=¡El grupo ha ganado ¬1 monedas de oro!

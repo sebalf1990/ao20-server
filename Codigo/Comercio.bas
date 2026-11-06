@@ -35,6 +35,7 @@ Public Const REDUCTOR_PRECIOVENTA As Byte = 3
 
 Public Sub Comercio(ByVal Modo As eModoComercio, ByVal UserIndex As Integer, ByVal NpcIndex As Integer, ByVal Slot As Integer, ByVal Cantidad As Integer)
     On Error GoTo Comercio_Err
+    Call VigiaFuente(UserIndex, "npc_comercio")  ' E2 vigia (modVigia)
     Dim precio           As Long
     Dim Objeto           As t_Obj
     Dim objquedo         As t_Obj

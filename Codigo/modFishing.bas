@@ -89,6 +89,7 @@ End Sub
 
 Public Sub PerformFishing(ByVal UserIndex As Integer)
     On Error GoTo ErrHandler
+    Call VigiaFuente(UserIndex, "trabajo")  ' E2 vigia (modVigia)
     ' Early validation
     If Not IsValidUserIndex(UserIndex) Then
         Call TraceError(1001, "Invalid user index in PerformFishing:  " & UserIndex, "modFishing.PerformFishing", Erl)

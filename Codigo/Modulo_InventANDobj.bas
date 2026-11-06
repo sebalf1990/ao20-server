@@ -237,6 +237,7 @@ Public Sub NpcDropQuestObj(ByRef Npc As t_Npc, ByRef UserIndex As Integer)
             If Probabilidad = 1 Then
                 Dropeo.Amount = .Amount
                 Dropeo.ObjIndex = .ObjIndex
+                Call VigiaFuente(UserIndex, "npc_muerte")  ' E2 vigia (modVigia)
                 Call MeterItemEnInventario(UserIndex, Dropeo)
                 Call SendData(ToIndex, UserIndex, PrepareMessagePlayWave(e_SoundEffects.Dropeo_Sound, Npc.pos.x, Npc.pos.y))
             End If

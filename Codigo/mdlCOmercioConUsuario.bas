@@ -234,6 +234,8 @@ Public Sub AceptarComercioUsu(ByVal UserIndex As Integer)
     Next i
     'Por si las moscas...
     If TerminarAhora Then GoTo FinalizarComercio
+    Call VigiaFuenteCon(UserIndex, "comercio_usuario", VigiaContraparte("con", OtroUserIndex))  ' E2 vigia (modVigia)
+    Call VigiaFuenteCon(OtroUserIndex, "comercio_usuario", VigiaContraparte("con", UserIndex))  ' E2 vigia (modVigia)
     'pone el oro directamente en la billetera
     If UserList(OtroUserIndex).ComUsu.Oro > 0 Then
         UserList(OtroUserIndex).Stats.GLD = UserList(OtroUserIndex).Stats.GLD - UserList(OtroUserIndex).ComUsu.Oro

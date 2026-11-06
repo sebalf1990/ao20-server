@@ -105,6 +105,7 @@ End Function
  
 Public Sub FinishQuest(ByVal UserIndex As Integer, ByVal QuestIndex As Integer, ByVal QuestSlot As Byte)
     On Error GoTo FinishQuest_Err
+    Call VigiaFuente(UserIndex, "quest")  ' E2 vigia (modVigia)
     'Maneja el evento de terminar una quest.
     Dim i, j           As Integer
     Dim InvSlotsLibres As Byte

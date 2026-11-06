@@ -276,6 +276,7 @@ Public Sub DenunciaOro(ByVal UserIndex As Integer)
             If delta > CANTIDAD_TOPE Then delta = CANTIDAD_TOPE
             If delta < -CANTIDAD_TOPE Then delta = -CANTIDAD_TOPE
             Call RegistrarAccion(UserIndex, eDenOro, 0, CLng(delta), oro)
+            Call VigiaDelta(UserIndex, 0, delta, oro)  ' E2 vigia (modVigia)
         End If
     End If
     m_Buf(UserIndex).OroConocido = oro
@@ -297,10 +298,17 @@ Public Sub DenunciaItemSlot(ByVal UserIndex As Integer, ByVal Slot As Byte)
     With m_Buf(UserIndex)
         If UserList(UserIndex).flags.UserLogged Then
             If obj <> .InvObj(Slot) Then
-                If .InvObj(Slot) > 0 And .InvCant(Slot) > 0 Then Call RegistrarAccion(UserIndex, eDenItem, .InvObj(Slot), -.InvCant(Slot), Slot)
-                If obj > 0 And cant > 0 Then Call RegistrarAccion(UserIndex, eDenItem, obj, cant, Slot)
+                If .InvObj(Slot) > 0 And .InvCant(Slot) > 0 Then
+                    Call RegistrarAccion(UserIndex, eDenItem, .InvObj(Slot), -.InvCant(Slot), Slot)
+                    Call VigiaDelta(UserIndex, .InvObj(Slot), -CDbl(.InvCant(Slot)), 0)  ' E2 vigia (modVigia)
+                End If
+                If obj > 0 And cant > 0 Then
+                    Call RegistrarAccion(UserIndex, eDenItem, obj, cant, Slot)
+                    Call VigiaDelta(UserIndex, obj, CDbl(cant), 0)  ' E2 vigia (modVigia)
+                End If
             ElseIf obj > 0 And cant <> .InvCant(Slot) Then
                 Call RegistrarAccion(UserIndex, eDenItem, obj, cant - .InvCant(Slot), Slot)
+                Call VigiaDelta(UserIndex, obj, CDbl(cant) - CDbl(.InvCant(Slot)), 0)  ' E2 vigia (modVigia)
             End If
         End If
         .InvObj(Slot) = obj

@@ -324,6 +324,7 @@ Public Function HandleIncomingData(ByVal ConnectionID As Long, ByVal Message As 
             End If
         End If
     #End If
+    Call VigiaInicioPaquete(UserIndex, PacketId, PacketName)  ' E2 vigia (modVigia)
     Select Case PacketId
         Case ClientPacketID.eLoginExistingChar
             Call HandleLoginExistingChar(ConnectionID)
@@ -2237,6 +2238,7 @@ Private Sub HandleWalk(ByVal UserIndex As Integer)
             If MoveUserChar(UserIndex, Heading) Then
                 Call AntitrampaPasoAceptado(UserIndex, PasoCosto)
                 Call DenunciaAccion(UserIndex, eDenPaso, 0, 1)
+                Call VigiaPaso(UserIndex)  ' E2 vigia (modVigia)
                 Call ResetUserAutomatedActions(UserIndex)
                 If UserList(UserIndex).Grupo.EnGrupo Then
                     Call CompartirUbicacion(UserIndex)
@@ -3873,6 +3875,7 @@ End Sub
 ' @param    UserIndex The index of the user sending the message.
 Private Sub HandleBankExtractItem(ByVal UserIndex As Integer)
     On Error GoTo HandleBankExtractItem_Err
+    Call VigiaFuente(UserIndex, "banco")  ' E2 vigia (modVigia)
     With UserList(UserIndex)
         Dim Slot        As Byte
         Dim slotdestino As Byte
@@ -3934,6 +3937,7 @@ End Sub
 ' @param    UserIndex The index of the user sending the message.
 Private Sub HandleBankDeposit(ByVal UserIndex As Integer)
     On Error GoTo HandleBankDeposit_Err
+    Call VigiaFuente(UserIndex, "banco")  ' E2 vigia (modVigia)
     With UserList(UserIndex)
         Dim Slot        As Byte
         Dim slotdestino As Byte
@@ -5469,6 +5473,7 @@ End Sub
 ' @param    UserIndex The index of the user sending the message.
 Private Sub HandleBankExtractGold(ByVal UserIndex As Integer)
     On Error GoTo HandleBankExtractGold_Err
+    Call VigiaFuente(UserIndex, "banco")  ' E2 vigia (modVigia)
     With UserList(UserIndex)
         Dim amount As Long
         amount = reader.ReadInt32()
@@ -5597,6 +5602,7 @@ End Sub
 
 Private Sub HandleBankDepositGold(ByVal UserIndex As Integer)
     On Error GoTo HandleBankDepositGold_Err
+    Call VigiaFuente(UserIndex, "banco")  ' E2 vigia (modVigia)
     With UserList(UserIndex)
         Dim amount As Long
         amount = reader.ReadInt32()
@@ -6629,11 +6635,13 @@ Private Sub HandleOfertaDeSubasta(ByVal UserIndex As Integer)
             'Devolvemos el oro al usuario que oferto antes...(si es que hubo oferta)
             If Subasta.HuboOferta = True Then
                 ExOferta = NameIndex(Subasta.Comprador)
+                Call VigiaFuente(ExOferta.ArrayIndex, "subasta")  ' E2 vigia (modVigia)
                 UserList(ExOferta.ArrayIndex).Stats.GLD = UserList(ExOferta.ArrayIndex).Stats.GLD + Subasta.MejorOferta
                 Call WriteUpdateGold(ExOferta.ArrayIndex)
             End If
             Subasta.MejorOferta = Oferta
             Subasta.Comprador = .name
+            Call VigiaFuente(UserIndex, "subasta")  ' E2 vigia (modVigia)
             .Stats.GLD = .Stats.GLD - Oferta
             Call WriteUpdateGold(UserIndex)
             If Subasta.TiempoRestanteSubasta < 60 Then
@@ -7382,6 +7390,7 @@ Private Sub HandleResponderPregunta(ByVal UserIndex As Integer)
                         For i = 1 To MAX_INVENTORY_SLOTS
                             For j = 1 To UBound(PecesEspeciales)
                                 If .invent.Object(i).ObjIndex = PecesEspeciales(j).ObjIndex Then
+                                    Call VigiaFuente(UserIndex, "pesca_especial")  ' E2 vigia (modVigia)
                                     .Stats.PuntosPesca = .Stats.PuntosPesca + (ObjData(.invent.Object(i).ObjIndex).PuntosPesca * .invent.Object(i).amount)
                                     .Stats.GLD = .Stats.GLD + (ObjData(.invent.Object(i).ObjIndex).Valor * .invent.Object(i).amount * SvrConfig.GetValue( _
                                             "SpecialFishGoldMultiplier"))
@@ -7954,6 +7963,7 @@ End Sub
 
 Private Sub HandleCuentaExtractItem(ByVal UserIndex As Integer)
     On Error GoTo HandleCuentaExtractItem_Err
+    Call VigiaFuente(UserIndex, "banco")  ' E2 vigia (modVigia)
     With UserList(UserIndex)
         Dim Slot        As Byte
         Dim slotdestino As Byte
@@ -8240,6 +8250,7 @@ End Sub
 
 Private Sub HandleRemoveItemCrafting(ByVal UserIndex As Integer)
     On Error GoTo ErrHandler
+    Call VigiaFuente(UserIndex, "trabajo")  ' E2 vigia (modVigia)
     With UserList(UserIndex)
         Dim InvSlot As Byte, CraftSlot As Byte
         CraftSlot = reader.ReadInt8
@@ -8459,6 +8470,7 @@ End Sub
 
 Private Sub HandleRomperCania(ByVal UserIndex As Integer)
     On Error GoTo HandleRomperCania_Err
+    Call VigiaFuente(UserIndex, "trabajo")  ' E2 vigia (modVigia)
     Dim LoopC    As Integer
     Dim obj      As t_Obj
     Dim caniaOld As Integer

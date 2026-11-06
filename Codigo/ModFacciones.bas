@@ -298,6 +298,7 @@ End Function
 ' que debería tener hasta alcanzar su rango.
 Private Sub DarRecompensas(ByVal UserIndex As Integer)
     On Error GoTo DarRecompensas_Err
+    Call VigiaFuente(UserIndex, "faccion")  ' E2 vigia (modVigia)
     Dim recompensa       As t_RecompensaFaccion
     Dim rank             As Byte
     Dim ultimaRecompensa As Byte

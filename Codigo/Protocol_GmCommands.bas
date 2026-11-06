@@ -196,6 +196,7 @@ End Sub
 
 Public Sub HandleGamble(ByVal UserIndex As Integer)
     On Error GoTo HandleGamble_Err
+    Call VigiaFuente(UserIndex, "apuesta")  ' E2 vigia (modVigia)
     With UserList(UserIndex)
         Dim amount As Integer
         amount = reader.ReadInt16()
@@ -1062,6 +1063,7 @@ Public Sub HandleEditChar(ByVal UserIndex As Integer)
         Select Case opcion
             Case e_EditOptions.eo_Gold
                 If (.flags.Privilegios And (e_PlayerType.User Or e_PlayerType.Consejero Or e_PlayerType.SemiDios)) Then Exit Sub
+                Call VigiaFuenteCon(tUser.ArrayIndex, "gm", VigiaContraparte("gm", UserIndex))  ' E2 vigia (modVigia)
                 UserList(tUser.ArrayIndex).Stats.GLD = val(Arg1)
                 Call WriteUpdateGold(tUser.ArrayIndex)
             Case e_EditOptions.eo_Experience
@@ -2602,6 +2604,7 @@ Public Sub HandleCreateItem(ByVal UserIndex As Integer)
         '   1 = NO
         If ObjData(tObj).Agarrable = 0 Then
             ' Trato de meterlo en el inventario.
+            Call VigiaFuenteCon(UserIndex, "gm", VigiaContraparte("gm", UserIndex))  ' E2 vigia (modVigia)
             If MeterItemEnInventario(UserIndex, Objeto) Then
                 Call WriteLocaleMsg(UserIndex, MSG_YOU_CREATED_ITEM, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO, (ObjData(tObj).name & "¬" & CStr(Cuantos)))
             Else
@@ -3390,6 +3393,7 @@ Public Sub HandleGiveItem(ByVal UserIndex As Integer)
             Objeto.amount = Cantidad
             Objeto.ObjIndex = ObjIndex
             ' Trato de meterlo en el inventario.
+            Call VigiaFuenteCon(tUser.ArrayIndex, "gm", VigiaContraparte("gm", UserIndex))  ' E2 vigia (modVigia)
             If MeterItemEnInventario(tUser.ArrayIndex, Objeto) Then
                 Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_OTORGADO, .name & "¬" & UserList(tUser.ArrayIndex).name & "¬" & Cantidad & "¬" & ObjData(ObjIndex).name & _
                         "¬" & Motivo, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_ROSA)) 'Msg1743=¬1 ha otorgado a ¬2 ¬3 ¬4: ¬5

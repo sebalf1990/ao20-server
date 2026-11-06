@@ -153,6 +153,7 @@ Public Sub FinalizarSubasta()
                     "Subastador te ha dejado un mensaje: ¡Has ganado la subasta! Como no tenias espacio ni en tu boveda ni en el correo, tuve que tirarlo en tu ultima posicion.")
         End If
     Else
+        Call VigiaFuente(tUser.ArrayIndex, "subasta")  ' E2 vigia (modVigia)
         If Not MeterItemEnInventario(tUser.ArrayIndex, ObjVendido) Then
             Call TirarItemAlPiso(UserList(tUser.ArrayIndex).pos, ObjVendido)
         End If
@@ -171,6 +172,7 @@ Public Sub FinalizarSubasta()
         Call WriteVar(CharPath & UCase$(Subasta.Subastador) & ".chr", "INIT", "MENSAJEINFORMACION", _
                 "Subastador te ha dejado un mensaje: ¡Has vendido tu item! Te deposite el oro en el sistema de finanzas Goliath.")
     Else
+        Call VigiaFuente(Subastador.ArrayIndex, "subasta")  ' E2 vigia (modVigia)
         UserList(Subastador.ArrayIndex).Stats.GLD = UserList(Subastador.ArrayIndex).Stats.GLD + Subasta.MejorOferta
         Call WriteLocaleMsg(Subastador.ArrayIndex, MSG_FELICITACIONES_HAS_GANADO_MONEDAS_DE_ORO_DE_TU_SUBASTA, e_TextChannel.TEXTCHANNEL_ECONOMY, e_FontTypeNames.FONTTYPE_SUBASTA, PonerPuntos(Subasta.MejorOferta)) ' Msg1441=Felicitaciones, has ganado ¬1 monedas de oro de tú subasta.
         Call WriteUpdateGold(Subastador.ArrayIndex)
@@ -246,6 +248,7 @@ Public Sub DevolverItem()
         End If
     Else
         Subastador = NameIndex(Subasta.Subastador)
+        Call VigiaFuente(Subastador.ArrayIndex, "subasta")  ' E2 vigia (modVigia)
         If Not MeterItemEnInventario(Subastador.ArrayIndex, ObjVendido) Then
             Call TirarItemAlPiso(UserList(Subastador.ArrayIndex).pos, ObjVendido)
             Call LogearEventoDeSubasta("Se tiro al piso el item.")
@@ -301,6 +304,7 @@ Public Sub CancelarSubasta()
         End If
     Else
         Subastador = NameIndex(Subasta.Subastador)
+        Call VigiaFuente(Subastador.ArrayIndex, "subasta")  ' E2 vigia (modVigia)
         If Not MeterItemEnInventario(Subastador.ArrayIndex, ObjVendido) Then
             Call TirarItemAlPiso(UserList(Subastador.ArrayIndex).pos, ObjVendido)
             Call LogearEventoDeSubasta("Se tiro al piso el item.")

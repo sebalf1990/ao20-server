@@ -51,6 +51,8 @@ Attribute VB_Name = "modAntitrampa"
 '      (10 min) se sigue aplicando antes: solo las muertes que ya contaban gastan tope.
 '    Solo registro (no son trampas en si): sin aviso a GMs ni politica. Ante un error propio cuenta (falla
 '    abierto: nunca le saca un kill a nadie por un bug de este modulo).
+' 7. Vigia (etapa E2, modVigia.bas): oro/items con fuente, login/logout, ritmo y rutas van a este mismo log
+'    por AntitrampaLinea; los analiza tools\antitrampa\analizar.py. Sin avisos a GMs.
 Option Explicit
 
 Public Enum e_AntitrampaAccion
@@ -196,6 +198,8 @@ Public Sub AntitrampaResetUser(ByVal UserIndex As Integer)
     End With
     ' Buffer de acciones de /denunciar (E3, modDenuncias): tambien campo por campo.
     Call DenunciasResetUser(UserIndex)
+    ' Estado de la vigia (E2, modVigia): fuente, ritmo y ruta.
+    Call VigiaResetUser(UserIndex)
     Exit Sub
 AntitrampaResetUser_Err:
     Call TraceError(Err.Number, Err.Description, "modAntitrampa.AntitrampaResetUser", Erl)
@@ -258,6 +262,25 @@ End Function
 ' Registra un evento del jugador. accion = lo que se hizo con el (log, avisar_gm, expulsar).
 Public Sub AntitrampaRegistrar(ByVal UserIndex As Integer, ByVal evento As String, ByVal accion As String, ByVal detalle As String)
     On Error GoTo AntitrampaRegistrar_Err
+    Call AgregarLinea(ArmarLinea(UserIndex, evento, accion, detalle))
+    ' El evento tambien queda en el buffer de acciones del jugador (snapshot de /denunciar, E3).
+    Call DenunciaAntitrampa(UserIndex, evento)
+    Exit Sub
+AntitrampaRegistrar_Err:
+    Call TraceError(Err.Number, Err.Description, "modAntitrampa.AntitrampaRegistrar", Erl)
+End Sub
+
+' Linea de la vigia (E2, modVigia): accion "log" y SIN pasar por el buffer de /denunciar (oro, items, login,
+' ritmo y ruta ya estan ahi o no son acciones del jugador).
+Public Sub AntitrampaLinea(ByVal UserIndex As Integer, ByVal evento As String, ByVal detalle As String)
+    On Error GoTo AntitrampaLinea_Err
+    Call AgregarLinea(ArmarLinea(UserIndex, evento, "log", detalle))
+    Exit Sub
+AntitrampaLinea_Err:
+    Call TraceError(Err.Number, Err.Description, "modAntitrampa.AntitrampaLinea", Erl)
+End Sub
+
+Private Function ArmarLinea(ByVal UserIndex As Integer, ByVal evento As String, ByVal accion As String, ByVal detalle As String) As String
     Dim linea As String
     With UserList(UserIndex)
         linea = "{""ts"":" & JsonTexto(Format$(Now, "yyyy-mm-dd hh:nn:ss")) & _
@@ -273,13 +296,8 @@ Public Sub AntitrampaRegistrar(ByVal UserIndex As Integer, ByVal evento As Strin
                 ",""y"":" & .pos.y & _
                 ",""detalle"":" & JsonTexto(detalle) & "}"
     End With
-    Call AgregarLinea(linea)
-    ' El evento tambien queda en el buffer de acciones del jugador (snapshot de /denunciar, E3).
-    Call DenunciaAntitrampa(UserIndex, evento)
-    Exit Sub
-AntitrampaRegistrar_Err:
-    Call TraceError(Err.Number, Err.Description, "modAntitrampa.AntitrampaRegistrar", Erl)
-End Sub
+    ArmarLinea = linea
+End Function
 
 ' Como mucho una linea por jugador y tipo cada m_LogCadaMs (forzar = siempre, p. ej. una expulsion).
 ' Los eventos suprimidos se cuentan y salen como " sin_registrar=N" en la linea siguiente.

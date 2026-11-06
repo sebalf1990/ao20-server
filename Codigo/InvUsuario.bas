@@ -269,6 +269,7 @@ ResetUserSkinsInventory_Error:
 End Sub
 
 Sub TirarOro(ByVal Cantidad As Long, ByVal UserIndex As Integer)
+    Call VigiaFuente(UserIndex, "piso")  ' E2 vigia (modVigia)
     '***************************************************
     'Autor: Unknown (orginal version)
     'Last Modification: 23/01/2007
@@ -399,6 +400,7 @@ End Sub
 
 Sub DropObj(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal num As Integer, ByVal Map As Integer, ByVal x As Integer, ByVal y As Integer)
     On Error GoTo DropObj_Err
+    Call VigiaFuente(UserIndex, "piso")  ' E2 vigia (modVigia)
     Dim obj As t_Obj
     Dim ammoClearMotivo As String
     If num > 0 Then
@@ -648,6 +650,7 @@ Public Sub PickObjAt(ByVal UserIndex As Integer, _
                      ByVal y As Integer, _
                      Optional ByVal DestinationSlot As Byte = 0)
     On Error GoTo PickObj_Err
+    Call VigiaFuente(UserIndex, "piso")  ' E2 vigia (modVigia)
     Dim Slot  As Byte
     Dim obj   As t_ObjData
     Dim MiObj As t_Obj
@@ -1788,6 +1791,7 @@ ErrHandler:
 End Function
 
 Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As Byte)
+    Call VigiaFuente(UserIndex, "usar_item")  ' E2 vigia (modVigia)
     Dim ObjIndex As Integer
     Dim nowRaw   As Long
     Dim TargObj  As t_ObjData
@@ -4597,6 +4601,7 @@ EquipArrow_Error:
 End Sub
 Public Function TryRepairFishingRod(ByVal UserIndex As Integer, ByVal oldSlot As Byte, ByVal newSlot As Byte) As Boolean
     On Error GoTo TryRepairFishingRod_Error
+    Call VigiaFuente(UserIndex, "trabajo")  ' E2 vigia (modVigia)
     Dim objRod As t_Obj
     Dim rodObjIndex As Integer
     Dim powerLine As Integer

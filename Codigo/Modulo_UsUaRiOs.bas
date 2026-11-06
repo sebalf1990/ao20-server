@@ -884,6 +884,7 @@ Dim tStr                        As String
             Call modElementalBalanceLog.ElementalBalanceLogGearSnapshot(UserIndex)
         End If
     End With
+    Call VigiaLogin(UserIndex)  ' E2 vigia (modVigia)
     ConnectUser_Complete = True
     Exit Function
 Complete_ConnectUser_Err:
@@ -1294,6 +1295,7 @@ Sub CheckUserLevel(ByVal UserIndex As Integer)
                 If EsNewbie(UserIndex) Then
                     Dim OroRecompenza As Long
                     OroRecompenza = SvrConfig.GetValue("OroPorNivel") * .Stats.ELV * SvrConfig.GetValue("GoldMult")
+                    Call VigiaFuente(UserIndex, "nivel")  ' E2 vigia (modVigia)
                     .Stats.GLD = .Stats.GLD + OroRecompenza
                     'Msg1293= Has ganado ¬1 monedas de oro.
                     Call WriteLocaleMsg(UserIndex, MSG_GANADO_MONEDAS_ORO, e_TextChannel.TEXTCHANNEL_ECONOMY, e_FontTypeNames.FONTTYPE_PROMEDIO_MAYOR, OroRecompenza)

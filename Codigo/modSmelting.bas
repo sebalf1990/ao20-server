@@ -82,6 +82,7 @@ End Sub
 
 Public Sub CraftIngots(ByVal UserIndex As Integer)
     On Error GoTo CraftIngots_Err
+    Call VigiaFuente(UserIndex, "trabajo")  ' E2 vigia (modVigia)
     Dim Slot       As Integer
     Dim obji       As Integer
     Dim cant       As Byte

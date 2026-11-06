@@ -680,6 +680,7 @@ Sub Main()
     Call InitializeAntiCheat
     Call InitAntitrampa
     Call InitDenuncias
+    Call InitVigia  ' E2 vigia (modVigia)
     tInicioServer = GetTickCountRaw()
     #If UNIT_TEST = 1 Then
         Call UnitTesting.Init
@@ -704,6 +705,7 @@ Sub Main()
             Call modNetwork.Tick(GetElapsed())
         #End If
         Call PerformTimeLimitCheck(PerformanceTimer, "General modNetwork.Tick")
+        Call VigiaFinPaquetes  ' E2 vigia (modVigia)
         Call UpdateEffectOverTime
         Call PerformTimeLimitCheck(PerformanceTimer, "General Update Effects over time")
         Call UpdateNpcRadarTick
@@ -728,6 +730,7 @@ Sub Main()
         Call PerformTimeLimitCheck(PerformanceTimer, "Update anti cheat")
         Call MaybeFlushAntitrampa
         Call DenunciasTick
+        Call VigiaTick  ' E2 vigia (modVigia)
         Call PerformTimeLimitCheck(PerformanceTimer, "Flush antitrampa")
         ' Unlock main loop for maximum throughput but it can hog weak CPUs.
         #If UNLOCK_CPU = 0 Then

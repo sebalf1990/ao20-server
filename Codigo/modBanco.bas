@@ -91,6 +91,7 @@ End Sub
 
 Sub UserRetiraItem(ByVal UserIndex As Integer, ByVal i As Integer, ByVal Cantidad As Integer, ByVal slotdestino As Integer)
     On Error GoTo ErrHandler
+    Call VigiaFuente(UserIndex, "banco")  ' E2 vigia (modVigia)
     If Cantidad < 1 Then Exit Sub
     'Call WriteUpdateUserStats(UserIndex)
     If UserList(UserIndex).BancoInvent.Object(i).amount > 0 Then
@@ -195,6 +196,7 @@ End Sub
 
 Sub UserDepositaItem(ByVal UserIndex As Integer, ByVal Slot As Integer, ByVal Cantidad As Integer, ByVal slotdestino As Integer)
     On Error GoTo ErrHandler
+    Call VigiaFuente(UserIndex, "banco")  ' E2 vigia (modVigia)
     If Slot < 1 Or Slot > UserList(UserIndex).CurrentInventorySlots Then
         Exit Sub
     End If

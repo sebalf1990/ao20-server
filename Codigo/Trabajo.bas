@@ -1062,6 +1062,7 @@ End Function
 
 Public Sub HerreroConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As Integer)
     On Error GoTo HerreroConstruirItem_Err
+    Call VigiaFuente(UserIndex, "trabajo")  ' E2 vigia (modVigia)
     If Not IntervaloPermiteTrabajarConstruir(UserIndex) Then Exit Sub
     ' Plan 04.001: gate de ejecucion — eCraftBlacksmith llegaba directo sin validar profesion.
     ' Plan 27.001 (05.002 wave 7): the 4 crafts had NO position, map or event gate. The gate lives
@@ -1182,6 +1183,7 @@ End Function
 
 Public Sub CarpinteroConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As Integer, ByVal Cantidad As Long, ByVal cantidad_maxima As Integer)
     On Error GoTo CarpinteroConstruirItem_Err
+    Call VigiaFuente(UserIndex, "trabajo")  ' E2 vigia (modVigia)
     If Not IntervaloPermiteTrabajarConstruir(UserIndex) Then Exit Sub
     ' Plan 04.001: gate de ejecucion, no solo al equipar la herramienta.
     ' Plan 27.001 (05.002 wave 7): carpentry crafts in the server timer (t_Extraer_Timer -> Trabajar),
@@ -1266,6 +1268,7 @@ End Sub
 
 Public Sub AlquimistaConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As Integer)
     On Error GoTo AlquimistaConstruirItem_Err
+    Call VigiaFuente(UserIndex, "trabajo")  ' E2 vigia (modVigia)
     ' Plan 04.001: gate de ejecucion, no solo al equipar la herramienta.
     ' Plan 27.001 (05.002 wave 7): no working inside a duel or an event. It goes at the top, next to
     ' the profession gate: this Sub's error handler ends in Resume Next, so an Exit Sub placed among
@@ -1351,6 +1354,7 @@ End Sub
 
 Public Sub SastreConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As Integer)
     On Error GoTo SastreConstruirItem_Err
+    Call VigiaFuente(UserIndex, "trabajo")  ' E2 vigia (modVigia)
     If Not IntervaloPermiteTrabajarConstruir(UserIndex) Then Exit Sub
     ' Plan 04.001: gate de ejecucion, no solo al equipar la herramienta.
     ' Plan 27.001 (05.002 wave 7): no working inside a duel or an event (4th and last twin copy).
@@ -1739,6 +1743,8 @@ Public Sub DoRobar(ByVal LadronIndex As Integer, ByVal VictimaIndex As Integer)
                         End If
                         If n > UserList(VictimaIndex).Stats.GLD Then n = UserList(VictimaIndex).Stats.GLD
                         Dim prevGold As Long: prevGold = UserList(VictimaIndex).Stats.GLD
+                        Call VigiaFuenteCon(LadronIndex, "robo", VigiaContraparte("victima", VictimaIndex))  ' E2 vigia (modVigia)
+                        Call VigiaFuenteCon(VictimaIndex, "robo", VigiaContraparte("ladron", LadronIndex))  ' E2 vigia (modVigia)
                         UserList(VictimaIndex).Stats.GLD = UserList(VictimaIndex).Stats.GLD - n
                         Dim ProtectedGold As Long
                         ProtectedGold = SvrConfig.GetValue("OroPorNivelBilletera") * UserList(VictimaIndex).Stats.ELV
@@ -1839,6 +1845,7 @@ Private Sub RobarObjeto(ByVal LadronIndex As Integer, ByVal VictimaIndex As Inte
                 Call QuitarUserInvItem(VictimaIndex, CByte(i), 1)
             End If
             Call UpdateUserInv(False, VictimaIndex, CByte(i))
+            Call VigiaFuenteCon(LadronIndex, "robo", VigiaContraparte("victima", VictimaIndex))  ' E2 vigia (modVigia)
             If Not MeterItemEnInventario(LadronIndex, MiObj) Then
                 Call TirarItemAlPiso(UserList(LadronIndex).pos, MiObj)
             End If
@@ -2251,6 +2258,7 @@ PuedeDomarMascota_Err:
 End Function
 
 Public Function EntregarPezEspecial(ByVal UserIndex As Integer)
+    Call VigiaFuente(UserIndex, "trabajo")  ' E2 vigia (modVigia)
     With UserList(UserIndex)
         If .flags.PescandoEspecial Then
             Dim obj As t_Obj

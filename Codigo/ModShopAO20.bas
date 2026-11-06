@@ -29,6 +29,7 @@ Option Explicit
 
 Public Sub init_transaction(ByVal obj_num As Long, ByVal UserIndex As Integer)
     On Error GoTo init_transaction_Err
+    Call VigiaFuente(UserIndex, "tienda")  ' E2 vigia (modVigia)
     Dim obj As t_ObjData
     obj.ObjNum = obj_num
     With UserList(UserIndex)
