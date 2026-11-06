@@ -194,6 +194,8 @@ Public Sub AntitrampaResetUser(ByVal UserIndex As Integer)
         .UltimoAvisoGm = 0
         .EventosSinAvisar = 0
     End With
+    ' Buffer de acciones de /denunciar (E3, modDenuncias): tambien campo por campo.
+    Call DenunciasResetUser(UserIndex)
     Exit Sub
 AntitrampaResetUser_Err:
     Call TraceError(Err.Number, Err.Description, "modAntitrampa.AntitrampaResetUser", Erl)
@@ -272,6 +274,8 @@ Public Sub AntitrampaRegistrar(ByVal UserIndex As Integer, ByVal evento As Strin
                 ",""detalle"":" & JsonTexto(detalle) & "}"
     End With
     Call AgregarLinea(linea)
+    ' El evento tambien queda en el buffer de acciones del jugador (snapshot de /denunciar, E3).
+    Call DenunciaAntitrampa(UserIndex, evento)
     Exit Sub
 AntitrampaRegistrar_Err:
     Call TraceError(Err.Number, Err.Description, "modAntitrampa.AntitrampaRegistrar", Erl)

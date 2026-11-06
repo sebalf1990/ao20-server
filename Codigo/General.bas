@@ -679,6 +679,7 @@ Sub Main()
     Call frmMain.InitMain(HideMe)
     Call InitializeAntiCheat
     Call InitAntitrampa
+    Call InitDenuncias
     tInicioServer = GetTickCountRaw()
     #If UNIT_TEST = 1 Then
         Call UnitTesting.Init
@@ -726,6 +727,7 @@ Sub Main()
         Call AntiCheatUpdate
         Call PerformTimeLimitCheck(PerformanceTimer, "Update anti cheat")
         Call MaybeFlushAntitrampa
+        Call DenunciasTick
         Call PerformTimeLimitCheck(PerformanceTimer, "Flush antitrampa")
         ' Unlock main loop for maximum throughput but it can hog weak CPUs.
         #If UNLOCK_CPU = 0 Then
@@ -1765,6 +1767,7 @@ Public Sub CerrarServidor()
     ' proceso sin volver a Main: por eso la liberacion va aca. La llamada que hay al final
     ' de Main queda por si algun dia se sale del loop principal, pero hoy es inalcanzable.
     Call FlushAntitrampa
+    Call DenunciasFlush
     Call ShutdownLogging
     End
 End Sub

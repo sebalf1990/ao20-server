@@ -2022,6 +2022,10 @@ Private Sub HandleTalk(ByVal UserIndex As Integer)
                 Packet_ID), MacroIterations(Packet_ID)) Then Exit Sub
         ' Comandos de chat para profesiones (solo GM/SemiDios/Dios)
         If Left$(chat, 1) = "~" Then
+            ' ~DENUNCIAS (plan 2026-10-29 E3): las ven todos los GMs, Consejero incluido (duenio 2026-10-29).
+            If EsGM(UserIndex) Then
+                If HandleDenunciasChatCommand(UserIndex, chat) Then Exit Sub
+            End If
             If (.flags.Privilegios And (e_PlayerType.SemiDios Or e_PlayerType.Dios Or e_PlayerType.Admin)) Then
                 If HandleProfesionChatCommand(UserIndex, chat) Then Exit Sub
                 If HandleLogLevelChatCommand(UserIndex, chat) Then Exit Sub
@@ -2232,6 +2236,7 @@ Private Sub HandleWalk(ByVal UserIndex As Integer)
             'Move user
             If MoveUserChar(UserIndex, Heading) Then
                 Call AntitrampaPasoAceptado(UserIndex, PasoCosto)
+                Call DenunciaAccion(UserIndex, eDenPaso, 0, 1)
                 Call ResetUserAutomatedActions(UserIndex)
                 If UserList(UserIndex).Grupo.EnGrupo Then
                     Call CompartirUbicacion(UserIndex)
@@ -2350,6 +2355,7 @@ Private Sub HandleAttack(ByVal UserIndex As Integer)
         End If
         'If exiting, cancel
         Call CancelExit(UserIndex)
+        Call DenunciaAccion(UserIndex, eDenAtaque, 0, 1)
         'Attack!
         Call UsuarioAtaca(UserIndex)
     End With
@@ -2385,6 +2391,7 @@ Private Sub HandlePickUp(ByVal UserIndex As Integer)
         End If
         If Not CanTransferWorldItemAt(UserIndex, TargetX, TargetY) Then Exit Sub
         If DestinationSlot > .CurrentInventorySlots Then Exit Sub
+        Call DenunciaAccion(UserIndex, eDenAgarrar, MapData(TargetX, TargetY, .pos.Map).ObjInfo.ObjIndex, MapData(TargetX, TargetY, .pos.Map).ObjInfo.amount)
         Call PickObjAt(UserIndex, .pos.Map, TargetX, TargetY, DestinationSlot)
     End With
     Exit Sub
@@ -2649,6 +2656,11 @@ Private Sub HandleDrop(ByVal UserIndex As Integer)
         End If
 
         Call ResetUserAutomatedActions(UserIndex)
+        If Slot >= 1 And Slot <= .CurrentInventorySlots Then
+            Call DenunciaAccion(UserIndex, eDenTirar, .invent.Object(Slot).ObjIndex, amount)
+        Else
+            Call DenunciaAccion(UserIndex, eDenTirar, 0, amount)
+        End If
 
         'Are we dropping gold or other items??
         If Slot = FLAGORO Then
@@ -2775,6 +2787,9 @@ Private Sub HandleCastSpell(ByVal UserIndex As Integer)
     Packet_ID = PacketNames.CastSpell
     ' Solo registro (plan 2026-10-29 E1, H6): nunca bloquea.
     Call AntitrampaContador(UserIndex, PacketNames.CastSpell, PacketCounter, "CastSpell")
+    If Spell >= 1 And Spell <= MAXUSERHECHIZOS Then
+        Call DenunciaAccion(UserIndex, eDenHechizo, UserList(UserIndex).Stats.UserHechizos(Spell), 1)
+    End If
     Call UseSpellSlot(UserIndex, Spell)
     Exit Sub
 HandleCastSpell_Err:
@@ -2979,6 +2994,7 @@ Private Sub HandleUseItem(ByVal UserIndex As Integer)
         '  Debug.Print "LLEGA PAQUETE"
         If Slot <= UserList(UserIndex).CurrentInventorySlots And Slot > 0 Then
             If .invent.Object(Slot).ObjIndex = 0 Then Exit Sub
+            Call DenunciaAccion(UserIndex, eDenUsar, .invent.Object(Slot).ObjIndex, 1)
             Call UseInvItem(UserIndex, Slot, 1)
         End If
     End With
@@ -3008,6 +3024,7 @@ Private Sub HandleUseItemU(ByVal UserIndex As Integer)
         End If
         If Slot <= UserList(UserIndex).CurrentInventorySlots And Slot > 0 Then
             If .invent.Object(Slot).ObjIndex = 0 Then Exit Sub
+            Call DenunciaAccion(UserIndex, eDenUsar, .invent.Object(Slot).ObjIndex, 1)
             Call UseInvItem(UserIndex, Slot, 0)
         End If
     End With

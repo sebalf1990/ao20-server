@@ -168,6 +168,12 @@ Public Function LoadSettings(ByVal Filename As String) As Long
     ' E1b anti-farmeo de kills: IPs de tunel extra (coma) y, SOLO para pruebas, loopback como IP publica.
     mSettings.Add "AntitrampaKillIPsTunel", CStr(reader.GetValue("ANTITRAMPA", "KillIPsTunel", ""))
     mSettings.Add "AntitrampaKillIncluirLoopback", CLng(val(reader.GetValue("ANTITRAMPA", "KillIncluirLoopback", "0")))
+    ' E3 /denunciar (modDenuncias.bas): buffer de acciones por jugador, ventana del snapshot, limites y avisos.
+    mSettings.Add "DenunciaBufferAcciones", CLng(val(reader.GetValue("ANTITRAMPA", "DenunciaBufferAcciones", "256")))
+    mSettings.Add "DenunciaVentanaMs", CLng(val(reader.GetValue("ANTITRAMPA", "DenunciaVentanaMs", "300000")))
+    mSettings.Add "DenunciasPorHora", CLng(val(reader.GetValue("ANTITRAMPA", "DenunciasPorHora", "3")))
+    mSettings.Add "DenunciasMismoObjetivoPorHora", CLng(val(reader.GetValue("ANTITRAMPA", "DenunciasMismoObjetivoPorHora", "1")))
+    mSettings.Add "DenunciaAvisoGmCadaMs", CLng(val(reader.GetValue("ANTITRAMPA", "DenunciaAvisoGmCadaMs", "60000")))
     mSettings.Add "FISHING_REQUIRED_PERCENT", CInt(val(reader.GetValue("PESCA", "MinAgua")))
     mSettings.Add "FISHING_TILES_ON_MAP", CInt(val(reader.GetValue("PESCA", "MaxZonas")))
     mSettings.Add "FISHING_POOL_ID", CInt(val(reader.GetValue("PESCA", "FishingID")))

@@ -659,6 +659,8 @@ Public Sub WriteUpdateGold(ByVal UserIndex As Integer)
     Call Writer.WriteInt32(UserList(UserIndex).Stats.GLD)
     Call Writer.WriteInt32(SvrConfig.GetValue("OroPorNivelBilletera"))
     Call modSendData.SendData(ToIndex, UserIndex)
+    ' Buffer de /denunciar (E3): diferencia contra el ultimo oro conocido. Despues del envio (usa el Writer).
+    Call DenunciaOro(UserIndex)
     Exit Sub
 WriteUpdateGold_Err:
     Call Writer.Clear
@@ -1431,6 +1433,8 @@ Public Sub WriteUpdateUserStats(ByVal UserIndex As Integer)
     Call Writer.WriteInt32(UserList(UserIndex).Stats.Exp)
     Call Writer.WriteInt8(UserList(UserIndex).clase)
     Call modSendData.SendData(ToIndex, UserIndex)
+    ' Buffer de /denunciar (E3): este paquete tambien lleva el oro (en el login fija la base).
+    Call DenunciaOro(UserIndex)
     Exit Sub
 WriteUpdateUserStats_Err:
     Call Writer.Clear
@@ -1603,6 +1607,8 @@ Public Sub WriteChangeInventorySlot(ByVal UserIndex As Integer, ByVal Slot As By
         Call Writer.WriteBool(False)
     End If
     Call modSendData.SendData(ToIndex, UserIndex)
+    ' Buffer de /denunciar (E3): lo que entro o salio del slot. Despues del envio (usa el Writer).
+    Call DenunciaItemSlot(UserIndex, Slot)
     Exit Sub
 WriteChangeInventorySlot_Err:
     Call Writer.Clear

@@ -295,42 +295,11 @@ End Sub
 
 Public Sub HandleDenounce(ByVal UserIndex As Integer)
     On Error GoTo ErrHandler
-    With UserList(UserIndex)
-        Dim name As String
-        name = reader.ReadString8()
-        If LenB(name) = 0 Then Exit Sub
-        If EsGmChar(name) Then
-            ' Msg531=No podés denunciar a un administrador.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_PODES_DENUNCIAR_ADMINISTRADOR, e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_SERVER)
-            Exit Sub
-        End If
-        Dim tUser As t_UserReference
-        tUser = NameIndex(name)
-        If Not IsValidUserRef(tUser) Then 'user abuse of this system to know if someone is online
-            ' Msg532=Tu denuncia fue recibida por el equipo de soporte.
-            Call WriteLocaleMsg(UserIndex, MSG_DENUNCIA_FUE_RECIBIDA_EQUIPO_SOPORTE, e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_SERVER)
-            Exit Sub
-        End If
-        Dim Denuncia As String, HayChat As Boolean
-        Denuncia = "[Últimos mensajes de " & UserList(tUser.ArrayIndex).name & "]" & vbNewLine
-        Dim i As Integer
-        For i = 1 To UBound(UserList(tUser.ArrayIndex).flags.ChatHistory)
-            If LenB(UserList(tUser.ArrayIndex).flags.ChatHistory(i)) <> 0 Then
-                Denuncia = Denuncia & UserList(tUser.ArrayIndex).flags.ChatHistory(i) & vbNewLine
-                HayChat = True
-            End If
-        Next
-        If Not HayChat Then
-            ' Msg533=El usuario no ha escrito nada. Recordá que las denuncias inválidas pueden ser motivo de advertencia.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_USUARIO_HA_ESCRITO_NADA_RECORDA_DENUNCIAS_INVALIDAS_PUEDEN, e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_SERVER)
-            Exit Sub
-        End If
-        Call Ayuda.Push(.name, Denuncia, "Denuncia a " & UserList(tUser.ArrayIndex).name)
-        Call SendData(SendTarget.ToAdmins, 0, PrepareMessageLocaleMsg(MSG_RECIBIDO_NUEVA_DENUNCIA_PARTE, .name, e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_SERVER)) ' Msg1826=Se ha recibido una nueva denuncia de parte de ¬1.
-        ' Msg534=Tu denuncia fue recibida por el equipo de soporte.
-        Call WriteLocaleMsg(UserIndex, MSG_DENUNCIA_FUE_RECIBIDA_EQUIPO_SOPORTE_534, e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_SERVER)
-        Call LogConsulta(.name & " (Denuncia a " & UserList(tUser.ArrayIndex).name & ")" & vbNewLine & Denuncia)
-    End With
+    ' /DENUNCIAR <nick> [motivo] (plan 2026-10-29 E3): el cliente manda el texto crudo; lo resuelve
+    ' modDenuncias (snapshot de acciones, limites por hora, aviso a GMs, ~DENUNCIAS).
+    Dim texto As String
+    texto = reader.ReadString8()
+    Call DenunciarJugador(UserIndex, texto)
     Exit Sub
 ErrHandler:
     Call TraceError(Err.Number, Err.Description, "Protocol.HandleDenounce", Erl)

@@ -1512,6 +1512,10 @@ Public Const MSG_PROF_CLASE_TRABAJADOR_NO_DISPONIBLE As Integer = 9010
 Public Const MSG_SKILL_YA_NO_SE_ASIGNA As Integer = 9013
 Public Const MSG_FUNDAR_CLAN_NECESITAS_ORO As Integer = 9014
 Public Const MSG_MISSION_FACTION_NOT_AVAILABLE As Integer = 9015
+' /denunciar (plan 2026-10-29-seguridad-antitrampas E3, modDenuncias.bas)
+Public Const MSG_DENUNCIA_A_VOS_MISMO As Integer = 9016
+Public Const MSG_DENUNCIA_LIMITE_POR_HORA As Integer = 9017
+Public Const MSG_DENUNCIA_MISMO_OBJETIVO As Integer = 9018
 Public Const MSG_BLODIUM_PICKAXE_REQUIRED As Integer = 597
 Public Const MSG_ONLY_ELVISH_AXE_ALLOWED As Integer = 601
 Public Const MSG_GOLD_PICKAXE_REQUIRED As Integer = 1022

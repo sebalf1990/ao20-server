@@ -91,6 +91,7 @@ Module=ModAccountBridge; Codigo\ModAccountBridge.bas
 Module=UnitTesting; Codigo\UnitTesting.bas
 Module=Logging; Codigo\Logging.bas
 Module=modAntitrampa; Codigo\modAntitrampa.bas
+Module=modDenuncias; Codigo\modDenuncias.bas
 Module=DisconnectDiagnostics; Codigo\DisconnectDiagnostics.bas
 Class=Instruments; Codigo\Instrumentation.cls
 Module=modTime; Codigo\modTime.bas
