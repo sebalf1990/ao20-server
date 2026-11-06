@@ -24,10 +24,11 @@ Attribute VB_Name = "modDenuncias"
 '    Acciones iguales dentro de FUSION_MS se suman en una sola entrada. Se vacia campo por campo al
 '    conectar/desconectar (TCP.ResetContadores -> AntitrampaResetUser), nunca copiando el UDT entero.
 ' 2. /DENUNCIAR <nick> [motivo] (paquete eDenounce, que ya existia: el cliente manda el texto crudo).
-'    El denunciado tiene que estar online: si no, la respuesta es la misma de siempre (Msg532) y no se
-'    guarda nada (no revela si esta conectado). No vale uno mismo ni un GM. Limites por denunciante (Id de
-'    personaje: sobreviven al relogueo, no a un reinicio): DenunciasPorHora y DenunciasMismoObjetivoPorHora
-'    (<= 0 = sin limite).
+'    Sin oraculo de "esta online": todo lo que rechaza (a uno mismo, GM de Server.ini, tope diario global
+'    DenunciasPorDiaGlobal, DenunciasPorHora, DenunciasMismoObjetivoPorHora por nick) se decide sin mirar si
+'    el denunciado esta conectado, y online/offline/inexistente responden igual (Msg534) y cuentan igual
+'    para los limites. Solo se guarda si esta online (el snapshot sale de memoria). Limites por Id del
+'    denunciante (sobreviven al relogueo, no a un reinicio; <= 0 = sin limite).
 ' 3. Snapshot: Logs\Denuncias\Denuncia_NNNNNN.jsonl (cabecera, acciones del denunciado de los ultimos
 '    DenunciaVentanaMs y su chat reciente). Indice persistente Logs\Denuncias\Denuncias_indice.tsv (solo se
 '    agrega: nueva/cerrar/borrar) que se relee al arrancar. Todo se encola y lo baja a disco DenunciasTick
@@ -62,6 +63,7 @@ Private Const VER_LINEAS_MAX As Long = 15
 Private Const PENDIENTES_MAX As Long = 64
 Private Const FLUSH_FALLOS_MAX As Long = 3
 Private Const MOTIVO_MAX As Long = 120
+Private Const PODA_MS As Long = 60000
 Private Const PALABRAS_NICK_MAX As Long = 4
 Private Const CANTIDAD_TOPE As Double = 1000000000#
 Private Const CARPETA_DENUNCIAS As String = "Denuncias"
@@ -127,6 +129,11 @@ Private m_UltimoAviso As Long
 Private m_AvisosPendientes As Long
 Private m_UltimoPendienteId As Long
 
+Private m_PorDiaGlobal As Long                ' tope de denuncias guardadas por dia en todo el server
+Private m_DiaFecha As String
+Private m_DiaCant As Long
+Private m_UltimaPoda As Long
+
 ' ---------------------------------------------------------------------------------------------
 ' Arranque y reset por jugador
 ' ---------------------------------------------------------------------------------------------
@@ -148,6 +155,7 @@ Public Sub InitDenuncias()
     m_MismoObjetivoPorHora = SvrConfig.GetValue("DenunciasMismoObjetivoPorHora")
     m_AvisoCadaMs = SvrConfig.GetValue("DenunciaAvisoGmCadaMs")
     If m_AvisoCadaMs < 0 Then m_AvisoCadaMs = 0
+    m_PorDiaGlobal = SvrConfig.GetValue("DenunciasPorDiaGlobal")
     m_BufMax = 0
     If MaxUsers > 0 Then
         ReDim m_Buf(1 To MaxUsers)
@@ -160,7 +168,7 @@ Public Sub InitDenuncias()
     End If
     Call CargarIndice
     Call LogThis(0, "Denuncias: buffer=" & m_Tam & " acciones ventana_ms=" & m_VentanaMs & " por_hora=" & m_PorHora & _
-            " mismo_objetivo_por_hora=" & m_MismoObjetivoPorHora & " aviso_gm_cada_ms=" & m_AvisoCadaMs & _
+            " mismo_objetivo_por_hora=" & m_MismoObjetivoPorHora & " por_dia_global=" & m_PorDiaGlobal & " aviso_gm_cada_ms=" & m_AvisoCadaMs & _
             " en_indice=" & m_IndiceCant & " proximo_id=" & m_ProximoId, vbLogEventTypeInformation)
     Exit Sub
 InitDenuncias_Err:
@@ -192,6 +200,18 @@ Private Function TickNoCero(ByVal nowRaw As Long) As Long
     If TickNoCero = 0 Then TickNoCero = 1
 End Function
 
+' Coordenada (Integer) a Byte sin desbordar.
+Private Function ByteSeguro(ByVal valor As Long) As Byte
+    If valor >= 0 And valor <= 255 Then ByteSeguro = valor
+End Function
+
+' Texto a Long sin desbordar (CLng de un numero gigante da error 6): fuera de rango = 0.
+Private Function ValorLong(ByVal texto As String) As Long
+    Dim d As Double
+    d = val(texto)
+    If d >= -2000000000# And d <= 2000000000# Then ValorLong = CLng(Fix(d))
+End Function
+
 ' ---------------------------------------------------------------------------------------------
 ' Buffer de acciones (hot path: solo escribe en un arreglo ya reservado)
 ' ---------------------------------------------------------------------------------------------
@@ -213,8 +233,8 @@ Private Sub RegistrarAccion(ByVal UserIndex As Integer, ByVal nTipo As Long, ByV
                         .Acciones(ultimo).Cantidad = CLng(suma)
                         If nTipo = eDenOro Then .Acciones(ultimo).Total = nTotal
                         .Acciones(ultimo).Mapa = UserList(UserIndex).pos.Map
-                        .Acciones(ultimo).PosX = UserList(UserIndex).pos.x
-                        .Acciones(ultimo).PosY = UserList(UserIndex).pos.y
+                        .Acciones(ultimo).PosX = ByteSeguro(UserList(UserIndex).pos.x)
+                        .Acciones(ultimo).PosY = ByteSeguro(UserList(UserIndex).pos.y)
                         Exit Sub
                     End If
                 End If
@@ -227,8 +247,8 @@ Private Sub RegistrarAccion(ByVal UserIndex As Integer, ByVal nTipo As Long, ByV
         .Acciones(ultimo).Cantidad = nCantidad
         .Acciones(ultimo).Total = nTotal
         .Acciones(ultimo).Mapa = UserList(UserIndex).pos.Map
-        .Acciones(ultimo).PosX = UserList(UserIndex).pos.x
-        .Acciones(ultimo).PosY = UserList(UserIndex).pos.y
+        .Acciones(ultimo).PosX = ByteSeguro(UserList(UserIndex).pos.x)
+        .Acciones(ultimo).PosY = ByteSeguro(UserList(UserIndex).pos.y)
         .Cabeza = (.Cabeza + 1) Mod m_Tam
         If .Ocupadas < m_Tam Then .Ocupadas = .Ocupadas + 1
     End With
@@ -557,6 +577,8 @@ Public Sub DenunciasTick()
     If m_AvisosPendientes > 0 Then
         If TicksElapsed(m_UltimoAviso, GetTickCountRaw()) >= m_AvisoCadaMs Then Call AvisoAgregado
     End If
+    ' Cada PODA_MS se sacan de m_Limites los denunciantes sin denuncias en la ultima hora.
+    If m_UltimaPoda = 0 Or TicksElapsed(m_UltimaPoda, GetTickCountRaw()) >= PODA_MS Then Call PodarLimites
     Exit Sub
 DenunciasTick_Err:
     Call TraceError(Err.Number, Err.Description, "modDenuncias.DenunciasTick", Erl)
@@ -572,8 +594,9 @@ End Function
 
 Private Function LineaIndice(ByVal op As String, ByVal numero As Long, ByVal fecha As String, ByVal denunciante As String, _
                              ByVal denunciado As String, ByVal Motivo As String, ByVal Resumen As String, ByVal por As String) As String
-    LineaIndice = op & vbTab & numero & vbTab & Limpiar(fecha) & vbTab & Limpiar(denunciante) & vbTab & Limpiar(denunciado) & vbTab & _
-            Limpiar(Motivo) & vbTab & Limpiar(Resumen) & vbTab & Limpiar(por) & vbCrLf
+    ' El salto va ADELANTE: si la ultima linea quedo cortada (corte de luz), la siguiente no se le pega.
+    LineaIndice = vbCrLf & op & vbTab & numero & vbTab & Limpiar(fecha) & vbTab & Limpiar(denunciante) & vbTab & Limpiar(denunciado) & vbTab & _
+            Limpiar(Motivo) & vbTab & Limpiar(Resumen) & vbTab & Limpiar(por)
 End Function
 
 Private Sub AgregarIndice(ByVal numero As Long, ByVal fecha As String, ByVal denunciante As String, ByVal denunciado As String, _
@@ -608,7 +631,7 @@ End Function
 
 Private Sub CargarIndice()
     On Error GoTo CargarIndice_Err
-    Dim fn As Integer, linea As String, campos() As String, numero As Long, pos As Long
+    Dim fn As Integer, linea As String, malas As Long
     m_IndiceCant = 0
     m_ProximoId = 1
     If Not FileExist(RutaIndice()) Then Exit Sub
@@ -616,40 +639,61 @@ Private Sub CargarIndice()
     Open RutaIndice() For Input As #fn
     Do While Not EOF(fn)
         Line Input #fn, linea
-        campos = Split(linea, vbTab)
-        If UBound(campos) >= 7 Then
-            numero = CLng(val(campos(1)))
-            If numero > 0 Then
-                Select Case campos(0)
-                    Case "nueva"
-                        If BuscarIndice(numero) = 0 Then Call AgregarIndice(numero, campos(2), campos(3), campos(4), campos(5), campos(6))
-                    Case "cerrar"
-                        pos = BuscarIndice(numero)
-                        If pos > 0 Then
-                            m_Indice(pos).Estado = ESTADO_CERRADA
-                            m_Indice(pos).CerradaPor = campos(7)
-                        End If
-                    Case "borrar"
-                        pos = BuscarIndice(numero)
-                        If pos > 0 Then m_Indice(pos).Estado = ESTADO_BORRADA
-                End Select
-                If numero >= m_ProximoId Then m_ProximoId = numero + 1
-            End If
+        If LenB(linea) > 0 Then
+            If Not ProcesarLineaIndice(linea) Then malas = malas + 1
         End If
     Loop
     Close #fn
+    fn = 0
+    If malas > 0 Then Call LogThis(0, "Denuncias: " & malas & " lineas invalidas salteadas en " & ARCHIVO_INDICE, vbLogEventTypeWarning)
     Exit Sub
 CargarIndice_Err:
     If fn <> 0 Then Close #fn
     Call TraceError(Err.Number, Err.Description, "modDenuncias.CargarIndice", Erl)
 End Sub
 
+' Una linea del indice; False si es invalida (se saltea y se sigue leyendo).
+Private Function ProcesarLineaIndice(ByVal linea As String) As Boolean
+    On Error GoTo ProcesarLineaIndice_Err
+    Dim campos() As String, numero As Long, pos As Long
+    campos = Split(linea, vbTab)
+    If UBound(campos) < 7 Then Exit Function
+    numero = ValorLong(campos(1))
+    If numero <= 0 Then Exit Function
+    Select Case campos(0)
+        Case "nueva"
+            If BuscarIndice(numero) = 0 Then Call AgregarIndice(numero, campos(2), campos(3), campos(4), campos(5), campos(6))
+        Case "cerrar"
+            pos = BuscarIndice(numero)
+            If pos > 0 Then
+                m_Indice(pos).Estado = ESTADO_CERRADA
+                m_Indice(pos).CerradaPor = campos(7)
+            End If
+        Case "borrar"
+            pos = BuscarIndice(numero)
+            If pos > 0 Then m_Indice(pos).Estado = ESTADO_BORRADA
+        Case Else
+            Exit Function
+    End Select
+    If numero >= m_ProximoId Then m_ProximoId = numero + 1
+    ProcesarLineaIndice = True
+    Exit Function
+ProcesarLineaIndice_Err:
+    ProcesarLineaIndice = False
+End Function
+
 ' ---------------------------------------------------------------------------------------------
 ' Limites por denunciante
 ' ---------------------------------------------------------------------------------------------
 
-' Limpia lo viejo (mas de una hora) y cuenta las denuncias de la ultima hora: en total y contra objetivoId.
-Private Sub ContarLimites(ByVal denuncianteId As Long, ByVal objetivoId As Long, ByVal nowRaw As Long, ByRef total As Long, ByRef mismo As Long)
+' La clave del objetivo es el nick en mayusculas (exista, este online o no): el limite por objetivo no
+' depende de si esta conectado. ":" y ";" son separadores del registro, se cambian.
+Private Function ClaveObjetivo(ByVal nick As String) As String
+    ClaveObjetivo = Replace$(Replace$(UCase$(nick), ":", "_"), ";", "_")
+End Function
+
+' Limpia lo viejo (mas de una hora) y cuenta las denuncias de la ultima hora: en total y contra objetivo.
+Private Sub ContarLimites(ByVal denuncianteId As Long, ByVal objetivo As String, ByVal nowRaw As Long, ByRef total As Long, ByRef mismo As Long)
     Dim clave As String, lista As String, partes() As String, campos() As String, i As Long, salida As String
     total = 0
     mismo = 0
@@ -661,9 +705,9 @@ Private Sub ContarLimites(ByVal denuncianteId As Long, ByVal objetivoId As Long,
     For i = 0 To UBound(partes)
         campos = Split(partes(i), ":")
         If UBound(campos) = 1 Then
-            If TicksElapsed(CLng(val(campos(0))), nowRaw) < HORA_MS Then
+            If TicksElapsed(ValorLong(campos(0)), nowRaw) < HORA_MS Then
                 total = total + 1
-                If CLng(val(campos(1))) = objetivoId Then mismo = mismo + 1
+                If campos(1) = objetivo Then mismo = mismo + 1
                 salida = salida & partes(i) & ";"
             End If
         End If
@@ -675,17 +719,45 @@ Private Sub ContarLimites(ByVal denuncianteId As Long, ByVal objetivoId As Long,
     End If
 End Sub
 
-Private Sub AgregarLimite(ByVal denuncianteId As Long, ByVal objetivoId As Long, ByVal nowRaw As Long)
+Private Sub AgregarLimite(ByVal denuncianteId As Long, ByVal objetivo As String, ByVal nowRaw As Long)
     Dim clave As String, total As Long, mismo As Long
-    Call ContarLimites(denuncianteId, objetivoId, nowRaw, total, mismo)
+    Call ContarLimites(denuncianteId, objetivo, nowRaw, total, mismo)
     If total >= LIMITE_ENTRADAS_MAX Then Exit Sub
     clave = CStr(denuncianteId)
     If m_Limites.Exists(clave) Then
-        m_Limites.Item(clave) = m_Limites.Item(clave) & CStr(TickNoCero(nowRaw)) & ":" & CStr(objetivoId) & ";"
+        m_Limites.Item(clave) = m_Limites.Item(clave) & CStr(TickNoCero(nowRaw)) & ":" & objetivo & ";"
     Else
-        m_Limites.Item(clave) = CStr(TickNoCero(nowRaw)) & ":" & CStr(objetivoId) & ";"
+        m_Limites.Item(clave) = CStr(TickNoCero(nowRaw)) & ":" & objetivo & ";"
     End If
 End Sub
+
+' Saca a los denunciantes sin denuncias en la ultima hora (m_Limites no crece con el tiempo).
+Private Sub PodarLimites()
+    On Error GoTo PodarLimites_Err
+    Dim claves As Variant, i As Long, total As Long, mismo As Long, nowRaw As Long
+    nowRaw = GetTickCountRaw()
+    m_UltimaPoda = TickNoCero(nowRaw)
+    If m_Limites Is Nothing Then Exit Sub
+    If m_Limites.Count = 0 Then Exit Sub
+    claves = m_Limites.Keys
+    For i = LBound(claves) To UBound(claves)
+        Call ContarLimites(ValorLong(claves(i)), vbNullString, nowRaw, total, mismo)
+    Next i
+    Exit Sub
+PodarLimites_Err:
+    Call TraceError(Err.Number, Err.Description, "modDenuncias.PodarLimites", Erl)
+End Sub
+
+' Tope global por dia (DenunciasPorDiaGlobal, <= 0 = sin tope): cuenta solo las denuncias guardadas.
+Private Function TopeDiarioAlcanzado() As Boolean
+    Dim hoy As String
+    hoy = Format$(Date, "yyyymmdd")
+    If hoy <> m_DiaFecha Then
+        m_DiaFecha = hoy
+        m_DiaCant = 0
+    End If
+    TopeDiarioAlcanzado = (m_PorDiaGlobal > 0 And m_DiaCant >= m_PorDiaGlobal)
+End Function
 
 ' ---------------------------------------------------------------------------------------------
 ' /DENUNCIAR (Protocol_GmCommands.HandleDenounce)
@@ -699,11 +771,19 @@ Private Function UnirPalabras(ByRef palabras() As String, ByVal desde As Long, B
     Next i
 End Function
 
+Private Sub ResponderRecibida(ByVal UserIndex As Integer)
+    ' Msg534=Tu denuncia fue recibida por el equipo de soporte. La MISMA respuesta para un denunciado online,
+    ' offline, inexistente o GM del bridge: no sirve para saber quien esta conectado.
+    Call WriteLocaleMsg(UserIndex, MSG_DENUNCIA_FUE_RECIBIDA_EQUIPO_SOPORTE_534, e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_SERVER)
+End Sub
+
+' Orden pensado para no dar un oraculo de "esta online" (revision E3): todo lo que puede rechazar se decide
+' SIN mirar si el denunciado esta conectado; recien al final se mira, y online/offline responden igual.
 Public Sub DenunciarJugador(ByVal UserIndex As Integer, ByVal texto As String)
     On Error GoTo DenunciarJugador_Err
     Dim palabras() As String, limpias() As String, cant As Long, i As Long, k As Long
-    Dim candidato As String, Motivo As String, objetivo As Integer, tUser As t_UserReference
-    Dim nowRaw As Long, total As Long, mismo As Long
+    Dim candidato As String, nick As String, Motivo As String, objetivo As Integer, tUser As t_UserReference
+    Dim nowRaw As Long, total As Long, mismo As Long, claveObj As String
     texto = Trim$(Limpiar(texto))
     If LenB(texto) = 0 Then Exit Sub
     palabras = Split(texto, " ")
@@ -715,42 +795,40 @@ Public Sub DenunciarJugador(ByVal UserIndex As Integer, ByVal texto As String)
         End If
     Next i
     If cant = 0 Then Exit Sub
-    ' Los nicks pueden tener espacios: se prueba el prefijo mas largo que sea un personaje conectado.
+    ' Los nicks pueden tener espacios: el nick es el prefijo MAS LARGO que sea un personaje existente (base de
+    ' datos) o conectado. Si ese personaje esta offline no se cae a un prefijo mas corto que si este online
+    ' ("Ana Maria" offline no denuncia a "Ana"). Sin coincidencia: la primera palabra (desconocido).
     k = cant
     If k > PALABRAS_NICK_MAX Then k = PALABRAS_NICK_MAX
     Do While k >= 1
         candidato = UnirPalabras(limpias, 0, k - 1)
-        If EsGmChar(candidato) Then
-            ' Msg531=No podes denunciar a un administrador.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_PODES_DENUNCIAR_ADMINISTRADOR, e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_SERVER)
-            Exit Sub
-        End If
-        tUser = NameIndex(candidato)
-        If IsValidUserRef(tUser) Then
-            objetivo = tUser.ArrayIndex
-            Motivo = Left$(UnirPalabras(limpias, k, cant - 1), MOTIVO_MAX)
-            Exit Do
-        End If
+        If PersonajeExiste(candidato) Then Exit Do
+        If IsValidUserRef(NameIndex(candidato)) Then Exit Do
         k = k - 1
     Loop
-    If objetivo = 0 Then
-        ' Desconectado o inexistente: la respuesta de siempre (no revela si esta online) y no se guarda nada.
-        ' Msg532=Tu denuncia fue recibida por el equipo de soporte.
-        Call WriteLocaleMsg(UserIndex, MSG_DENUNCIA_FUE_RECIBIDA_EQUIPO_SOPORTE, e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_SERVER)
-        Exit Sub
-    End If
-    If objetivo = UserIndex Then
+    If k < 1 Then k = 1
+    nick = UnirPalabras(limpias, 0, k - 1)
+    Motivo = Left$(UnirPalabras(limpias, k, cant - 1), MOTIVO_MAX)
+    If UCase$(nick) = UCase$(UserList(UserIndex).name) Then
         ' Msg9016=No podes denunciarte a vos mismo.
         Call WriteLocaleMsg(UserIndex, MSG_DENUNCIA_A_VOS_MISMO, e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_SERVER)
         Exit Sub
     End If
-    ' Con el bridge los rangos vienen de la cuenta (EsGmChar solo mira Server.ini): se mira el conectado.
-    If EsGM(objetivo) Then
+    ' GM por Server.ini: se sabe sin que este conectado. (Un GM del bridge solo se ve conectado: ese cae en la
+    ' respuesta comun de abajo y no se guarda.)
+    If EsGmChar(nick) Then
+        ' Msg531=No podes denunciar a un administrador.
         Call WriteLocaleMsg(UserIndex, MSG_NO_PODES_DENUNCIAR_ADMINISTRADOR, e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_SERVER)
         Exit Sub
     End If
+    If TopeDiarioAlcanzado() Then
+        ' Msg9019=Las denuncias estan saturadas en este momento.
+        Call WriteLocaleMsg(UserIndex, MSG_DENUNCIA_SATURADO, e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_SERVER)
+        Exit Sub
+    End If
     nowRaw = GetTickCountRaw()
-    Call ContarLimites(UserList(UserIndex).Id, UserList(objetivo).Id, nowRaw, total, mismo)
+    claveObj = ClaveObjetivo(nick)
+    Call ContarLimites(UserList(UserIndex).Id, claveObj, nowRaw, total, mismo)
     If m_PorHora > 0 And total >= m_PorHora Then
         ' Msg9017=Llegaste al limite de 1 denuncias por hora.
         Call WriteLocaleMsg(UserIndex, MSG_DENUNCIA_LIMITE_POR_HORA, e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_SERVER, CStr(m_PorHora))
@@ -758,18 +836,28 @@ Public Sub DenunciarJugador(ByVal UserIndex As Integer, ByVal texto As String)
     End If
     If m_MismoObjetivoPorHora > 0 And mismo >= m_MismoObjetivoPorHora Then
         ' Msg9018=Ya denunciaste a 1 hace menos de una hora.
-        Call WriteLocaleMsg(UserIndex, MSG_DENUNCIA_MISMO_OBJETIVO, e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_SERVER, UserList(objetivo).name)
+        Call WriteLocaleMsg(UserIndex, MSG_DENUNCIA_MISMO_OBJETIVO, e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_SERVER, nick)
         Exit Sub
     End If
-    Call CrearDenuncia(UserIndex, objetivo, Motivo, nowRaw)
+    ' Desde aca cuenta para los limites, este o no conectado (si no, el contador seria el oraculo).
+    Call AgregarLimite(UserList(UserIndex).Id, claveObj, nowRaw)
+    tUser = NameIndex(nick)
+    If IsValidUserRef(tUser) Then objetivo = tUser.ArrayIndex
+    If objetivo > 0 And objetivo <> UserIndex Then
+        If Not EsGM(objetivo) Then Call CrearDenuncia(UserIndex, objetivo, Motivo)
+    End If
+    Call ResponderRecibida(UserIndex)
     Exit Sub
 DenunciarJugador_Err:
     Call TraceError(Err.Number, Err.Description, "modDenuncias.DenunciarJugador", Erl)
 End Sub
 
-Private Sub CrearDenuncia(ByVal UserIndex As Integer, ByVal objetivo As Integer, ByVal Motivo As String, ByVal nowRaw As Long)
+' Arma todo primero; recien con el registro completo avanza el id, encola y avisa. Un error aca no deja ids
+' gastados ni registros a medias (el denunciante igual recibe la respuesta en DenunciarJugador).
+Private Sub CrearDenuncia(ByVal UserIndex As Integer, ByVal objetivo As Integer, ByVal Motivo As String)
+    On Error GoTo CrearDenuncia_Err
     Dim numero As Long, fecha As String, contenido As String, Resumen As String, cantAcciones As Long
-    Dim chatTexto As String, i As Long, nickDenunciante As String, nickDenunciado As String
+    Dim chatTexto As String, i As Long, nickDenunciante As String, nickDenunciado As String, lineaIdx As String
     nickDenunciante = UserList(UserIndex).name
     nickDenunciado = UserList(objetivo).name
     numero = m_ProximoId
@@ -778,28 +866,31 @@ Private Sub CrearDenuncia(ByVal UserIndex As Integer, ByVal objetivo As Integer,
     Do While FileExist(RutaDenuncia(numero)) Or FileExist(RutaBorrada(numero))
         numero = numero + 1
     Loop
-    m_ProximoId = numero + 1
     fecha = Format$(Now, "yyyy-mm-dd hh:nn:ss")
     contenido = ArmarSnapshot(numero, fecha, UserIndex, objetivo, Motivo, Resumen, cantAcciones)
-    Call Encolar(RutaDenuncia(numero), contenido)
-    Call AgregarIndice(numero, fecha, nickDenunciante, nickDenunciado, Motivo, Resumen)
-    Call Encolar(RutaIndice(), LineaIndice("nueva", numero, fecha, nickDenunciante, nickDenunciado, Motivo, Resumen, vbNullString))
-    Call AgregarLimite(UserList(UserIndex).Id, UserList(objetivo).Id, nowRaw)
-    Call AntitrampaRegistrar(objetivo, "denunciado", "log", "id=" & numero & " denunciante_pj=" & UserList(UserIndex).Id & _
-            " denunciante_nick=" & nickDenunciante & " motivo=" & Motivo)
-    ' Compatibilidad con el panel de consultas (SOS) de los GMs: sigue recibiendo el chat del denunciado.
+    lineaIdx = LineaIndice("nueva", numero, fecha, nickDenunciante, nickDenunciado, Motivo, Resumen, vbNullString)
     With UserList(objetivo)
         For i = LBound(.flags.ChatHistory) To UBound(.flags.ChatHistory)
             If LenB(.flags.ChatHistory(i)) <> 0 Then chatTexto = chatTexto & .flags.ChatHistory(i) & vbNewLine
         Next i
     End With
+    ' Registro completo: recien ahora se confirma.
+    m_ProximoId = numero + 1
+    m_DiaCant = m_DiaCant + 1
+    Call Encolar(RutaDenuncia(numero), contenido)
+    Call Encolar(RutaIndice(), lineaIdx)
+    Call AgregarIndice(numero, fecha, nickDenunciante, nickDenunciado, Motivo, Resumen)
+    Call AntitrampaRegistrar(objetivo, "denunciado", "log", "id=" & numero & " denunciante_pj=" & UserList(UserIndex).Id & _
+            " denunciante_nick=" & nickDenunciante & " motivo=" & Motivo)
+    ' Compatibilidad con el panel de consultas (SOS) de los GMs: sigue recibiendo el chat del denunciado.
     If LenB(chatTexto) <> 0 Then
         Call Ayuda.Push(nickDenunciante, "[Ultimos mensajes de " & nickDenunciado & "]" & vbNewLine & chatTexto, "Denuncia #" & numero & " a " & nickDenunciado)
     End If
     Call LogConsulta(nickDenunciante & " (Denuncia #" & numero & " a " & nickDenunciado & ") motivo=" & Motivo & " " & Resumen)
     Call AvisarNueva(numero, nickDenunciante, nickDenunciado, Motivo)
-    ' Msg534=Tu denuncia fue recibida por el equipo de soporte.
-    Call WriteLocaleMsg(UserIndex, MSG_DENUNCIA_FUE_RECIBIDA_EQUIPO_SOPORTE_534, e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_SERVER)
+    Exit Sub
+CrearDenuncia_Err:
+    Call TraceError(Err.Number, Err.Description, "modDenuncias.CrearDenuncia", Erl)
 End Sub
 
 ' ---------------------------------------------------------------------------------------------
@@ -891,9 +982,11 @@ Public Function HandleDenunciasChatCommand(ByVal UserIndex As Integer, ByVal cha
     ' Split de "" devuelve un arreglo vacio (UBound = -1).
     If UBound(partes) < 0 Then Exit Function
     If UCase$(partes(0)) <> "~DENUNCIAS" Then Exit Function
+    ' Defensa propia (HandleTalk ya filtra): un no-GM no usa el comando, su texto sigue como chat.
+    If Not EsGM(UserIndex) Then Exit Function
     HandleDenunciasChatCommand = True
     If UBound(partes) >= 1 Then opcion = LCase$(partes(1))
-    If UBound(partes) >= 2 Then numero = CLng(val(partes(2)))
+    If UBound(partes) >= 2 Then numero = ValorLong(partes(2))
     Select Case opcion
         Case vbNullString, "lista"
             Call ComandoLista(UserIndex, UBound(partes) >= 2 And LCase$(partes(UBound(partes))) = "todas")
@@ -1026,17 +1119,33 @@ Private Sub ComandoBorrar(ByVal UserIndex As Integer, ByVal numero As Long)
         Call Responder(UserIndex, "Denuncias: no existe la denuncia #" & numero & ".")
         Exit Sub
     End If
+    ' Primero se baja la cola (el snapshot puede estar pendiente) y se mueve el archivo; solo si eso anduvo
+    ' se marca borrada y queda en el indice y en la auditoria.
+    Call DenunciasFlush
+    Call AsegurarCarpeta
+    If FileExist(RutaDenuncia(numero)) Then
+        If Not MoverArchivo(RutaDenuncia(numero), RutaBorrada(numero)) Then
+            Call Responder(UserIndex, "Denuncias: no se pudo mover el archivo de la denuncia #" & numero & " a Borradas; no se borro.")
+            Exit Sub
+        End If
+    End If
     m_Indice(pos).Estado = ESTADO_BORRADA
     With m_Indice(pos)
         Call Encolar(RutaIndice(), LineaIndice("borrar", numero, Format$(Now, "yyyy-mm-dd hh:nn:ss"), .Denunciante, .Denunciado, .Motivo, .Resumen, UserList(UserIndex).name))
     End With
-    ' Primero se baja la cola (el snapshot puede estar pendiente), despues se mueve el archivo.
-    Call DenunciasFlush
-    Call AsegurarCarpeta
-    If FileExist(RutaDenuncia(numero)) Then Name RutaDenuncia(numero) As RutaBorrada(numero)
     Call LogAudit("DENUNCIA", "GM " & UserList(UserIndex).name & " borro la denuncia #" & numero & " (archivo movido a Logs\" & CARPETA_DENUNCIAS & "\Borradas)")
     Call Responder(UserIndex, "Denuncia #" & numero & " borrada (archivo movido a Logs\" & CARPETA_DENUNCIAS & "\Borradas).")
     Exit Sub
 ComandoBorrar_Err:
     Call TraceError(Err.Number, Err.Description, "modDenuncias.ComandoBorrar", Erl)
+    Call Responder(UserIndex, "Denuncias: error al borrar la denuncia #" & numero & ".")
 End Sub
+
+Private Function MoverArchivo(ByVal origen As String, ByVal destino As String) As Boolean
+    On Error GoTo MoverArchivo_Err
+    Name origen As destino
+    MoverArchivo = True
+    Exit Function
+MoverArchivo_Err:
+    Call TraceError(Err.Number, Err.Description, "modDenuncias.MoverArchivo", Erl)
+End Function

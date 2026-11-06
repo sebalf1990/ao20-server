@@ -174,6 +174,7 @@ Public Function LoadSettings(ByVal Filename As String) As Long
     mSettings.Add "DenunciasPorHora", CLng(val(reader.GetValue("ANTITRAMPA", "DenunciasPorHora", "3")))
     mSettings.Add "DenunciasMismoObjetivoPorHora", CLng(val(reader.GetValue("ANTITRAMPA", "DenunciasMismoObjetivoPorHora", "1")))
     mSettings.Add "DenunciaAvisoGmCadaMs", CLng(val(reader.GetValue("ANTITRAMPA", "DenunciaAvisoGmCadaMs", "60000")))
+    mSettings.Add "DenunciasPorDiaGlobal", CLng(val(reader.GetValue("ANTITRAMPA", "DenunciasPorDiaGlobal", "200")))
     mSettings.Add "FISHING_REQUIRED_PERCENT", CInt(val(reader.GetValue("PESCA", "MinAgua")))
     mSettings.Add "FISHING_TILES_ON_MAP", CInt(val(reader.GetValue("PESCA", "MaxZonas")))
     mSettings.Add "FISHING_POOL_ID", CInt(val(reader.GetValue("PESCA", "FishingID")))
