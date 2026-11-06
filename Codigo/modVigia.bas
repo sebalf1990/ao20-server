@@ -34,7 +34,7 @@ Attribute VB_Name = "modVigia"
 '    - perdida sin fuente (pociones, flechas, pagos) o de consumo (usar_item, trabajo, quest...): no se
 '      registra (no es senial y es la mayoria del volumen); ver FuenteRegistraPerdidas;
 '    - gm y comercio_usuario: linea inmediata, con el GM o la contraparte en el detalle;
-'    - el resto (npc_comercio, piso, trabajo, banco, quest...): se suma por jugador + objeto + fuente y sale UNA
+'    - el resto (npc_comercio, piso, trabajo, banco, quest...): se suma por jugador + objeto + fuente + signo y sale UNA
 '      linea cada VigiaAgregadoMs (n = operaciones) y al desloguear.
 ' 2. login / logout con IP y cuenta. Sin id de maquina hasta E4 (H8). Detras de playit la IP es 127.x (H12):
 '    el analizador lo detecta y lo dice en el reporte.
@@ -45,6 +45,9 @@ Attribute VB_Name = "modVigia"
 ' 4. ruta: pasos aceptados comprimidos (N/S/E/O + repeticiones; "@mapa,x,y" en un salto o cambio de mapa).
 '    Una linea cada VigiaRutaVentanaMs o RUTA_LARGO_MAX caracteres, y al desloguear, si hubo al menos
 '    VigiaRutaMinPasos pasos.
+' LIMITE CONOCIDO (W5): la fuente se marca al ENTRAR a la funcion que mueve oro/items (Comercio, PickObjAt,
+' UseInvItem, banco...). Un dupe que pase por adentro de una de esas funciones sale con esa fuente (banco, piso,
+' npc_comercio, usar_item), NO como sin_fuente: para eso el analizador mira tambien el volumen por fuente.
 ' Todo falla abierto: un error aca se registra con TraceError y el juego sigue igual.
 Option Explicit
 
@@ -79,6 +82,7 @@ Private Type t_VigiaUser
     FuenteDetalle As String
     FuenteEpoca As Long
     LoginTick As Long
+    ClavesAgregadas As String     ' claves de m_Agregados de este jugador, separadas por vbTab
     Ritmo(0 To RITMO_MAX) As t_VigiaRitmo
     Ruta As String
     RutaInicio As String
@@ -98,13 +102,14 @@ Private Type t_VigiaPend
     Total As Long
     Fuente As String
     FuenteDetalle As String
-    Paquete As String
+    PaqueteId As Long             ' -1 = ninguno (timer, u otro jugador que el del paquete)
 End Type
 
 Private m_U() As t_VigiaUser
 Private m_Max As Long
 Private m_Epoca As Long
-Private m_Paquete As String
+Private m_PaqueteId As Long          ' paquete que se esta procesando (-1 = ninguno)
+Private m_PaqueteUser As Integer     ' de quien es ese paquete
 
 Private m_Pend(1 To PEND_MAX) As t_VigiaPend
 Private m_PendCant As Long
@@ -139,6 +144,8 @@ Public Sub InitVigia()
     Set m_Agregados = New Dictionary
     m_Epoca = 1
     m_PendCant = 0
+    m_PaqueteId = -1
+    m_PaqueteUser = 0
     m_UltimoAgregado = GetTickCountRaw()
     m_Max = 0
     If MaxUsers > 0 Then
@@ -185,6 +192,7 @@ Public Sub VigiaResetUser(ByVal UserIndex As Integer)
         .FuenteDetalle = vbNullString
         .FuenteEpoca = 0
         .LoginTick = 0
+        .ClavesAgregadas = vbNullString
         For i = 0 To RITMO_MAX
             Call ResetRitmo(UserIndex, i, True)
         Next i
@@ -229,12 +237,14 @@ Private Sub AvanzarEpoca()
     End If
 End Sub
 
-' Desde Protocol.HandleIncomingData, antes de despachar cada paquete.
-Public Sub VigiaInicioPaquete(ByVal UserIndex As Integer, ByVal PacketId As Long, ByVal PacketName As String)
+' Desde Protocol.HandleIncomingData, antes de despachar cada paquete. Solo guarda el id (Long): el nombre se
+' resuelve al escribir una linea sin fuente, no en cada paquete (caminar incluido).
+Public Sub VigiaInicioPaquete(ByVal UserIndex As Integer, ByVal PacketId As Long)
     On Error GoTo VigiaInicioPaquete_Err
     Dim tipo As Long
     Call AvanzarEpoca
-    m_Paquete = PacketName
+    m_PaqueteId = PacketId
+    m_PaqueteUser = UserIndex
     If Not SlotValido(UserIndex) Then Exit Sub
     If Not UserList(UserIndex).flags.UserLogged Then Exit Sub
     Select Case PacketId
@@ -259,7 +269,8 @@ End Sub
 Public Sub VigiaFinPaquetes()
     On Error GoTo VigiaFinPaquetes_Err
     Call AvanzarEpoca
-    m_Paquete = vbNullString
+    m_PaqueteId = -1
+    m_PaqueteUser = 0
     Exit Sub
 VigiaFinPaquetes_Err:
     Call TraceError(Err.Number, Err.Description, "modVigia.VigiaFinPaquetes", Erl)
@@ -269,7 +280,8 @@ End Sub
 Public Sub VigiaTick()
     On Error GoTo VigiaTick_Err
     Call AvanzarEpoca
-    m_Paquete = vbNullString
+    m_PaqueteId = -1
+    m_PaqueteUser = 0
     If TicksElapsed(m_UltimoAgregado, GetTickCountRaw()) >= m_AgregadoMs Then
         m_UltimoAgregado = GetTickCountRaw()
         Call FlushAgregados(0)
@@ -344,7 +356,13 @@ Public Sub VigiaDelta(ByVal UserIndex As Integer, ByVal ObjIndex As Long, ByVal 
         .Total = total
         .Fuente = fuente
         .FuenteDetalle = detalle
-        .Paquete = m_Paquete
+        ' El paquete solo sirve de evidencia si es del mismo jugador: lo que le pasa a otro en esta operacion
+        ' (un connect/disconnect que procesa modNetwork.Tick entre paquetes) no es "por" ese paquete.
+        If m_PaqueteUser = UserIndex Then
+            .PaqueteId = m_PaqueteId
+        Else
+            .PaqueteId = -1
+        End If
     End With
     Exit Sub
 VigiaDelta_Err:
@@ -394,7 +412,7 @@ Private Sub Asentar()
         Call EmitirPendiente(i)
         m_Pend(i).Fuente = vbNullString
         m_Pend(i).FuenteDetalle = vbNullString
-        m_Pend(i).Paquete = vbNullString
+        m_Pend(i).PaqueteId = -1
     Next i
     Exit Sub
 Asentar_Err:
@@ -402,7 +420,9 @@ Asentar_Err:
     Call TraceError(Err.Number, Err.Description, "modVigia.Asentar", Erl)
 End Sub
 
+' Con su propio manejador: una entrada que falla se registra y Asentar sigue con las demas.
 Private Sub EmitirPendiente(ByVal i As Long)
+    On Error GoTo EmitirPendiente_Err
     Dim evento As String, detalle As String, total As Double, paquete As String
     With m_Pend(i)
         If .Delta = 0 Then Exit Sub
@@ -418,7 +438,7 @@ Private Sub EmitirPendiente(ByVal i As Long)
         If LenB(.Fuente) = 0 Then
             ' Perder sin fuente es consumir (pociones, flechas, pagos): no es senial.
             If .Delta < 0 Then Exit Sub
-            paquete = .Paquete
+            If .PaqueteId >= 0 Then paquete = GetClientPacketName(.PaqueteId)
             If LenB(paquete) = 0 Then paquete = "ninguno"
             detalle = DetalleDelta(.ObjIndex, FUENTE_SIN, .Delta, total, 1) & " paquete=" & paquete
             Call AntitrampaLinea(.UserIndex, evento, detalle)
@@ -433,11 +453,20 @@ Private Sub EmitirPendiente(ByVal i As Long)
             Call Agregar(.UserIndex, .ObjIndex, .Fuente, .Delta)
         End If
     End With
+    Exit Sub
+EmitirPendiente_Err:
+    Call TraceError(Err.Number, Err.Description, "modVigia.EmitirPendiente (entrada " & i & ")", Erl)
 End Sub
 
 Private Sub Agregar(ByVal UserIndex As Integer, ByVal ObjIndex As Long, ByVal fuente As String, ByVal delta As Double)
     Dim clave As String, valor As Variant
-    clave = CStr(UserIndex) & "|" & CStr(ObjIndex) & "|" & fuente
+    ' Ganancias y perdidas por separado: depositar y retirar del banco (o tirar y juntar) en la misma ventana no se
+    ' anulan entre si; los dos movimientos son evidencia.
+    If delta > 0 Then
+        clave = CStr(UserIndex) & "|" & CStr(ObjIndex) & "|" & fuente & "|+"
+    Else
+        clave = CStr(UserIndex) & "|" & CStr(ObjIndex) & "|" & fuente & "|-"
+    End If
     If m_Agregados.Exists(clave) Then
         valor = m_Agregados.Item(clave)
         valor(0) = valor(0) + delta
@@ -445,41 +474,58 @@ Private Sub Agregar(ByVal UserIndex As Integer, ByVal ObjIndex As Long, ByVal fu
         m_Agregados.Item(clave) = valor
     Else
         m_Agregados.Add clave, Array(delta, 1&)
+        m_U(UserIndex).ClavesAgregadas = m_U(UserIndex).ClavesAgregadas & clave & vbTab
     End If
 End Sub
 
-' soloUser = 0: todos (cada VigiaAgregadoMs); si no, solo los de ese jugador (al desloguear).
+' soloUser = 0: todos (cada VigiaAgregadoMs); si no, solo los de ese jugador (al desloguear), por su indice.
 Private Sub FlushAgregados(ByVal soloUser As Integer)
     On Error GoTo FlushAgregados_Err
-    Dim claves As Variant, i As Long, partes() As String, UserIndex As Integer, objIdx As Long, valor As Variant
-    Dim evento As String, total As Double
+    Dim claves As Variant, i As Long
     If m_Agregados Is Nothing Then Exit Sub
     If m_Agregados.Count = 0 Then Exit Sub
-    claves = m_Agregados.Keys
+    If soloUser = 0 Then
+        claves = m_Agregados.Keys
+        For i = 1 To m_Max
+            m_U(i).ClavesAgregadas = vbNullString
+        Next i
+    Else
+        If Not SlotValido(soloUser) Then Exit Sub
+        If LenB(m_U(soloUser).ClavesAgregadas) = 0 Then Exit Sub
+        claves = Split(m_U(soloUser).ClavesAgregadas, vbTab)
+        m_U(soloUser).ClavesAgregadas = vbNullString
+    End If
     For i = 0 To UBound(claves)
-        partes = Split(claves(i), "|")
-        UserIndex = CInt(partes(0))
-        If soloUser = 0 Or UserIndex = soloUser Then
-            objIdx = CLng(partes(1))
-            valor = m_Agregados.Item(claves(i))
-            Call m_Agregados.Remove(claves(i))
-            If valor(0) <> 0 And SlotValido(UserIndex) Then
-                If UserList(UserIndex).flags.UserLogged Then
-                    If objIdx = 0 Then
-                        evento = "oro"
-                        total = UserList(UserIndex).Stats.GLD
-                    Else
-                        evento = "item"
-                        total = CantidadEnInventario(UserIndex, objIdx)
-                    End If
-                    Call AntitrampaLinea(UserIndex, evento, DetalleDelta(objIdx, partes(2), valor(0), total, valor(1)))
-                End If
-            End If
-        End If
+        If LenB(claves(i)) > 0 Then Call EmitirAgregado(CStr(claves(i)))
     Next i
     Exit Sub
 FlushAgregados_Err:
     Call TraceError(Err.Number, Err.Description, "modVigia.FlushAgregados", Erl)
+End Sub
+
+' Una clave de m_Agregados -> una linea (y se borra). Con su manejador: una que falla no corta a las demas.
+Private Sub EmitirAgregado(ByVal clave As String)
+    On Error GoTo EmitirAgregado_Err
+    Dim partes() As String, UserIndex As Integer, objIdx As Long, valor As Variant, evento As String, total As Double
+    If Not m_Agregados.Exists(clave) Then Exit Sub
+    valor = m_Agregados.Item(clave)
+    Call m_Agregados.Remove(clave)
+    partes = Split(clave, "|")
+    UserIndex = CInt(partes(0))
+    objIdx = CLng(partes(1))
+    If valor(0) = 0 Or Not SlotValido(UserIndex) Then Exit Sub
+    If Not UserList(UserIndex).flags.UserLogged Then Exit Sub
+    If objIdx = 0 Then
+        evento = "oro"
+        total = UserList(UserIndex).Stats.GLD
+    Else
+        evento = "item"
+        total = CantidadEnInventario(UserIndex, objIdx)
+    End If
+    Call AntitrampaLinea(UserIndex, evento, DetalleDelta(objIdx, partes(2), valor(0), total, valor(1)))
+    Exit Sub
+EmitirAgregado_Err:
+    Call TraceError(Err.Number, Err.Description, "modVigia.EmitirAgregado", Erl)
 End Sub
 
 ' ---------------------------------------------------------------------------------------------
@@ -622,6 +668,7 @@ Public Sub VigiaPaso(ByVal UserIndex As Integer)
     On Error GoTo VigiaPaso_Err
     Dim mapa As Integer, x As Long, y As Long, dx As Long, dy As Long, direccion As String
     If Not SlotValido(UserIndex) Then Exit Sub
+    If Not UserList(UserIndex).flags.UserLogged Then Exit Sub
     mapa = UserList(UserIndex).pos.Map
     x = UserList(UserIndex).pos.x
     y = UserList(UserIndex).pos.y

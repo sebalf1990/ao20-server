@@ -928,6 +928,8 @@ Private Sub CancelarRetoEnConteo(ByVal Sala As Integer, ByVal Abandona As Intege
                 Idx = .Jugadores(i).ArrayIndex
                 Call VigiaFuente(Idx, "reto")  ' E2 vigia (modVigia)
                 UserList(Idx).Stats.GLD = UserList(Idx).Stats.GLD + .Apuesta
+                ' La escritura al cliente llega despues (DevolverJugadorCancelado): medir ya, con la fuente puesta.
+                Call DenunciaOro(Idx)  ' E2 vigia (modVigia)
             End If
         Next i
         ' Despues la limpieza jugador por jugador; un fallo en uno no corta a los demas.

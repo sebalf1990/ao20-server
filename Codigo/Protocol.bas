@@ -324,7 +324,7 @@ Public Function HandleIncomingData(ByVal ConnectionID As Long, ByVal Message As 
             End If
         End If
     #End If
-    Call VigiaInicioPaquete(UserIndex, PacketId, PacketName)  ' E2 vigia (modVigia)
+    Call VigiaInicioPaquete(UserIndex, PacketId)  ' E2 vigia (modVigia)
     Select Case PacketId
         Case ClientPacketID.eLoginExistingChar
             Call HandleLoginExistingChar(ConnectionID)
@@ -8317,6 +8317,7 @@ End Sub
 
 Private Sub HandleRemoveCatalyst(ByVal UserIndex As Integer)
     On Error GoTo ErrHandler
+    Call VigiaFuente(UserIndex, "trabajo")  ' E2 vigia (modVigia)
     With UserList(UserIndex)
         Dim Slot As Byte
         Slot = reader.ReadInt8
