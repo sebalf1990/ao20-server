@@ -38,13 +38,14 @@ Attribute VB_Name = "modAntitrampa"
 '    El anti-macro de verifyTimeStamp NO pasa por aca (decision del duenio 2026-08-08).
 ' 6. Anti-farmeo de kills (etapa E1b, duenio 2026-10-29: "no cuentan las muertes entre misma IP/PC, mas
 '    el tope diario por pareja"). Lo consultan ContarMuerte y ActStats (Modulo_UsUaRiOs.bas):
-'    - Misma IP PUBLICA real (o misma PC cuando exista E4) = la muerte no suma kills, puntos de faccion ni
+'    - Misma IP PUBLICA real (o misma PC por guardian, E4e: toggle kill_regla_misma_pc, evento `kill_misma_pc`,
+'      requiere guardian valido en los DOS; si no, rige la IP) = la muerte no suma kills, puntos de faccion ni
 '      experiencia; evento `kill_misma_ip`. Nunca cuentan como "misma IP": loopback, privadas, link-local,
 '      CGNAT, IPv6 y las de KillIPsTunel (detras de playit todos llegan como 127.0.0.1, H12). El toggle
 '      kill_regla_misma_ip apaga esta regla. KillIncluirLoopback=1 (o ~ANTITRAMPA kills loopback si) trata
 '      127.x como publica: SOLO para las sondas antitrampa_kills / antitrampa_retos.
 '    - Retos (duenio 2026-10-29): la misma regla de origen entre RIVALES apaga el ELO del reto entero
-'      (ModRetos.RetoRivalesMismoOrigen, evento `reto_misma_ip`); la apuesta no cambia.
+'      (ModRetos.RetoRivalesMismoOrigen, evento `reto_misma_ip` / `reto_misma_pc`); la apuesta no cambia.
 '    - Tope por pareja asesino->victima (Id de personaje): KillsMismaParejaPorDia (Balance.dat [EXTRA],
 '      default 3, 0 = sin tope) muertes que cuentan por dia; la siguiente no suma (`kill_tope_diario`). En
 '      memoria: se vacia al cambiar la fecha (00:00) y con un reinicio (aceptado, plan). FactionReKillTime
@@ -84,6 +85,7 @@ Private Const FLUSH_LINEAS As Long = 64
 Private Const LOG_ARBOL As String = "Antitrampa"
 Private Const CONTADOR_TOPE As Long = 1000000
 Private Const KILL_TOGGLE_IP As String = "kill_regla_misma_ip"
+Private Const KILL_TOGGLE_PC As String = "kill_regla_misma_pc"
 
 Private m_Accion As e_AntitrampaAccion
 Private m_ToleranciaPct As Long
@@ -677,13 +679,16 @@ AntitrampaIpEsPublica_Err:
     Call TraceError(Err.Number, Err.Description, "modAntitrampa.AntitrampaIpEsPublica", Erl)
 End Function
 
-' Gancho para E4 (guardian): cuando el server conozca un id de PC por conexion, compararlo aca y devolver True
-' si coinciden (evento kill_misma_pc). Hoy el server no conoce ningun id de maquina (H8): nunca coincide.
+' E4e (duenio 2026-10-29): mismo id de PC del guardian (modGuardian.GuardianMismaPc) = misma maquina, aunque las IPs
+' difieran. Solo cuenta si LAS DOS sesiones tienen guardian valido; si falta uno el id es "desconocido" (nunca
+' "limpio") y rigen la IP y el tope diario. El toggle kill_regla_misma_pc (independiente del de IP) la apaga.
 Private Function KillMismaPc(ByVal asesino As Integer, ByVal victima As Integer) As Boolean
-    KillMismaPc = False
+    If Not IsFeatureEnabled(KILL_TOGGLE_PC) Then Exit Function
+    KillMismaPc = GuardianMismaPc(asesino, victima)
 End Function
 
 ' Evento por el que la muerte NO cuenta por mismo origen ("kill_misma_pc" / "kill_misma_ip"), o "" si cuenta.
+' Si coinciden PC e IP gana kill_misma_pc (un solo evento; la PC es la evidencia mas fuerte).
 ' No registra nada: ContarMuerte registra, ActStats solo pregunta.
 Public Function AntitrampaKillMotivoMismoOrigen(ByVal asesino As Integer, ByVal victima As Integer) As String
     On Error GoTo AntitrampaKillMotivoMismoOrigen_Err

@@ -89,6 +89,7 @@ Private Type t_GuardianUser
     AvisoTick As Long
     HbValidos As Long
     HbInvalidos As Long
+    MidPc As String
     FlagsVistos As Long
     GenCant As Long
     Gen(1 To MAX_GEN) As t_GuardianGen
@@ -486,6 +487,45 @@ EmitirResumen_Err:
     Call TraceError(Err.Number, Err.Description, "modGuardian.EmitirResumen", Erl)
 End Sub
 
+' ---------------------------------------------------------------------------------------------
+' Id de PC (etapa E4e)
+' ---------------------------------------------------------------------------------------------
+
+' True si la sesion tiene un id de PC validado: al menos un heartbeat valido en ESTA sesion (el slot se limpia en
+' login y logout). Sin guardian valido el id de PC es "desconocido", nunca "limpio".
+Private Function TieneMidPc(ByVal UserIndex As Integer) As Boolean
+    If Not SlotValido(UserIndex) Then Exit Function
+    If UserIndex > m_Max Then Exit Function
+    With m_U(UserIndex)
+        TieneMidPc = (.Activo And .HbValidos > 0 And LenB(.MidPc) > 0)
+    End With
+End Function
+
+' True si los dos jugadores tienen guardian valido y el MISMO id de PC (HMAC de la maquina, 32 hex). Si alguno no lo
+' tiene, False: el origen cae a la regla de IP y al tope diario como hasta ahora.
+Public Function GuardianMismaPc(ByVal UserA As Integer, ByVal UserB As Integer) As Boolean
+    On Error GoTo GuardianMismaPc_Err
+    If UserA = UserB Then Exit Function
+    If Not TieneMidPc(UserA) Then Exit Function
+    If Not TieneMidPc(UserB) Then Exit Function
+    GuardianMismaPc = (StrComp(m_U(UserA).MidPc, m_U(UserB).MidPc, vbBinaryCompare) = 0)
+    Exit Function
+GuardianMismaPc_Err:
+    GuardianMismaPc = False
+    Call TraceError(Err.Number, Err.Description, "modGuardian.GuardianMismaPc", Erl)
+End Function
+
+' Id de PC re-hasheado (el mismo que va en guardian_ok) para el log, o "" si la sesion no tiene guardian valido.
+Public Function GuardianPcLog(ByVal UserIndex As Integer) As String
+    On Error GoTo GuardianPcLog_Err
+    If Not TieneMidPc(UserIndex) Then Exit Function
+    GuardianPcLog = MidReHasheado(m_U(UserIndex).MidPc)
+    Exit Function
+GuardianPcLog_Err:
+    GuardianPcLog = vbNullString
+    Call TraceError(Err.Number, Err.Description, "modGuardian.GuardianPcLog", Erl)
+End Function
+
 Private Function SiNo(ByVal valor As Boolean) As String
     If valor Then
         SiNo = "si"
@@ -686,6 +726,8 @@ Private Sub ValidarLinea(ByVal UserIndex As Integer, ByVal linea As String, ByVa
         .AusenteUltTick = 0
         If .HbValidos < CONTADOR_TOPE Then .HbValidos = .HbValidos + 1
         If .HbValidos = 1 Then
+            ' E4e: id de PC de la sesion (crudo, 32 hex); solo se compara en memoria, nunca se loguea sin re-hashear.
+            .MidPc = LCase$(campos(7))
             Call Emitir(UserIndex, "guardian_ok", "kid=" & kid & " g=" & g & " exe=" & campos(6) & " mid=" & MidReHasheado(campos(7)), False)
         End If
     End With
