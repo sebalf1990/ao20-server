@@ -776,6 +776,7 @@ Public Sub LoadEffectOverTime()
         EffectOverTime(i).OnHitWav = val(Leer.GetValue("EOT" & i, "OnHitWav"))
         EffectOverTime(i).Override = val(Leer.GetValue("EOT" & i, "Override"))
         EffectOverTime(i).Limit = val(Leer.GetValue("EOT" & i, "Limit"))
+        Call ReadRadarProfile(Leer, "EOT" & i, EffectOverTime(i).Radar)
         EffectOverTime(i).PhysicalDamageReduction = val(Leer.GetValue("EOT" & i, "PhysicalDamageReduction"))
         EffectOverTime(i).MagicDamageReduction = val(Leer.GetValue("EOT" & i, "MagicDamageReduction"))
         EffectOverTime(i).PhysicalDamageDone = val(Leer.GetValue("EOT" & i, "PhysicalDamageDone"))
@@ -861,6 +862,8 @@ Public Sub LoadEffectOverTime()
         EffectOverTime(i).SecondaryTargetModifier = val(Leer.GetValue("EOT" & i, "SecondaryTargetModifier"))
     Next i
     Call InitializePools
+    ' Plan radar-v2 E3: perfiles por defecto de los EOT de radar viejos (DetectaCiuda..., tipo 18).
+    Call ApplyLegacyRadarProfiles
     Exit Sub
 ErrHandler:
     MsgBox "Error cargando EffectsOverTime.dat " & Err.Number & ": " & Err.Description
@@ -1301,6 +1304,7 @@ Sub LoadOBJData()
             .ImprovedRangedHitChance = val(Leer.GetValue(ObjKey, "ImprovedRHit"))
             .ImprovedMeleeHitChance = val(Leer.GetValue(ObjKey, "ImprovedMHit"))
             .ApplyEffectId = val(Leer.GetValue(ObjKey, "ApplyEffectId"))
+            Call ReadRadarProfile(Leer, ObjKey, .Radar)
             .JineteLevel = val(Leer.GetValue(ObjKey, "JineteLevel"))
             .FactionScore = val(Leer.GetValue(ObjKey, "FactionScore"))
             .ElementalTags = val(Leer.GetValue(ObjKey, "ElementalTags"))

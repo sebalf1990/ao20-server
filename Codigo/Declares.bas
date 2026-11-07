@@ -2006,7 +2006,17 @@ Public Enum e_ModifierTypes
     DefenseBonus = 1024
 End Enum
 
+' Plan radar-v2 E3: perfil de radar de un efecto (EffectsOverTime.dat) o de un objeto (obj.dat).
+' Claves: RadarVe (lista), RadarRadio, RadarProtege, RadarPenetra (Radar.ReadRadarProfile).
+Public Type t_RadarProfile
+    Mask As Long            ' un bit (2 ^ e_RadarCategory) por categoria detectada; 0 = no detecta
+    Radius As Integer       ' tiles alrededor del jugador; 0 = mapa entero
+    Protection As Byte      ' 0-3: esconde de la deteccion con penetracion menor
+    Penetration As Byte     ' 0-3: atraviesa protecciones menores o iguales
+End Type
+
 Public Type t_EffectOverTime
+    Radar As t_RadarProfile
     Type As e_EffectOverTimeType
     SharedTypeId As e_EotTypeId
     Limit As e_EOTTargetLimit
@@ -2420,6 +2430,7 @@ End Enum
 
 'Tipos de objetos
 Public Type t_ObjData
+    Radar As t_RadarProfile         ' plan radar-v2 E3: mientras este equipado
     Pino As Byte
     Elfico As Byte
     velocidad As Single
@@ -3084,8 +3095,11 @@ Public Type t_UserFlags
     jugando_captura_timer As Integer
     jugando_captura_muertes As Integer
     tiene_bandera As Byte
-    NpcRadarActive As Byte
-    UserDetectMask As Byte
+    NpcRadarActive As Byte          ' 0 apagado, 1 perfil (hechizo/item), 2 GM
+    RadarMask As Long               ' perfil vigente (plan radar-v2 E3, Radar.RefreshRadarProfile)
+    RadarRadius As Integer
+    RadarPenetration As Byte
+    RadarProtection As Byte
 End Type
 
 Public Enum e_EstadoMimetismo

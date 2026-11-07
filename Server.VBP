@@ -179,7 +179,6 @@ Class=TransformEffect; Codigo\EffectOverTime\TransformEffect.cls
 Class=BonusDamageEffect; Codigo\EffectOverTime\BonusDamageEffect.cls
 Class=BuffPotenciadoEffect; Codigo\EffectOverTime\BuffPotenciadoEffect.cls
 Class=EffectMinimapRadar; Codigo\EffectOverTime\EffectMinimapRadar.cls
-Class=EffectMinimapUDetect; Codigo\EffectOverTime\EffectMinimapUDetect.cls
 Class=ScenarioNavalBoarding; Codigo\Scenearios\ScenarioNavalBoarding.cls
 Class=IInventoryInterface; Codigo\Scenearios\IInventoryInterface.cls
 Module=PacketId; Codigo\PacketId.bas

@@ -26,6 +26,14 @@ Dim TickTime          As Long
 Dim TimeSinceLastTick As Long
 Private EffectInfo    As t_BaseDotInfo
 Private Source        As t_AnyReference
+' Plan radar-v2 E3: clase generica para los EOT de radar (tipos 18 y 19). El perfil (que detecta,
+' radio, proteccion, penetracion) vive en EffectOverTime(EotId).Radar; Radar.RefreshRadarProfile
+' junta todos los efectos y objetos equipados del jugador.
+Private RadarTypeId   As e_EffectOverTimeType
+
+Private Sub Class_Initialize()
+    RadarTypeId = e_EffectOverTimeType.eMinimapRadar
+End Sub
 
 Public Sub Setup(ByVal SourceIndex As Integer, _
                  ByVal SourceType As e_ReferenceType, _
@@ -37,23 +45,16 @@ Public Sub Setup(ByVal SourceIndex As Integer, _
     Call SetBaseDot(EffectInfo, TargetIndex, TargetType, Id, EffectId)
     Call SetRef(Source, SourceIndex, SourceType)
     TickTime = EffectOverTime(EffectInfo.EotId).TickTime
+    RadarTypeId = EffectOverTime(EffectInfo.EotId).Type
     If TargetType = eUser Then
-        ' Mutua exclusion: si habia un UserDetect activo (=3), removerlo
-        ' antes de pisar el flag (su OnRemove enviara packets vacios).
-        If UserList(TargetIndex).flags.NpcRadarActive = 3 Then
-            Call RemoveEffectsByType(UserList(TargetIndex).EffectOverTime, e_EffectOverTimeType.eMinimapUserDetect)
-        End If
-        ' Si quedo en 0 tras la limpieza (o ya estaba), activar como =1.
-        ' GM (=2) sigue siendo permanente, no se toca.
-        If UserList(TargetIndex).flags.NpcRadarActive = 0 Then
-            UserList(TargetIndex).flags.NpcRadarActive = 1
-        End If
-        Call ForceNpcRadarUpdate(TargetIndex)
+        ' Plan radar-v2 D6: una deteccion nueva reemplaza a la anterior y una proteccion nueva a la
+        ' anterior. El perfil se recalcula en CreateEffect, cuando este efecto ya esta en la lista.
+        Call MarkReplacedRadarEffects(TargetIndex, EffectInfo.EotId, Id)
     End If
 End Sub
 
 Public Property Get IBaseEffectOverTime_TypeId() As Integer
-    IBaseEffectOverTime_TypeId = e_EffectOverTimeType.eMinimapRadar
+    IBaseEffectOverTime_TypeId = RadarTypeId
 End Property
 
 Public Property Get IBaseEffectOverTime_SharedTypeId() As Integer
@@ -119,6 +120,13 @@ Public Function IBaseEffectOverTime_Reset(ByVal SourceUserId As Integer, ByVal S
     TimeSinceLastTick = 0
     EffectInfo.EotId = NewEffectId
     TickTime = EffectOverTime(EffectInfo.EotId).TickTime
+    RadarTypeId = EffectOverTime(EffectInfo.EotId).Type
+    ' Recast de un efecto marcado para salir (MarkReplacedRadarEffects) que todavia sigue en la lista: revive.
+    EffectInfo.RemoveEffect = False
+    If EffectInfo.TargetRef.RefType = eUser Then
+        Call MarkReplacedRadarEffects(EffectInfo.TargetRef.ArrayIndex, NewEffectId, EffectInfo.UniqueId)
+        Call RefreshRadarProfile(EffectInfo.TargetRef.ArrayIndex)
+    End If
     IBaseEffectOverTime_Reset = True
 End Function
 
@@ -131,15 +139,8 @@ Public Sub IBaseEffectOverTime_OnRemove()
     EffectInfo.Removed = True
     EffectInfo.RemoveEffect = True
     If EffectInfo.TargetRef.RefType = eUser Then
-        Dim TargetIndex As Integer
-        TargetIndex = EffectInfo.TargetRef.ArrayIndex
-        ' GM toggle (=2) is permanent; only clear the flag if it was set by the spell (=1)
-        If UserList(TargetIndex).flags.NpcRadarActive = 1 Then
-            UserList(TargetIndex).flags.NpcRadarActive = 0
-            If UserList(TargetIndex).flags.UserLogged Then
-                Call SendData(SendTarget.ToIndex, TargetIndex, PrepareMessageNpcRadarEmpty())
-            End If
-        End If
+        ' Recalcula sin este efecto (ya esta marcado RemoveMe): apaga o achica el radar segun lo que quede.
+        Call RefreshRadarProfile(EffectInfo.TargetRef.ArrayIndex)
     End If
 End Sub
 

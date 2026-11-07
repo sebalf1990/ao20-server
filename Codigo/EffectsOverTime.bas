@@ -317,15 +317,18 @@ Public Sub CreateEffect(ByVal SourceIndex As Integer, _
             Call AddEffectToUpdate(Radar)
             If TargetType = eUser Then
                 Call AddEffect(UserList(TargetIndex).EffectOverTime, Radar)
+                Call RefreshRadarProfile(TargetIndex)   ' plan radar-v2 E3: ya esta en la lista
             End If
         Case e_EffectOverTimeType.eMinimapUserDetect
-            Dim UserDetect As EffectMinimapUDetect
+            ' Plan radar-v2 E3: el tipo 19 usa la misma clase generica; el perfil sale del EOT.
+            Dim UserDetect As EffectMinimapRadar
             Set UserDetect = GetEOT(EffectType)
             UniqueIdCounter = GetNextId()
             Call UserDetect.Setup(SourceIndex, SourceType, TargetIndex, TargetType, EffectIndex, UniqueIdCounter)
             Call AddEffectToUpdate(UserDetect)
             If TargetType = eUser Then
                 Call AddEffect(UserList(TargetIndex).EffectOverTime, UserDetect)
+                Call RefreshRadarProfile(TargetIndex)
             End If
         Case Else
             Debug.Assert False
@@ -1253,7 +1256,7 @@ Private Function InstantiateEOT(ByVal EffectType As e_EffectOverTimeType) As IBa
         Case e_EffectOverTimeType.eMinimapRadar
             Set InstantiateEOT = New EffectMinimapRadar
         Case e_EffectOverTimeType.eMinimapUserDetect
-            Set InstantiateEOT = New EffectMinimapUDetect
+            Set InstantiateEOT = New EffectMinimapRadar
         ' --- Sistema de venenos nuevo (TOGGLE26) ---
         Case e_EffectOverTimeType.ePoisonMinor
             Set InstantiateEOT = New PoisonMinorEffect

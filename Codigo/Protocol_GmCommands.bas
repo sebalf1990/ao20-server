@@ -759,6 +759,7 @@ Public Sub HandleNpcRadarToggle(ByVal UserIndex As Integer)
         If .flags.NpcRadarActive = 2 Then
             .flags.NpcRadarActive = 0
             .Counters.NpcRadarTick = 0
+            Call ResetRadarProfileState(UserIndex)   ' el proximo tick reactiva el perfil (hechizo/item) si hay
             Call SendRadarClearAll(UserIndex)
             Call WriteConsoleMsg(UserIndex, "Radar de NPCs hostiles desactivado.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         Else
