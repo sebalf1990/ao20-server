@@ -28,6 +28,9 @@ Option Explicit
 
 ' Periodo minimo entre actualizaciones del radar de minimapa (antes Private en Radar.bas).
 Public Const NPC_RADAR_TICK_MS As Long = 300
+' Plan radar-v2 E7: el main loop gira sin pausa (UNLOCK_CPU=1, ~130.000 vueltas/s medidas); el radar recorre
+' los usuarios a lo sumo una vez cada RADAR_LOOP_GATE_MS. Atraso maximo por usuario: 25 ms sobre 300.
+Public Const RADAR_LOOP_GATE_MS As Long = 25
 
 ' Tick actual con el 0 reservado: devuelve t, o 1 si t = 0. Para guardar un tick que despues se
 ' consulta con TickStampIsSet/CooldownActive (0 = "nunca"). Esta aca y no en modElapsedTime
