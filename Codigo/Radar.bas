@@ -80,6 +80,11 @@ Private Function ClassifyNpc(ByVal NpcIndex As Integer) As Integer
             ClassifyNpc = e_RadarCategory.eRadarMascota
             Exit Function
         End If
+        ' Plan radar-v2 E4: jefe marcado en npcs.dat (RadarJefe=1). Viaja aparte, con su icono.
+        If .RadarJefe Then
+            ClassifyNpc = e_RadarCategory.eRadarJefe
+            Exit Function
+        End If
         If .Hostile = 1 Then
             ClassifyNpc = e_RadarCategory.eRadarHostile
             Exit Function
@@ -171,6 +176,7 @@ Private Function PacketIdForCategory(ByVal Category As e_RadarCategory) As Serve
         Case e_RadarCategory.eRadarUserCaos:       PacketIdForCategory = ServerPacketID.eNpcRadarUserCaos
         Case e_RadarCategory.eRadarPartyMember:    PacketIdForCategory = ServerPacketID.eNpcRadarPartyMember
         Case e_RadarCategory.eRadarClanMember:     PacketIdForCategory = ServerPacketID.eNpcRadarClanMember
+        Case e_RadarCategory.eRadarJefe:           PacketIdForCategory = ServerPacketID.eNpcRadarJefe
     End Select
 End Function
 
@@ -610,6 +616,43 @@ CollectNpcSymbolRadar_Err:
     Call TraceError(Err.Number, Err.Description, "Radar.CollectNpcSymbolRadar", Erl)
 End Function
 
+' Plan radar-v2 E4: jefes del mapa con su icono (0 = sin icono: el cliente dibuja un punto grande).
+Private Function CollectJefeRadar(ByVal UserIndex As Integer, ByRef Xs() As Byte, ByRef Ys() As Byte, ByRef Ss() As Byte, ByRef count As Integer) As Long
+    On Error GoTo CollectJefeRadar_Err
+    Dim userMap As Integer
+    userMap = UserList(UserIndex).pos.Map
+    count = 0
+    Dim h As Long
+    h = (CLng(userMap) Mod 32768) * 17 + CLng(e_RadarCategory.eRadarJefe) * 31
+    If userMap <= 0 Then CollectJefeRadar = h: Exit Function
+    Dim NpcIndex As Integer
+    Dim px As Byte, py As Byte
+    Dim firstK As Long, lastK As Long, k As Long
+    Call BucketRange(userMap, firstK, lastK)
+    For k = firstK To lastK
+        NpcIndex = RadarMapNpcs(k)
+        With NpcList(NpcIndex)
+            If .pos.Map = userMap Then
+                If ClassifyNpc(NpcIndex) = e_RadarCategory.eRadarJefe And InRadarRange(UserIndex, .pos.x, .pos.y) Then
+                    count = count + 1
+                    px = CByte(.pos.x)
+                    py = CByte(.pos.y)
+                    Xs(count) = px
+                    Ys(count) = py
+                    Ss(count) = .RadarIcono
+                    h = ((h Mod 1048576) * 17) Xor (CLng(px) * 256& + CLng(py))
+                    h = ((h Mod 1048576) * 31) Xor CLng(.RadarIcono)
+                    If count >= MAX_RADAR_ENTITIES Then Exit For
+                End If
+            End If
+        End With
+    Next k
+    CollectJefeRadar = h
+    Exit Function
+CollectJefeRadar_Err:
+    Call TraceError(Err.Number, Err.Description, "Radar.CollectJefeRadar", Erl)
+End Function
+
 ' ============================================================================
 ' Hash storage (por categoria)
 ' ============================================================================
@@ -630,6 +673,7 @@ Private Function GetCategoryHash(ByVal UserIndex As Integer, ByVal Category As e
         Case e_RadarCategory.eRadarUserCaos:       GetCategoryHash = UserList(UserIndex).Counters.NpcRadarHashUserCaos
         Case e_RadarCategory.eRadarPartyMember:    GetCategoryHash = UserList(UserIndex).Counters.NpcRadarHashPartyMember
         Case e_RadarCategory.eRadarClanMember:     GetCategoryHash = UserList(UserIndex).Counters.NpcRadarHashClanMember
+        Case e_RadarCategory.eRadarJefe:           GetCategoryHash = UserList(UserIndex).Counters.NpcRadarHashJefe
     End Select
 End Function
 
@@ -649,6 +693,7 @@ Private Sub SetCategoryHash(ByVal UserIndex As Integer, ByVal Category As e_Rada
         Case e_RadarCategory.eRadarUserCaos:       UserList(UserIndex).Counters.NpcRadarHashUserCaos = h
         Case e_RadarCategory.eRadarPartyMember:    UserList(UserIndex).Counters.NpcRadarHashPartyMember = h
         Case e_RadarCategory.eRadarClanMember:     UserList(UserIndex).Counters.NpcRadarHashClanMember = h
+        Case e_RadarCategory.eRadarJefe:           UserList(UserIndex).Counters.NpcRadarHashJefe = h
     End Select
 End Sub
 
@@ -674,6 +719,7 @@ Private Sub ResetCategoryHashes(ByVal UserIndex As Integer)
         .NpcRadarHashUserCaos = 0
         .NpcRadarHashPartyMember = 0
         .NpcRadarHashClanMember = 0
+        .NpcRadarHashJefe = 0
     End With
 End Sub
 
@@ -708,6 +754,17 @@ Private Sub SendCategoryUpdate(ByVal UserIndex As Integer, ByVal Category As e_R
         End If
         Call SetCategoryHash(UserIndex, Category, newHash)
         Call SendData(SendTarget.ToIndex, UserIndex, PrepareMessageRadarQuestNpc(PacketIdForCategory(Category), CByte(count), Xs, Ys, Ss2))
+        Exit Sub
+    End If
+    If Category = e_RadarCategory.eRadarJefe Then
+        Dim Ss3(1 To MAX_RADAR_ENTITIES) As Byte
+        newHash = CollectJefeRadar(UserIndex, Xs, Ys, Ss3, count)
+        If newHash = 0 Then newHash = 1   ' 0 = "sin enviar" (ResetCategoryHashes)
+        If (Not forceSend) And newHash = GetCategoryHash(UserIndex, Category) Then
+            Exit Sub
+        End If
+        Call SetCategoryHash(UserIndex, Category, newHash)
+        Call SendData(SendTarget.ToIndex, UserIndex, PrepareMessageRadarQuestNpc(PacketIdForCategory(Category), CByte(count), Xs, Ys, Ss3))
         Exit Sub
     End If
     If Category = e_RadarCategory.eRadarPartyMember Then
@@ -746,6 +803,7 @@ Public Sub SendRadarClearAll(ByVal UserIndex As Integer)
     Call SendData(SendTarget.ToIndex, UserIndex, PrepareMessageRadarCategoryEmpty(ServerPacketID.eNpcRadarUserCaos))
     Call SendData(SendTarget.ToIndex, UserIndex, PrepareMessageRadarCategoryEmpty(ServerPacketID.eNpcRadarPartyMember))
     Call SendData(SendTarget.ToIndex, UserIndex, PrepareMessageRadarCategoryEmpty(ServerPacketID.eNpcRadarClanMember))
+    Call SendData(SendTarget.ToIndex, UserIndex, PrepareMessageRadarCategoryEmpty(ServerPacketID.eNpcRadarJefe))
     Call ResetAllHashes(UserIndex)
     Exit Sub
 SendRadarClearAll_Err:
@@ -771,6 +829,10 @@ Public Sub SendNpcRadarUpdateProfile(ByVal UserIndex As Integer)
     For c = LBound(cats) To UBound(cats)
         If (mask And RadarBit(cats(c))) <> 0 Then Call SendCategoryUpdate(UserIndex, cats(c), mapChanged)
     Next c
+    ' Plan radar-v2 D9: quien ve hostiles ve tambien a los jefes (punto grande / icono propio).
+    If (mask And (RadarBit(e_RadarCategory.eRadarHostile) Or RadarBit(e_RadarCategory.eRadarJefe))) <> 0 Then
+        Call SendCategoryUpdate(UserIndex, e_RadarCategory.eRadarJefe, mapChanged)
+    End If
     UserList(UserIndex).Counters.NpcRadarLastMap = UserList(UserIndex).pos.Map
     Exit Sub
 SendNpcRadarUpdateProfile_Err:
@@ -783,6 +845,7 @@ Public Sub SendNpcRadarUpdateGm(ByVal UserIndex As Integer)
     Dim mapChanged As Boolean
     mapChanged = (UserList(UserIndex).Counters.NpcRadarLastMap <> UserList(UserIndex).pos.Map)
     Call SendCategoryUpdate(UserIndex, e_RadarCategory.eRadarHostile, mapChanged)
+    Call SendCategoryUpdate(UserIndex, e_RadarCategory.eRadarJefe, mapChanged)
     Call SendCategoryUpdate(UserIndex, e_RadarCategory.eRadarNeutralNpc, mapChanged)
     Call SendCategoryUpdate(UserIndex, e_RadarCategory.eRadarGuardiaReal, mapChanged)
     Call SendCategoryUpdate(UserIndex, e_RadarCategory.eRadarGuardiaCaos, mapChanged)
@@ -870,7 +933,8 @@ End Sub
 ' Un perfil se define en datos y se aplica igual desde un efecto con duracion o un objeto:
 '   EffectsOverTime.dat [EOTn] de Type=18/19 -> hechizos (EOTID) y consumibles (ApplyEffectId)
 '   obj.dat [OBJn]                         -> mientras el objeto este equipado
-' Claves: RadarVe=hostiles,neutrales,mascotas,guardias,ciudadanos,criminales,imperiales,caos
+' Claves: RadarVe=hostiles,neutrales,mascotas,guardias,ciudadanos,criminales,imperiales,caos,jefes
+'         ("hostiles" incluye a los jefes; "jefes" solo a los jefes)
 '         RadarRadio=tiles (0 = mapa entero)  RadarProtege=0-3  RadarPenetra=0-3
 
 Public Function RadarBit(ByVal Category As Long) As Long
@@ -903,6 +967,7 @@ Private Function ParseRadarCategories(ByVal text As String, ByVal Section As Str
             Case "criminales": ParseRadarCategories = ParseRadarCategories Or RadarBit(e_RadarCategory.eRadarUserCriminal)
             Case "imperiales": ParseRadarCategories = ParseRadarCategories Or RadarBit(e_RadarCategory.eRadarUserImperial)
             Case "caos":       ParseRadarCategories = ParseRadarCategories Or RadarBit(e_RadarCategory.eRadarUserCaos)
+            Case "jefes":      ParseRadarCategories = ParseRadarCategories Or RadarBit(e_RadarCategory.eRadarJefe)
             Case Else
                 Call TraceError(0, "RadarVe con categoria desconocida '" & token & "' en [" & Section & "]", "Radar.ParseRadarCategories", 0)
         End Select

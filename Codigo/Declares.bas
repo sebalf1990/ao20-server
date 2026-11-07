@@ -3227,6 +3227,7 @@ Public Type t_UserCounters
     NpcRadarHashNpcSymbol As Long
     NpcRadarHashPartyMember As Long
     NpcRadarHashClanMember As Long
+    NpcRadarHashJefe As Long
     NpcSymbolRadarTick As Long
     SocialRadarTick As Long
     NpcRadarLastMap As Integer
@@ -3734,6 +3735,8 @@ Public Type t_NpcInfoCache
     Comercia As Integer
     Craftea As Integer
     Hostile As Integer
+    RadarJefe As Boolean      ' plan radar-v2 E4 (se copia a t_Npc al spawnear)
+    RadarIcono As Byte
     AttackRange As Integer
     ProjectileType As Integer
     PreferedRange As Integer
@@ -3906,6 +3909,8 @@ Public Type t_Npc
     Movement As e_TipoAI
     Attackable As Byte
     Hostile As Byte
+    RadarJefe As Boolean      ' plan radar-v2 E4: npcs.dat RadarJefe=1
+    RadarIcono As Byte        ' npcs.dat RadarIcono=n -> cliente interface/radar_jefe_<n>.bmp
     PoderAtaque As Long
     PoderEvasion As Long
     AttackRange As Byte
@@ -4304,6 +4309,7 @@ Public Enum e_RadarCategory
     eRadarUserCaos = 11
     eRadarPartyMember = 12
     eRadarClanMember = 13
+    eRadarJefe = 14             ' plan radar-v2 E4
 End Enum
 
 Public Enum e_EotTypeId

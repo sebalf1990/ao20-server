@@ -246,6 +246,7 @@ Public Enum ServerPacketID
     eUpdatePoisonStacks ' Sistema venenos TOGGLE26: contador stacks de Hemo (solo al dueno)
     eProfessionsUpdate  ' Plan 04.001: vista resuelta de profesiones (7 bytes, skills 17..23)
     eGuardianChallenge  ' E4b antitrampas: desafio del guardian (String8 N hex, Int16 intervalo_seg)
+    eNpcRadarJefe       ' Plan radar-v2 E4: jefes, count + (x, y, icono) x n
     eMaxPacket
     [PacketCount]
 End Enum

@@ -1161,6 +1161,11 @@ Private Sub LoadNpcInfoIntoCache(ByVal NpcNumber As Integer)
         .Comercia = Val(LeerNPCs.GetValue(SectionName, "Comercia"))
         .Craftea = Val(LeerNPCs.GetValue(SectionName, "Craftea"))
         .Hostile = Val(LeerNPCs.GetValue(SectionName, "Hostile"))
+        .RadarJefe = (Val(LeerNPCs.GetValue(SectionName, "RadarJefe")) <> 0)
+        Dim iconoJefe As Long
+        iconoJefe = Val(LeerNPCs.GetValue(SectionName, "RadarIcono"))
+        If iconoJefe < 0 Or iconoJefe > 255 Then iconoJefe = 0
+        .RadarIcono = CByte(iconoJefe)
         .AttackRange = Val(LeerNPCs.GetValue(SectionName, "AttackRange"))
         .ProjectileType = Val(LeerNPCs.GetValue(SectionName, "ProjectileType"))
         .PreferedRange = Val(LeerNPCs.GetValue(SectionName, "PreferedRange"))
@@ -1556,6 +1561,8 @@ Private Sub InitializeNpcFromInfo(ByVal NpcIndex As Integer, _
         .Comercia = Info.Comercia
         .Craftea = Info.Craftea
         .Hostile = Info.Hostile
+        .RadarJefe = Info.RadarJefe
+        .RadarIcono = Info.RadarIcono
         .flags.OldHostil = .Hostile
         .AttackRange = Info.AttackRange
         .ProjectileType = Info.ProjectileType
