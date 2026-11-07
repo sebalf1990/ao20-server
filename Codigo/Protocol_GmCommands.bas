@@ -750,7 +750,8 @@ End Sub
 Public Sub HandleNpcRadarToggle(ByVal UserIndex As Integer)
     On Error GoTo HandleNpcRadarToggle_Err
     With UserList(UserIndex)
-        If .flags.Privilegios And (e_PlayerType.User Or e_PlayerType.Consejero) Then Exit Sub
+        ' Plan radar-v2 D3: mismo rango que el radar automatico del login (SemiDios, Dios, Admin).
+        If (.flags.Privilegios And (e_PlayerType.SemiDios Or e_PlayerType.Dios Or e_PlayerType.Admin)) = 0 Then Exit Sub
         If Not IsFeatureEnabled("npc_minimap_radar") Then
             Call WriteConsoleMsg(UserIndex, "El radar de NPCs hostiles está deshabilitado.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             Exit Sub
