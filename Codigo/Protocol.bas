@@ -935,6 +935,8 @@ Public Function HandleIncomingData(ByVal ConnectionID As Long, ByVal Message As 
             Call HandleUseHKeySlot(UserIndex)
         Case ClientPacketID.eAntiCheatMessage
             Call HandleAntiCheatMessage(UserIndex)
+        Case ClientPacketID.eGuardianHeartbeat
+            Call HandleGuardianHeartbeat(UserIndex)
         Case ClientPacketID.eFactionMessage
             Call HandleFactionMessage(UserIndex)
         Case ClientPacketID.eAntiMacroMessage
@@ -983,6 +985,18 @@ Public Function HandleIncomingData(ByVal ConnectionID As Long, ByVal Message As 
     Call PerformTimeLimitCheck(performance_timer, "Protocol handling message " & PacketID_to_string(PacketId), 100)
     HandleIncomingData = True
 End Function
+
+' E4b antitrampas (modGuardian): linea firmada del guardian. El paquete se lee entero SIEMPRE (si quedaran bytes sin leer
+' el dispatcher cerraria la conexion); lo demas lo decide modGuardian y nunca cierra.
+Private Sub HandleGuardianHeartbeat(ByVal UserIndex As Integer)
+    On Error GoTo HandleGuardianHeartbeat_Err
+    Dim linea As String
+    linea = reader.ReadString8()
+    Call GuardianProcesarHeartbeat(UserIndex, linea)
+    Exit Sub
+HandleGuardianHeartbeat_Err:
+    Call TraceError(Err.Number, Err.Description, "Protocol.HandleGuardianHeartbeat", Erl)
+End Sub
 
 Public Sub ResetHooClientCapabilities(ByVal UserIndex As Integer)
     With UserList(UserIndex).HooCapabilities

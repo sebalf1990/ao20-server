@@ -245,6 +245,7 @@ Public Enum ServerPacketID
     eNpcRadarClanMember
     eUpdatePoisonStacks ' Sistema venenos TOGGLE26: contador stacks de Hemo (solo al dueno)
     eProfessionsUpdate  ' Plan 04.001: vista resuelta de profesiones (7 bytes, skills 17..23)
+    eGuardianChallenge  ' E4b antitrampas: desafio del guardian (String8 N hex, Int16 intervalo_seg)
     eMaxPacket
     [PacketCount]
 End Enum
@@ -572,6 +573,7 @@ Public Enum ClientPacketID
     eHooTargetedSpellCast
     eHooHouseDoorAction
     eNpcRadarToggle
+    eGuardianHeartbeat  ' E4b antitrampas: linea firmada del guardian (String8)
     eMaxPacket
     [PacketCount]
 End Enum

@@ -62,3 +62,6 @@ build-stamp.txt
 restart.request
 shutdown.request
 build.done
+
+# Secreto del guardian antitrampas (E4): nunca versionar
+Guardian.secret.ini

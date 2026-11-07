@@ -4790,6 +4790,19 @@ WriteAntiStartSeassion_Err:
     Call TraceError(Err.Number, Err.Description, "Argentum20.Protocol_Writes.WriteAntiStartSeassion", Erl)
 End Sub
 
+' E4b antitrampas (modGuardian): desafio por sesion. N = 16 bytes del RNG en hex minuscula (32 chars).
+Public Sub WriteGuardianChallenge(ByVal UserIndex As Integer, ByVal nHex As String, ByVal intervaloSeg As Long)
+    On Error GoTo WriteGuardianChallenge_Err
+    Call Writer.WriteInt16(ServerPacketID.eGuardianChallenge)
+    Call Writer.WriteString8(nHex)
+    Call Writer.WriteInt16(intervaloSeg)
+    Call modSendData.SendData(ToIndex, UserIndex)
+    Exit Sub
+WriteGuardianChallenge_Err:
+    Call Writer.Clear
+    Call TraceError(Err.Number, Err.Description, "Argentum20.Protocol_Writes.WriteGuardianChallenge", Erl)
+End Sub
+
 Public Sub WriteUpdateLobbyList(ByVal UserIndex As Integer)
     On Error GoTo WriteUpdateLobbyList_Err
     Dim IdList()       As Integer

@@ -641,6 +641,8 @@ Public Function PacketID_to_string(ByVal PacketId As ClientPacketID) As String
             PacketID_to_string = "eAntiMacroMessage"
         Case ClientPacketID.eModifyCastleWhiteList
             PacketID_to_string = "eModifyCastleWhiteList"
+        Case ClientPacketID.eGuardianHeartbeat
+            PacketID_to_string = "eGuardianHeartbeat"
         Case Else
             PacketID_to_string = "Unknown ClientPacketID (" & CStr(PacketId) & ")"
     End Select
