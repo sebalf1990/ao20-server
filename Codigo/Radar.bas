@@ -10,12 +10,23 @@ Attribute VB_Name = "Radar"
 '
 ' Modulo del radar de minimapa.
 ' - Para jugadores normales (NpcRadarActive=1): solo categoria Hostile.
-' - Para GMs (NpcRadarActive=2): 9 categorias (Hostile, NeutralNpc, QuestNpc,
-'   GuardiaReal, GuardiaCaos, Mascota, UserGm, UserCiudadano, UserCriminal).
+' - Para GMs (NpcRadarActive=2): Hostile, NeutralNpc, GuardiaReal, GuardiaCaos, Mascota,
+'   UserGm, UserCiudadano (incluye Armada/consejo) y UserCriminal (incluye Caos/concilio).
+' - Para "Detectar Personajes" (NpcRadarActive=3): categorias de UserDetectMask.
+' - Siempre activos para todos: QuestNpc, NpcSymbol, PartyMember, ClanMember.
 Option Explicit
 
 ' NPC_RADAR_TICK_MS (300 ms) vive ahora en modTickRules, junto a RadarDue.
 Private Const MAX_RADAR_ENTITIES As Integer = 100
+
+' Plan radar-v2 E1: NPCs agrupados por mapa. Se reconstruye como mucho cada RADAR_BUCKET_MS y cada
+' jugador recorre solo los NPCs de su mapa (antes recorria NpcList entero 2 a 7 veces por tick).
+' Orden estable por NpcIndex: mismo orden (y mismo hash) que el recorrido viejo.
+Private Const RADAR_BUCKET_MS As Long = 100
+Private RadarMapStart() As Long
+Private RadarMapNpcs() As Integer
+Private RadarBucketTick As Long
+Private RadarBucketReady As Boolean
 
 ' Estados que viajan en el packet eNpcRadarQuestNpc (Byte por NPC):
 '   0 = plano (sin glifo)
@@ -94,7 +105,8 @@ Private Function ClassifyUser(ByVal ObserverIndex As Integer, ByVal TargetIndex 
         End If
         If .flags.Privilegios <> e_PlayerType.User Then
             ClassifyUser = e_RadarCategory.eRadarUserGm
-        ElseIf .Faccion.Status = e_Facciones.Criminal Then
+        ElseIf .Faccion.Status = e_Facciones.Criminal Or .Faccion.Status = e_Facciones.Caos Or .Faccion.Status = e_Facciones.concilio Then
+            ' Plan radar-v2 D2: Caos/concilio se ven como criminal; Armada/consejo caen en ciudadano.
             ClassifyUser = e_RadarCategory.eRadarUserCriminal
         Else
             ClassifyUser = e_RadarCategory.eRadarUserCiudadano
@@ -163,6 +175,77 @@ End Function
 ' Recoleccion
 ' ============================================================================
 
+Private Sub EnsureNpcBuckets(ByVal nowTick As Long)
+    On Error GoTo EnsureNpcBuckets_Err
+    If RadarBucketReady Then
+        If CooldownActive(nowTick, RadarBucketTick, RADAR_BUCKET_MS) Then Exit Sub
+    End If
+    RadarBucketReady = False
+    If NumMaps <= 0 Then Exit Sub
+    Dim m As Long
+    Dim n As Long
+    ReDim RadarMapStart(1 To NumMaps + 1) As Long
+    For n = 1 To LastNPC
+        m = NpcList(n).pos.Map
+        If m >= 1 And m <= NumMaps Then
+            If NpcList(n).flags.NPCActive Then RadarMapStart(m) = RadarMapStart(m) + 1
+        End If
+    Next n
+    Dim mapCount As Long
+    Dim nextStart As Long
+    nextStart = 1
+    For m = 1 To NumMaps
+        mapCount = RadarMapStart(m)
+        RadarMapStart(m) = nextStart
+        nextStart = nextStart + mapCount
+    Next m
+    RadarMapStart(NumMaps + 1) = nextStart
+    If nextStart > 1 Then
+        ReDim RadarMapNpcs(1 To nextStart - 1) As Integer
+        Dim fillPos() As Long
+        ReDim fillPos(1 To NumMaps) As Long
+        For m = 1 To NumMaps
+            fillPos(m) = RadarMapStart(m)
+        Next m
+        For n = 1 To LastNPC
+            m = NpcList(n).pos.Map
+            If m >= 1 And m <= NumMaps Then
+                If NpcList(n).flags.NPCActive Then
+                    RadarMapNpcs(fillPos(m)) = n
+                    fillPos(m) = fillPos(m) + 1
+                End If
+            End If
+        Next n
+    End If
+    RadarBucketTick = NonZeroTickFrom(nowTick)
+    RadarBucketReady = True
+    Exit Sub
+EnsureNpcBuckets_Err:
+    RadarBucketReady = False
+    Call TraceError(Err.Number, Err.Description, "Radar.EnsureNpcBuckets", Erl)
+End Sub
+
+' Rango [firstK, lastK] de RadarMapNpcs para el mapa. Vacio (1, 0) si no hay baldes.
+Private Sub BucketRange(ByVal userMap As Integer, ByRef firstK As Long, ByRef lastK As Long)
+    firstK = 1
+    lastK = 0
+    Call EnsureNpcBuckets(GetTickCountRaw())
+    If Not RadarBucketReady Then Exit Sub
+    If userMap < 1 Or userMap > UBound(RadarMapStart) - 1 Then Exit Sub
+    firstK = RadarMapStart(userMap)
+    lastK = RadarMapStart(userMap + 1) - 1
+End Sub
+
+' Plan radar-v2 D4: un invisible u oculto solo aparece para un observador de rango estrictamente
+' mayor (regla de ClassifyUserDetailed). Vale para party y clan.
+Private Function HiddenFromObserver(ByVal ObserverIndex As Integer, ByVal TargetIndex As Integer) As Boolean
+    With UserList(TargetIndex)
+        If (.flags.AdminInvisible = 1) Or (.flags.invisible > 0) Or (.flags.Oculto = 1) Then
+            HiddenFromObserver = (CompararPrivilegiosUser(ObserverIndex, TargetIndex) <= 0)
+        End If
+    End With
+End Function
+
 ' Recolecta NPCs del mapa que matchean Category. Devuelve un hash.
 Private Function CollectRadarNpcs(ByVal UserIndex As Integer, ByVal Category As e_RadarCategory, ByRef Xs() As Byte, ByRef Ys() As Byte, ByRef count As Integer) As Long
     On Error GoTo CollectRadarNpcs_Err
@@ -178,7 +261,10 @@ Private Function CollectRadarNpcs(ByVal UserIndex As Integer, ByVal Category As 
     Dim NpcIndex As Integer
     Dim px As Byte, py As Byte
     Dim cat As Integer
-    For NpcIndex = 1 To LastNPC
+    Dim firstK As Long, lastK As Long, k As Long
+    Call BucketRange(userMap, firstK, lastK)
+    For k = firstK To lastK
+        NpcIndex = RadarMapNpcs(k)
         With NpcList(NpcIndex)
             If .pos.Map = userMap Then
                 cat = ClassifyNpc(NpcIndex)
@@ -193,7 +279,7 @@ Private Function CollectRadarNpcs(ByVal UserIndex As Integer, ByVal Category As 
                 End If
             End If
         End With
-    Next NpcIndex
+    Next k
     CollectRadarNpcs = h
     Exit Function
 CollectRadarNpcs_Err:
@@ -219,7 +305,9 @@ Private Function CollectRadarUsersByCategory(ByVal ObserverIndex As Integer, ByV
     For i = 1 To LastUser
         If i <> ObserverIndex Then
             If UserList(i).pos.Map = userMap Then
-                If Category = e_RadarCategory.eRadarUserGm Then
+                If UserList(ObserverIndex).flags.NpcRadarActive = 2 Then
+                    ' Radar GM: 3 categorias de usuario. Antes ciudadano/criminal pasaban por
+                    ' ClassifyUserDetailed y Armada/Caos no aparecian (plan radar-v2 D2).
                     cat = ClassifyUser(ObserverIndex, i)
                 Else
                     cat = ClassifyUserDetailed(ObserverIndex, i)
@@ -270,14 +358,7 @@ Private Function CollectRadarPartyMembers(ByVal ObserverIndex As Integer, ByRef 
         If memberIndex > 0 And memberIndex <> ObserverIndex And Not UserMod.GrupoCruzaBandos(ObserverIndex, memberIndex) Then
             If UserList(memberIndex).flags.UserLogged Then
                 If UserList(memberIndex).pos.Map = userMap Then
-                    Dim hidden As Boolean
-                    hidden = (UserList(memberIndex).flags.AdminInvisible = 1) Or (UserList(memberIndex).flags.invisible > 0) Or (UserList(memberIndex).flags.Oculto = 1)
-                    Dim show As Boolean
-                    show = True
-                    If hidden Then
-                        If CompararPrivilegiosUser(ObserverIndex, memberIndex) < 0 Then show = False
-                    End If
-                    If show Then
+                    If Not HiddenFromObserver(ObserverIndex, memberIndex) Then
                         count = count + 1
                         px = CByte(UserList(memberIndex).pos.x)
                         py = CByte(UserList(memberIndex).pos.y)
@@ -326,6 +407,9 @@ Private Function CollectRadarClanMembers(ByVal ObserverIndex As Integer, ByRef X
     Dim observerGuild As Integer
     observerGuild = UserList(ObserverIndex).GuildIndex
     If observerGuild <= 0 Then CollectRadarClanMembers = h: Exit Function
+    ' Plan radar-v2 D5: dentro de un evento o reto no hay radar de clan (dos del mismo clan pueden
+    ' estar en bandos opuestos). La party sigue con su regla de bandos (GrupoCruzaBandos).
+    If CustomScenarios.IsUserInMatch(ObserverIndex) Then CollectRadarClanMembers = h: Exit Function
     Dim i As Integer
     Dim px As Byte, py As Byte
     For i = 1 To LastUser
@@ -333,15 +417,8 @@ Private Function CollectRadarClanMembers(ByVal ObserverIndex As Integer, ByRef X
             If UserList(i).flags.UserLogged Then
                 If UserList(i).GuildIndex = observerGuild Then
                     If UserList(i).pos.Map = userMap Then
-                        If Not IsInObserverParty(ObserverIndex, i) Then
-                            Dim hidden As Boolean
-                            hidden = (UserList(i).flags.AdminInvisible = 1) Or (UserList(i).flags.invisible > 0) Or (UserList(i).flags.Oculto = 1)
-                            Dim show As Boolean
-                            show = True
-                            If hidden Then
-                                If CompararPrivilegiosUser(ObserverIndex, i) < 0 Then show = False
-                            End If
-                            If show Then
+                        If Not IsInObserverParty(ObserverIndex, i) And Not CustomScenarios.IsUserInMatch(i) Then
+                            If Not HiddenFromObserver(ObserverIndex, i) Then
                                 count = count + 1
                                 px = CByte(UserList(i).pos.x)
                                 py = CByte(UserList(i).pos.y)
@@ -365,6 +442,30 @@ End Function
 ' ============================================================================
 ' Estado de quest por usuario (siempre activo para todos los jugadores)
 ' ============================================================================
+
+' Disponible: no la hizo, cumple nivel, quest previa y clase. Lee QuestList sin copiar la quest
+' (plan radar-v2 E1: antes se copiaba el UDT entero por cada NPC de quest, jugador y tick).
+Private Function IsQuestAvailableForUser(ByVal UserIndex As Integer, ByVal qIdx As Integer) As Boolean
+    If qIdx < LBound(QuestList) Or qIdx > UBound(QuestList) Then Exit Function
+    If UserDoneQuest(UserIndex, qIdx) Then Exit Function
+    With QuestList(qIdx)
+        If UserList(UserIndex).Stats.ELV < .RequiredLevel Then Exit Function
+        If .RequiredQuest <> 0 Then
+            If Not UserDoneQuest(UserIndex, .RequiredQuest) Then Exit Function
+        End If
+        If .RequiredClassesCount > 0 Then
+            Dim ci As Integer
+            For ci = 1 To .RequiredClassesCount
+                If UserList(UserIndex).clase = .RequiredClass(ci) Then
+                    IsQuestAvailableForUser = True
+                    Exit Function
+                End If
+            Next ci
+            Exit Function
+        End If
+    End With
+    IsQuestAvailableForUser = True
+End Function
 
 ' Calcula el estado de quest agregado para un NPC respecto a un usuario.
 ' Prioridad: Ready > InProgress > Available > None.
@@ -393,38 +494,7 @@ Private Function GetQuestStateForUser(ByVal UserIndex As Integer, ByVal NpcIndex
                         hasInProgress = True
                     End If
                 Else
-                    ' Disponible: no la hizo, cumple prerequisitos
-                    If qIdx >= LBound(QuestList) And qIdx <= UBound(QuestList) Then
-                        Dim qData As t_Quest
-                        qData = QuestList(qIdx)
-                        Dim okClass As Boolean
-                        If qData.RequiredClassesCount > 0 Then
-                            Dim ci As Integer
-                            For ci = 1 To qData.RequiredClassesCount
-                                If UserList(UserIndex).clase = qData.RequiredClass(ci) Then
-                                    okClass = True
-                                    Exit For
-                                End If
-                            Next ci
-                        Else
-                            okClass = True
-                        End If
-                        If okClass Then
-                            If Not UserDoneQuest(UserIndex, qIdx) Then
-                                Dim okPrev As Boolean
-                                If qData.RequiredQuest = 0 Then
-                                    okPrev = True
-                                Else
-                                    okPrev = UserDoneQuest(UserIndex, qData.RequiredQuest)
-                                End If
-                                If okPrev Then
-                                    If UserList(UserIndex).Stats.ELV >= qData.RequiredLevel Then
-                                        hasAvailable = True
-                                    End If
-                                End If
-                            End If
-                        End If
-                    End If
+                    If IsQuestAvailableForUser(UserIndex, qIdx) Then hasAvailable = True
                 End If
             End If
         Next q
@@ -461,7 +531,10 @@ Private Function CollectQuestNpcRadar(ByVal UserIndex As Integer, ByRef Xs() As 
     Dim px As Byte, py As Byte
     Dim cat As Integer
     Dim state As Byte
-    For NpcIndex = 1 To LastNPC
+    Dim firstK As Long, lastK As Long, k As Long
+    Call BucketRange(userMap, firstK, lastK)
+    For k = firstK To lastK
+        NpcIndex = RadarMapNpcs(k)
         With NpcList(NpcIndex)
             If .pos.Map = userMap Then
                 cat = ClassifyNpc(NpcIndex)
@@ -479,7 +552,7 @@ Private Function CollectQuestNpcRadar(ByVal UserIndex As Integer, ByRef Xs() As 
                 End If
             End If
         End With
-    Next NpcIndex
+    Next k
     CollectQuestNpcRadar = h
     Exit Function
 CollectQuestNpcRadar_Err:
@@ -506,7 +579,10 @@ Private Function CollectNpcSymbolRadar(ByVal UserIndex As Integer, ByRef Xs() As
     Dim px As Byte, py As Byte
     Dim cat As Integer
     Dim sub_ As Byte
-    For NpcIndex = 1 To LastNPC
+    Dim firstK As Long, lastK As Long, k As Long
+    Call BucketRange(userMap, firstK, lastK)
+    For k = firstK To lastK
+        NpcIndex = RadarMapNpcs(k)
         With NpcList(NpcIndex)
             If .pos.Map = userMap Then
                 cat = ClassifyNpc(NpcIndex)
@@ -524,7 +600,7 @@ Private Function CollectNpcSymbolRadar(ByVal UserIndex As Integer, ByRef Xs() As
                 End If
             End If
         End With
-    Next NpcIndex
+    Next k
     CollectNpcSymbolRadar = h
     Exit Function
 CollectNpcSymbolRadar_Err:
@@ -574,7 +650,14 @@ Private Sub SetCategoryHash(ByVal UserIndex As Integer, ByVal Category As e_Rada
 End Sub
 
 Private Sub ResetAllHashes(ByVal UserIndex As Integer)
+    Call ResetCategoryHashes(UserIndex)
+    UserList(UserIndex).Counters.NpcRadarLastMap = -1
+End Sub
+
+' Pone en 0 el hash de todas las categorias: el proximo tick de cada una reenvia su lista.
+Private Sub ResetCategoryHashes(ByVal UserIndex As Integer)
     With UserList(UserIndex).Counters
+        .NpcRadarHashNpcSymbol = 0
         .NpcRadarHashHostile = 0
         .NpcRadarHashNeutralNpc = 0
         .NpcRadarHashQuestNpc = 0
@@ -588,7 +671,6 @@ Private Sub ResetAllHashes(ByVal UserIndex As Integer)
         .NpcRadarHashUserCaos = 0
         .NpcRadarHashPartyMember = 0
         .NpcRadarHashClanMember = 0
-        .NpcRadarLastMap = -1
     End With
 End Sub
 
@@ -606,6 +688,7 @@ Private Sub SendCategoryUpdate(ByVal UserIndex As Integer, ByVal Category As e_R
         ' QuestNpc: formato extendido con estado por NPC.
         Dim Ss(1 To MAX_RADAR_ENTITIES) As Byte
         newHash = CollectQuestNpcRadar(UserIndex, Xs, Ys, Ss, count)
+        If newHash = 0 Then newHash = 1   ' 0 = "sin enviar" (ResetCategoryHashes)
         If (Not forceSend) And newHash = GetCategoryHash(UserIndex, Category) Then
             Exit Sub
         End If
@@ -616,6 +699,7 @@ Private Sub SendCategoryUpdate(ByVal UserIndex As Integer, ByVal Category As e_R
     If Category = e_RadarCategory.eRadarNpcSymbol Then
         Dim Ss2(1 To MAX_RADAR_ENTITIES) As Byte
         newHash = CollectNpcSymbolRadar(UserIndex, Xs, Ys, Ss2, count)
+        If newHash = 0 Then newHash = 1   ' 0 = "sin enviar" (ResetCategoryHashes)
         If (Not forceSend) And newHash = GetCategoryHash(UserIndex, Category) Then
             Exit Sub
         End If
@@ -632,6 +716,7 @@ Private Sub SendCategoryUpdate(ByVal UserIndex As Integer, ByVal Category As e_R
     Else
         newHash = CollectRadarNpcs(UserIndex, Category, Xs, Ys, count)
     End If
+    If newHash = 0 Then newHash = 1   ' 0 = "sin enviar" (ResetCategoryHashes)
     If (Not forceSend) And newHash = GetCategoryHash(UserIndex, Category) Then
         Exit Sub
     End If
@@ -743,26 +828,30 @@ Public Sub UpdateNpcRadarTick()
     Dim nowTick As Long
     nowTick = GetTickCountRaw()
     Dim i As Integer
-    Dim mapChanged As Boolean
     For i = 1 To LastUser
         If UserList(i).flags.UserLogged Then
+            ' Plan radar-v2 E1 (bug 1): el cambio de mapa se detecta aca, para todos. Antes solo lo
+            ' anotaban los senders de radar activo y al jugador sin radar se le forzaba el reenvio de
+            ' quest/simbolos/party/clan en cada tick. El cliente borra los puntos al cambiar de mapa:
+            ' con los hashes en 0 cada categoria se reenvia una vez en su proximo tick.
+            If UserList(i).Counters.NpcRadarLastMap <> UserList(i).pos.Map Then
+                Call ResetCategoryHashes(i)
+                UserList(i).Counters.NpcRadarLastMap = UserList(i).pos.Map
+            End If
             ' QuestNpc siempre activo para todos los jugadores logueados.
             If RadarDue(nowTick, UserList(i).Counters.QuestRadarTick) Then
-                mapChanged = (UserList(i).Counters.NpcRadarLastMap <> UserList(i).pos.Map)
-                Call SendCategoryUpdate(i, e_RadarCategory.eRadarQuestNpc, mapChanged)
+                Call SendCategoryUpdate(i, e_RadarCategory.eRadarQuestNpc, False)
                 UserList(i).Counters.QuestRadarTick = nowTick
             End If
             ' NpcSymbol siempre activo para todos los jugadores logueados.
             If RadarDue(nowTick, UserList(i).Counters.NpcSymbolRadarTick) Then
-                mapChanged = (UserList(i).Counters.NpcRadarLastMap <> UserList(i).pos.Map)
-                Call SendCategoryUpdate(i, e_RadarCategory.eRadarNpcSymbol, mapChanged)
+                Call SendCategoryUpdate(i, e_RadarCategory.eRadarNpcSymbol, False)
                 UserList(i).Counters.NpcSymbolRadarTick = nowTick
             End If
             ' Party/Clan radar siempre activo para todos los jugadores logueados.
             If RadarDue(nowTick, UserList(i).Counters.SocialRadarTick) Then
-                mapChanged = (UserList(i).Counters.NpcRadarLastMap <> UserList(i).pos.Map)
-                Call SendCategoryUpdate(i, e_RadarCategory.eRadarPartyMember, mapChanged)
-                Call SendCategoryUpdate(i, e_RadarCategory.eRadarClanMember, mapChanged)
+                Call SendCategoryUpdate(i, e_RadarCategory.eRadarPartyMember, False)
+                Call SendCategoryUpdate(i, e_RadarCategory.eRadarClanMember, False)
                 UserList(i).Counters.SocialRadarTick = nowTick
             End If
             ' Resto del radar: solo si esta activo por hechizo (1) o GM (2).
