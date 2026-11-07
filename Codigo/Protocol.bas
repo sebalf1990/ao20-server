@@ -998,24 +998,6 @@ HandleGuardianHeartbeat_Err:
     Call TraceError(Err.Number, Err.Description, "Protocol.HandleGuardianHeartbeat", Erl)
 End Sub
 
-' E4b antitrampas: un cliente con guardian agrega 3 bytes (Int8 mayor, menor, revision) al final del login. Un cliente
-' viejo no manda nada (GetAvailable = 0) y la version queda desconocida (= guardian_cliente_viejo).
-Private Sub GuardianLeerVersionLogin(ByVal UserIndex As Integer)
-    On Error GoTo GuardianLeerVersionLogin_Err
-    Dim vMayor As Long, vMenor As Long, vRevision As Long
-    If reader.GetAvailable() >= 3 Then
-        vMayor = reader.ReadInt8()
-        vMenor = reader.ReadInt8()
-        vRevision = reader.ReadInt8()
-        Call GuardianSetVersion(UserIndex, True, vMayor, vMenor, vRevision)
-    Else
-        Call GuardianSetVersion(UserIndex, False, 0, 0, 0)
-    End If
-    Exit Sub
-GuardianLeerVersionLogin_Err:
-    Call TraceError(Err.Number, Err.Description, "Protocol.GuardianLeerVersionLogin", Erl)
-End Sub
-
 Public Sub ResetHooClientCapabilities(ByVal UserIndex As Integer)
     With UserList(UserIndex).HooCapabilities
         .Negotiated = False
@@ -1559,7 +1541,6 @@ Private Sub HandleLoginExistingChar(ByVal ConnectionID As Long)
     Dim char_id As Long
     char_id = reader.ReadInt32
     user_name = reader.ReadString8
-    Call GuardianLeerVersionLogin(UserIndex)  ' E4b guardian (modGuardian)
     UserList(UserIndex).id = char_id
     Call ConnectUser(UserIndex, user_name)
     Exit Sub
@@ -1992,7 +1973,6 @@ Private Sub HandleLoginNewChar(ByVal ConnectionID As Long)
 113     Class = reader.ReadInt()
 116     head = reader.ReadInt()
 118     Hogar = reader.ReadInt()
-        Call GuardianLeerVersionLogin(UserIndex)  ' E4b guardian (modGuardian)
 
 
 132     If aClon.MaxPersonajes(UserList(UserIndex).ConnectionDetails.IP) Then

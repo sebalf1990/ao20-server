@@ -19,9 +19,9 @@ Attribute VB_Name = "modGuardian"
 ' modGuardian (plan 2026-10-29-seguridad-antitrampas, etapa E4b; diseno en ia/work/.../e4-diseno.md)
 '
 ' Lado server del guardian (proceso nativo que corre junto al cliente). Este modulo:
-' 1. Entrega el desafio N (16 bytes de RNG_NonceData) despues de WriteLoggedMessage, si el login declaro una
-'    version >= GuardianMinVersion. Version menor o ausente: evento `guardian_cliente_viejo`, que cuenta igual que
-'    ausente (la version la dice el cliente: es falsificable).
+' 1. Entrega el desafio N (16 bytes de RNG_NonceData) a TODO login, despues de WriteLoggedMessage (el login vivo
+'    PYMMO=0 no manda version, y un cliente viejo ignora el ServerPacketID desconocido). Un cliente que no contesta
+'    queda como `guardian_ausente`.
 ' 2. Valida cada eGuardianHeartbeat en el orden del diseno (4): rate limit 1 cada GuardianRateLimitMs ANTES de mirar
 '    el contenido; logueado + desafio emitido; largo <= 512 y charset [0-9a-z|,._-]; recien ahi kid, HMAC
 '    (comparacion XOR acumulada), frescura de `ms`, contador por generacion `g`, flags.
@@ -79,11 +79,6 @@ End Type
 Private Type t_GuardianUser
     Activo As Boolean
     Desafiado As Boolean
-    Viejo As Boolean
-    VerConocida As Boolean
-    VerMajor As Long
-    VerMinor As Long
-    VerRev As Long
     CharId As Long
     N(0 To 15) As Byte
     DesafioTick As Long
@@ -108,8 +103,6 @@ Private m_PermitirDev As Boolean
 Private m_SaltLog As String
 
 Private m_Habilitado As Boolean
-Private m_MinVersionClave As Long
-Private m_MinVersionTexto As String
 Private m_IntervaloSeg As Long
 Private m_FactorAusencia As Long
 Private m_RepetirAusenteSeg As Long
@@ -126,8 +119,6 @@ Private m_UltimoTick As Long
 
 Private Sub CargarDefaults()
     m_Habilitado = True
-    m_MinVersionTexto = "5.6.49"
-    m_MinVersionClave = (5& * 65536) + (6& * 256) + 49&
     m_IntervaloSeg = 20
     m_FactorAusencia = 3
     m_RepetirAusenteSeg = 300
@@ -141,7 +132,7 @@ End Sub
 ' La llama General.Main despues de InitVigia (MaxUsers ya esta cargado).
 Public Sub InitGuardian()
     On Error GoTo InitGuardian_Err
-    Dim ini As clsIniManager, clave As Long, texto As String
+    Dim ini As clsIniManager
     Call CargarDefaults
     m_UltimoTick = GetTickCountRaw()
     m_Max = 0
@@ -152,11 +143,6 @@ Public Sub InitGuardian()
     Set ini = New clsIniManager
     Call ini.Initialize(IniPath & "Configuracion.ini")
     m_Habilitado = (val(ini.GetValue(SECCION_CFG, "GuardianHabilitado", "1")) <> 0)
-    texto = Trim$(ini.GetValue(SECCION_CFG, "GuardianMinVersion", "5.6.49"))
-    If VersionAClave(texto, clave) Then
-        m_MinVersionClave = clave
-        m_MinVersionTexto = texto
-    End If
     m_IntervaloSeg = CLng(val(ini.GetValue(SECCION_CFG, "GuardianIntervaloSeg", "20")))
     m_FactorAusencia = CLng(val(ini.GetValue(SECCION_CFG, "GuardianFactorAusencia", "3")))
     m_RepetirAusenteSeg = CLng(val(ini.GetValue(SECCION_CFG, "GuardianRepetirAusenteSeg", "300")))
@@ -176,7 +162,7 @@ Public Sub InitGuardian()
     If m_EventoCadaMs < 1000 Then m_EventoCadaMs = 1000
     Call CargarSecreto
     ' Nunca se loguea ningun secreto: solo cuantas claves hay y si el kid de prueba esta permitido.
-    Call LogThis(0, "Guardian: habilitado=" & m_Habilitado & " min_version=" & m_MinVersionTexto & " intervalo_s=" & m_IntervaloSeg & _
+    Call LogThis(0, "Guardian: habilitado=" & m_Habilitado & " intervalo_s=" & m_IntervaloSeg & _
             " factor_ausencia=" & m_FactorAusencia & " repetir_ausente_s=" & m_RepetirAusenteSeg & " resumen_s=" & m_ResumenSeg & _
             " rate_limit_ms=" & m_RateLimitMs & " frescura_ms=" & m_FrescuraMs & " accion=" & GuardianAccionTexto() & " kids=" & m_KidCant & _
             " permitir_dev=" & m_PermitirDev & " slots=" & m_Max, vbLogEventTypeInformation)
@@ -229,18 +215,6 @@ CargarSecreto_Err:
     m_PermitirDev = False
     Call TraceError(Err.Number, Err.Description, "modGuardian.CargarSecreto (sin claves)", Erl)
 End Sub
-
-Private Function VersionAClave(ByVal texto As String, ByRef clave As Long) As Boolean
-    Dim partes() As String
-    partes = Split(Trim$(texto), ".")
-    If UBound(partes) <> 2 Then Exit Function
-    If Not EsDecimal(partes(0), 3) Then Exit Function
-    If Not EsDecimal(partes(1), 3) Then Exit Function
-    If Not EsDecimal(partes(2), 3) Then Exit Function
-    If CLng(partes(0)) > 255 Or CLng(partes(1)) > 255 Or CLng(partes(2)) > 255 Then Exit Function
-    clave = (CLng(partes(0)) * 65536) + (CLng(partes(1)) * 256) + CLng(partes(2))
-    VersionAClave = True
-End Function
 
 Private Function GuardianAccionTexto() As String
     If m_AvisarGm Then
@@ -382,16 +356,6 @@ Private Function BuscarKid(ByVal kid As Long) As Long
     Next i
 End Function
 
-Private Function VersionTexto(ByVal UserIndex As Integer) As String
-    With m_U(UserIndex)
-        If .VerConocida Then
-            VersionTexto = .VerMajor & "." & .VerMinor & "." & .VerRev
-        Else
-            VersionTexto = "desconocida"
-        End If
-    End With
-End Function
-
 ' ---------------------------------------------------------------------------------------------
 ' Registro y politica
 ' ---------------------------------------------------------------------------------------------
@@ -444,52 +408,20 @@ End Sub
 ' Login, desafio y logout
 ' ---------------------------------------------------------------------------------------------
 
-' La version que declaro el login (3 bytes opcionales al final de eLoginExistingChar / eLoginNewChar). Protocol.bas la
-' llama SIEMPRE antes de ConnectUser: conocida = False si el cliente no mando version.
-Public Sub GuardianSetVersion(ByVal UserIndex As Integer, ByVal conocida As Boolean, ByVal major As Long, ByVal minor As Long, ByVal revision As Long)
-    On Error GoTo GuardianSetVersion_Err
-    If Not SlotValido(UserIndex) Then Exit Sub
-    With m_U(UserIndex)
-        .VerConocida = conocida
-        .VerMajor = major
-        .VerMinor = minor
-        .VerRev = revision
-    End With
-    Exit Sub
-GuardianSetVersion_Err:
-    Call TraceError(Err.Number, Err.Description, "modGuardian.GuardianSetVersion", Erl)
-End Sub
-
 ' Desde ConnectUser_Complete, justo despues de WriteLoggedMessage.
 Public Sub GuardianLogin(ByVal UserIndex As Integer)
     On Error GoTo GuardianLogin_Err
-    Dim nowRaw As Long, conocida As Boolean, major As Long, minor As Long, revision As Long, clave As Long
+    Dim nowRaw As Long
     If Not SlotValido(UserIndex) Then Exit Sub
     If Not m_Habilitado Then Exit Sub
     nowRaw = GetTickCountRaw()
-    With m_U(UserIndex)
-        conocida = .VerConocida
-        major = .VerMajor
-        minor = .VerMinor
-        revision = .VerRev
-    End With
     Call ResetEstado(UserIndex)
     With m_U(UserIndex)
-        .VerConocida = conocida
-        .VerMajor = major
-        .VerMinor = minor
-        .VerRev = revision
         .Activo = True
         .CharId = UserList(UserIndex).Id
         .DesafioTick = TickNoCero(nowRaw)
         .ResumenTick = TickNoCero(nowRaw)
-        If conocida Then clave = (major * 65536) + (minor * 256) + revision
-        If conocida And clave >= m_MinVersionClave Then
-            Call EmitirDesafio(UserIndex)
-        Else
-            .Viejo = True
-            Call Emitir(UserIndex, "guardian_cliente_viejo", "version=" & VersionTexto(UserIndex) & " minima=" & m_MinVersionTexto, False)
-        End If
+        Call EmitirDesafio(UserIndex)
     End With
     Exit Sub
 GuardianLogin_Err:
@@ -538,7 +470,7 @@ Private Sub EmitirResumen(ByVal UserIndex As Integer, ByVal motivo As String)
         haceS = -1
         If .UltimoOkTick <> 0 Then haceS = CLng(Fix(TicksElapsed(.UltimoOkTick, GetTickCountRaw()) / 1000#))
         detalle = "motivo=" & motivo & " hb_validos=" & .HbValidos & " hb_invalidos=" & .HbInvalidos & " ultimo_ok_hace_s=" & haceS & _
-                " desafio=" & SiNo(.Desafiado) & " viejo=" & SiNo(.Viejo) & " version=" & VersionTexto(UserIndex)
+                " desafio=" & SiNo(.Desafiado)
     End With
     Call Emitir(UserIndex, "guardian_resumen", detalle, False)
     Exit Sub
@@ -580,7 +512,7 @@ Public Sub GuardianProcesarHeartbeat(ByVal UserIndex As Integer, ByVal linea As 
     ' (2) Logueado y desafio emitido: si no, se descarta (la conexion sigue).
     If Not UserList(UserIndex).flags.UserLogged Or Not m_U(UserIndex).Desafiado Then
         If EventoPermitido(UserIndex, EV_SIN_DESAFIO, nowRaw) Then
-            Call Emitir(UserIndex, "guardian_sin_desafio", "version=" & VersionTexto(UserIndex), False)
+            Call Emitir(UserIndex, "guardian_sin_desafio", "sin_desafio=1", False)
         End If
         Exit Sub
     End If
@@ -799,15 +731,12 @@ Private Sub TickUsuario(ByVal UserIndex As Integer, ByVal nowRaw As Long)
             End If
             If LenB(motivo) > 0 Then
                 .AusenteUltTick = TickNoCero(nowRaw)
-                If .Viejo Then
-                    motivo = "cliente_viejo"
-                ElseIf Not .Desafiado Then
+                If Not .Desafiado Then
                     motivo = "sin_desafio"
                 Else
                     motivo = "sin_heartbeat"
                 End If
-                Call Emitir(UserIndex, "guardian_ausente", "motivo=" & motivo & " sin_hb_s=" & CLng(Fix(sinHbMs / 1000#)) & " hb_validos=" & .HbValidos & _
-                        " version=" & VersionTexto(UserIndex), True)
+                Call Emitir(UserIndex, "guardian_ausente", "motivo=" & motivo & " sin_hb_s=" & CLng(Fix(sinHbMs / 1000#)) & " hb_validos=" & .HbValidos, True)
             End If
         End If
         If TicksElapsed(.ResumenTick, nowRaw) >= CDbl(m_ResumenSeg) * 1000# Then
