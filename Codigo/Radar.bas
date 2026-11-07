@@ -16,6 +16,9 @@ Attribute VB_Name = "Radar"
 ' - Siempre activos para todos: QuestNpc, NpcSymbol, PartyMember, ClanMember.
 Option Explicit
 
+' Plan radar-v2 E7: ultima pasada del tick (ver RADAR_LOOP_GATE_MS).
+Private RadarLoopLastTick As Long
+
 ' NPC_RADAR_TICK_MS (300 ms) vive ahora en modTickRules, junto a RadarDue.
 Private Const MAX_RADAR_ENTITIES As Integer = 100
 
@@ -883,9 +886,11 @@ End Sub
 '  - Resto del radar: solo si NpcRadarActive > 0 (hechizo o GM).
 Public Sub UpdateNpcRadarTick()
     On Error GoTo UpdateNpcRadarTick_Err
-    If Not IsFeatureEnabled("npc_minimap_radar") Then Exit Sub
     Dim nowTick As Long
     nowTick = GetTickCountRaw()
+    If TicksElapsed(RadarLoopLastTick, nowTick) < RADAR_LOOP_GATE_MS Then Exit Sub
+    RadarLoopLastTick = nowTick
+    If Not IsFeatureEnabled("npc_minimap_radar") Then Exit Sub
     Dim i As Integer
     For i = 1 To LastUser
         If UserList(i).flags.UserLogged Then
