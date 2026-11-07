@@ -681,6 +681,7 @@ Sub Main()
     Call InitAntitrampa
     Call InitDenuncias
     Call InitVigia  ' E2 vigia (modVigia)
+    Call InitGuardian  ' E4b guardian (modGuardian)
     tInicioServer = GetTickCountRaw()
     #If UNIT_TEST = 1 Then
         Call UnitTesting.Init
@@ -731,6 +732,7 @@ Sub Main()
         Call MaybeFlushAntitrampa
         Call DenunciasTick
         Call VigiaTick  ' E2 vigia (modVigia)
+        Call GuardianTick  ' E4b guardian (modGuardian)
         Call PerformTimeLimitCheck(PerformanceTimer, "Flush antitrampa")
         ' Unlock main loop for maximum throughput but it can hog weak CPUs.
         #If UNLOCK_CPU = 0 Then

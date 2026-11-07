@@ -280,6 +280,16 @@ AntitrampaLinea_Err:
     Call TraceError(Err.Number, Err.Description, "modAntitrampa.AntitrampaLinea", Erl)
 End Sub
 
+' Linea del guardian (E4b, modGuardian): como AntitrampaLinea pero con la accion que corresponde a la politica del guardian
+' (log | avisar_gm) y SIN pasar por el buffer de /denunciar.
+Public Sub AntitrampaLineaAccion(ByVal UserIndex As Integer, ByVal evento As String, ByVal accion As String, ByVal detalle As String)
+    On Error GoTo AntitrampaLineaAccion_Err
+    Call AgregarLinea(ArmarLinea(UserIndex, evento, accion, detalle))
+    Exit Sub
+AntitrampaLineaAccion_Err:
+    Call TraceError(Err.Number, Err.Description, "modAntitrampa.AntitrampaLineaAccion", Erl)
+End Sub
+
 Private Function ArmarLinea(ByVal UserIndex As Integer, ByVal evento As String, ByVal accion As String, ByVal detalle As String) As String
     Dim linea As String
     With UserList(UserIndex)

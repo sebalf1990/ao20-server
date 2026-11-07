@@ -838,6 +838,7 @@ Dim tStr                        As String
         End If
         Call WriteCurrentWeatherState(UserIndex)
         Call WriteLoggedMessage(UserIndex, newUser)
+        Call GuardianLogin(UserIndex)  ' E4b guardian (modGuardian)
         Call WriteProfessionsUpdate(UserIndex)
         Call MaybeSendRemortState(UserIndex)
         If .Stats.ELV = 1 Then
