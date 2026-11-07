@@ -9,10 +9,10 @@ Attribute VB_Name = "Radar"
 '    (at your option) any later version.
 '
 ' Modulo del radar de minimapa.
-' - Para jugadores normales (NpcRadarActive=1): solo categoria Hostile.
+' - Perfil (NpcRadarActive=1, plan radar-v2 E3): lo que pidan los efectos de radar activos y los
+'   objetos equipados (RadarVe/RadarRadio/RadarProtege/RadarPenetra). Ver RefreshRadarProfile.
 ' - Para GMs (NpcRadarActive=2): Hostile, NeutralNpc, GuardiaReal, GuardiaCaos, Mascota,
 '   UserGm, UserCiudadano (incluye Armada/consejo) y UserCriminal (incluye Caos/concilio).
-' - Para "Detectar Personajes" (NpcRadarActive=3): categorias de UserDetectMask.
 ' - Siempre activos para todos: QuestNpc, NpcSymbol, PartyMember, ClanMember.
 Option Explicit
 
@@ -133,6 +133,9 @@ Private Function ClassifyUserDetailed(ByVal ObserverIndex As Integer, ByVal Targ
         If hidden Then
             If CompararPrivilegiosUser(ObserverIndex, TargetIndex) <= 0 Then Exit Function
         End If
+        ' Plan radar-v2 E3: proteccion contra la deteccion (objetos/efectos). Solo el radar por perfil
+        ' usa esta funcion: el GM usa ClassifyUser y party/clan tienen sus propias reglas.
+        If .flags.RadarProtection > UserList(ObserverIndex).flags.RadarPenetration Then Exit Function
         Select Case .Faccion.Status
             Case e_Facciones.Criminal
                 ClassifyUserDetailed = e_RadarCategory.eRadarUserCriminal
@@ -268,7 +271,7 @@ Private Function CollectRadarNpcs(ByVal UserIndex As Integer, ByVal Category As 
         With NpcList(NpcIndex)
             If .pos.Map = userMap Then
                 cat = ClassifyNpc(NpcIndex)
-                If cat = Category Then
+                If cat = Category And InRadarRange(UserIndex, .pos.x, .pos.y) Then
                     count = count + 1
                     px = CByte(.pos.x)
                     py = CByte(.pos.y)
@@ -312,7 +315,7 @@ Private Function CollectRadarUsersByCategory(ByVal ObserverIndex As Integer, ByV
                 Else
                     cat = ClassifyUserDetailed(ObserverIndex, i)
                 End If
-                If cat = Category Then
+                If cat = Category And InRadarRange(ObserverIndex, UserList(i).pos.x, UserList(i).pos.y) Then
                     count = count + 1
                     px = CByte(UserList(i).pos.x)
                     py = CByte(UserList(i).pos.y)
@@ -753,16 +756,25 @@ End Sub
 ' Senders publicos (llamados por el game loop y el toggle)
 ' ============================================================================
 
-' Para jugadores normales (NpcRadarActive=1) - solo hostiles.
-Public Sub SendNpcRadarUpdate(ByVal UserIndex As Integer)
-    On Error GoTo SendNpcRadarUpdate_Err
+' Perfil (NpcRadarActive=1): las categorias de flags.RadarMask, con radio y penetracion.
+Public Sub SendNpcRadarUpdateProfile(ByVal UserIndex As Integer)
+    On Error GoTo SendNpcRadarUpdateProfile_Err
+    Dim mask As Long
+    mask = UserList(UserIndex).flags.RadarMask
     Dim mapChanged As Boolean
     mapChanged = (UserList(UserIndex).Counters.NpcRadarLastMap <> UserList(UserIndex).pos.Map)
-    Call SendCategoryUpdate(UserIndex, e_RadarCategory.eRadarHostile, mapChanged)
+    Dim cats As Variant
+    cats = Array(e_RadarCategory.eRadarHostile, e_RadarCategory.eRadarNeutralNpc, e_RadarCategory.eRadarGuardiaReal, _
+                 e_RadarCategory.eRadarGuardiaCaos, e_RadarCategory.eRadarMascota, e_RadarCategory.eRadarUserCiudadano, _
+                 e_RadarCategory.eRadarUserCriminal, e_RadarCategory.eRadarUserImperial, e_RadarCategory.eRadarUserCaos)
+    Dim c As Long
+    For c = LBound(cats) To UBound(cats)
+        If (mask And RadarBit(cats(c))) <> 0 Then Call SendCategoryUpdate(UserIndex, cats(c), mapChanged)
+    Next c
     UserList(UserIndex).Counters.NpcRadarLastMap = UserList(UserIndex).pos.Map
     Exit Sub
-SendNpcRadarUpdate_Err:
-    Call TraceError(Err.Number, Err.Description, "Radar.SendNpcRadarUpdate", Erl)
+SendNpcRadarUpdateProfile_Err:
+    Call TraceError(Err.Number, Err.Description, "Radar.SendNpcRadarUpdateProfile", Erl)
 End Sub
 
 ' Para GMs (NpcRadarActive=2) - 8 categorias (QuestNpc esta en el loop siempre-activo).
@@ -784,23 +796,6 @@ SendNpcRadarUpdateGm_Err:
     Call TraceError(Err.Number, Err.Description, "Radar.SendNpcRadarUpdateGm", Erl)
 End Sub
 
-' Para hechizo de deteccion de usuarios (NpcRadarActive=3) - solo categorias en UserDetectMask.
-Public Sub SendNpcRadarUpdateUserDetect(ByVal UserIndex As Integer)
-    On Error GoTo SendNpcRadarUpdateUserDetect_Err
-    Dim mask As Byte
-    mask = UserList(UserIndex).flags.UserDetectMask
-    Dim mapChanged As Boolean
-    mapChanged = (UserList(UserIndex).Counters.NpcRadarLastMap <> UserList(UserIndex).pos.Map)
-    If (mask And 1) <> 0 Then Call SendCategoryUpdate(UserIndex, e_RadarCategory.eRadarUserCiudadano, mapChanged)
-    If (mask And 2) <> 0 Then Call SendCategoryUpdate(UserIndex, e_RadarCategory.eRadarUserCriminal, mapChanged)
-    If (mask And 4) <> 0 Then Call SendCategoryUpdate(UserIndex, e_RadarCategory.eRadarUserImperial, mapChanged)
-    If (mask And 8) <> 0 Then Call SendCategoryUpdate(UserIndex, e_RadarCategory.eRadarUserCaos, mapChanged)
-    UserList(UserIndex).Counters.NpcRadarLastMap = UserList(UserIndex).pos.Map
-    Exit Sub
-SendNpcRadarUpdateUserDetect_Err:
-    Call TraceError(Err.Number, Err.Description, "Radar.SendNpcRadarUpdateUserDetect", Erl)
-End Sub
-
 ' Fuerza un envio inmediato segun el modo del usuario.
 Public Sub ForceNpcRadarUpdate(ByVal UserIndex As Integer)
     On Error GoTo ForceNpcRadarUpdate_Err
@@ -808,10 +803,8 @@ Public Sub ForceNpcRadarUpdate(ByVal UserIndex As Integer)
     Call ResetAllHashes(UserIndex)
     If UserList(UserIndex).flags.NpcRadarActive = 2 Then
         Call SendNpcRadarUpdateGm(UserIndex)
-    ElseIf UserList(UserIndex).flags.NpcRadarActive = 3 Then
-        Call SendNpcRadarUpdateUserDetect(UserIndex)
-    Else
-        Call SendNpcRadarUpdate(UserIndex)
+    ElseIf UserList(UserIndex).flags.NpcRadarActive = 1 Then
+        Call SendNpcRadarUpdateProfile(UserIndex)
     End If
     UserList(UserIndex).Counters.NpcRadarTick = GetTickCountRaw()
     Exit Sub
@@ -854,18 +847,15 @@ Public Sub UpdateNpcRadarTick()
                 Call SendCategoryUpdate(i, e_RadarCategory.eRadarClanMember, False)
                 UserList(i).Counters.SocialRadarTick = nowTick
             End If
-            ' Resto del radar: solo si esta activo por hechizo (1) o GM (2).
-            If UserList(i).flags.NpcRadarActive > 0 Then
-                If RadarDue(nowTick, UserList(i).Counters.NpcRadarTick) Then
-                    If UserList(i).flags.NpcRadarActive = 2 Then
-                        Call SendNpcRadarUpdateGm(i)
-                    ElseIf UserList(i).flags.NpcRadarActive = 3 Then
-                        Call SendNpcRadarUpdateUserDetect(i)
-                    Else
-                        Call SendNpcRadarUpdate(i)
-                    End If
-                    UserList(i).Counters.NpcRadarTick = nowTick
+            ' Resto del radar: perfil (efectos + objetos equipados, recalculado cada tick) o GM.
+            If RadarDue(nowTick, UserList(i).Counters.NpcRadarTick) Then
+                If UserList(i).flags.NpcRadarActive <> 2 Then Call RefreshRadarProfile(i)
+                If UserList(i).flags.NpcRadarActive = 2 Then
+                    Call SendNpcRadarUpdateGm(i)
+                ElseIf UserList(i).flags.NpcRadarActive = 1 Then
+                    Call SendNpcRadarUpdateProfile(i)
                 End If
+                UserList(i).Counters.NpcRadarTick = nowTick
             End If
         End If
     Next i
@@ -873,3 +863,215 @@ Public Sub UpdateNpcRadarTick()
 UpdateNpcRadarTick_Err:
     Call TraceError(Err.Number, Err.Description, "Radar.UpdateNpcRadarTick", Erl)
 End Sub
+
+' ============================================================================
+' Motor de perfiles de radar (plan 2026-11-07-radar-v2, E3)
+' ============================================================================
+' Un perfil se define en datos y se aplica igual desde un efecto con duracion o un objeto:
+'   EffectsOverTime.dat [EOTn] de Type=18/19 -> hechizos (EOTID) y consumibles (ApplyEffectId)
+'   obj.dat [OBJn]                         -> mientras el objeto este equipado
+' Claves: RadarVe=hostiles,neutrales,mascotas,guardias,ciudadanos,criminales,imperiales,caos
+'         RadarRadio=tiles (0 = mapa entero)  RadarProtege=0-3  RadarPenetra=0-3
+
+Public Function RadarBit(ByVal Category As Long) As Long
+    RadarBit = CLng(2 ^ Category)
+End Function
+
+Private Function ClampRadarValue(ByVal value As Long, ByVal minValue As Long, ByVal maxValue As Long) As Long
+    If value < minValue Then value = minValue
+    If value > maxValue Then value = maxValue
+    ClampRadarValue = value
+End Function
+
+Private Function ParseRadarCategories(ByVal text As String, ByVal Section As String) As Long
+    On Error GoTo ParseRadarCategories_Err
+    Dim tokens() As String
+    Dim t As Long
+    Dim token As String
+    text = LCase$(Replace$(text, " ", ""))
+    If LenB(text) = 0 Then Exit Function
+    tokens = Split(text, ",")
+    For t = LBound(tokens) To UBound(tokens)
+        token = tokens(t)
+        Select Case token
+            Case "": ' coma sobrante
+            Case "hostiles":   ParseRadarCategories = ParseRadarCategories Or RadarBit(e_RadarCategory.eRadarHostile)
+            Case "neutrales":  ParseRadarCategories = ParseRadarCategories Or RadarBit(e_RadarCategory.eRadarNeutralNpc)
+            Case "mascotas":   ParseRadarCategories = ParseRadarCategories Or RadarBit(e_RadarCategory.eRadarMascota)
+            Case "guardias":   ParseRadarCategories = ParseRadarCategories Or RadarBit(e_RadarCategory.eRadarGuardiaReal) Or RadarBit(e_RadarCategory.eRadarGuardiaCaos)
+            Case "ciudadanos": ParseRadarCategories = ParseRadarCategories Or RadarBit(e_RadarCategory.eRadarUserCiudadano)
+            Case "criminales": ParseRadarCategories = ParseRadarCategories Or RadarBit(e_RadarCategory.eRadarUserCriminal)
+            Case "imperiales": ParseRadarCategories = ParseRadarCategories Or RadarBit(e_RadarCategory.eRadarUserImperial)
+            Case "caos":       ParseRadarCategories = ParseRadarCategories Or RadarBit(e_RadarCategory.eRadarUserCaos)
+            Case Else
+                Call TraceError(0, "RadarVe con categoria desconocida '" & token & "' en [" & Section & "]", "Radar.ParseRadarCategories", 0)
+        End Select
+    Next t
+    Exit Function
+ParseRadarCategories_Err:
+    Call TraceError(Err.Number, Err.Description, "Radar.ParseRadarCategories", Erl)
+End Function
+
+' Lee el perfil de una seccion de EffectsOverTime.dat o de obj.dat. Claves ausentes = 0.
+Public Sub ReadRadarProfile(ByVal Leer As clsIniManager, ByVal Section As String, ByRef profile As t_RadarProfile)
+    On Error GoTo ReadRadarProfile_Err
+    profile.Mask = ParseRadarCategories(Leer.GetValue(Section, "RadarVe"), Section)
+    profile.Radius = ClampRadarValue(val(Leer.GetValue(Section, "RadarRadio")), 0, 100)
+    profile.Protection = ClampRadarValue(val(Leer.GetValue(Section, "RadarProtege")), 0, 3)
+    profile.Penetration = ClampRadarValue(val(Leer.GetValue(Section, "RadarPenetra")), 0, 3)
+    Exit Sub
+ReadRadarProfile_Err:
+    Call TraceError(Err.Number, Err.Description, "Radar.ReadRadarProfile " & Section, Erl)
+End Sub
+
+' Compatibilidad con los datos viejos, despues de cargar hechizos y EOT:
+' - un hechizo con DetectaCiuda/Crimi/Impe/Caos le pasa esas categorias a su EOT si este no tiene RadarVe;
+' - un EOT de tipo 18 sin perfil detecta hostiles (era "Detectar el Mal").
+Public Sub ApplyLegacyRadarProfiles()
+    On Error GoTo ApplyLegacyRadarProfiles_Err
+    Dim h As Long
+    Dim eot As Long
+    Dim legacy As Byte
+    For h = 1 To NumeroHechizos
+        legacy = Hechizos(h).UserDetectMask
+        eot = Hechizos(h).EotId
+        If legacy <> 0 And eot >= LBound(EffectOverTime) And eot <= UBound(EffectOverTime) Then
+            If EffectOverTime(eot).Radar.Mask = 0 Then
+                If (legacy And 1) <> 0 Then EffectOverTime(eot).Radar.Mask = EffectOverTime(eot).Radar.Mask Or RadarBit(e_RadarCategory.eRadarUserCiudadano)
+                If (legacy And 2) <> 0 Then EffectOverTime(eot).Radar.Mask = EffectOverTime(eot).Radar.Mask Or RadarBit(e_RadarCategory.eRadarUserCriminal)
+                If (legacy And 4) <> 0 Then EffectOverTime(eot).Radar.Mask = EffectOverTime(eot).Radar.Mask Or RadarBit(e_RadarCategory.eRadarUserImperial)
+                If (legacy And 8) <> 0 Then EffectOverTime(eot).Radar.Mask = EffectOverTime(eot).Radar.Mask Or RadarBit(e_RadarCategory.eRadarUserCaos)
+            End If
+        End If
+    Next h
+    For eot = LBound(EffectOverTime) To UBound(EffectOverTime)
+        With EffectOverTime(eot)
+            If .Type = e_EffectOverTimeType.eMinimapRadar And .Radar.Mask = 0 And .Radar.Protection = 0 Then
+                .Radar.Mask = RadarBit(e_RadarCategory.eRadarHostile)
+            End If
+        End With
+    Next eot
+    Exit Sub
+ApplyLegacyRadarProfiles_Err:
+    Call TraceError(Err.Number, Err.Description, "Radar.ApplyLegacyRadarProfiles", Erl)
+End Sub
+
+Private Function IsRadarEffect(ByRef Effect As IBaseEffectOverTime) As Boolean
+    If Effect Is Nothing Then Exit Function
+    If Effect.RemoveMe Then Exit Function
+    IsRadarEffect = (Effect.TypeId = e_EffectOverTimeType.eMinimapRadar Or Effect.TypeId = e_EffectOverTimeType.eMinimapUserDetect)
+End Function
+
+' Plan radar-v2 D6: al aplicar un efecto de radar, los efectos anteriores que detectan se van si el nuevo
+' detecta, y los que protegen se van si el nuevo protege (un efecto con las dos cosas se va entero).
+Public Sub MarkReplacedRadarEffects(ByVal UserIndex As Integer, ByVal NewEotId As Integer, ByVal KeepUniqueId As Long)
+    On Error GoTo MarkReplacedRadarEffects_Err
+    Dim k As Long
+    Dim newProfile As t_RadarProfile
+    Dim oldProfile As t_RadarProfile
+    newProfile = EffectOverTime(NewEotId).Radar
+    With UserList(UserIndex).EffectOverTime
+        For k = 0 To .EffectCount - 1
+            If IsRadarEffect(.EffectList(k)) Then
+                If .EffectList(k).UniqueId <> KeepUniqueId Then
+                    oldProfile = EffectOverTime(.EffectList(k).EotId).Radar
+                    If (newProfile.Mask <> 0 And oldProfile.Mask <> 0) Or (newProfile.Protection > 0 And oldProfile.Protection > 0) Then
+                        .EffectList(k).RemoveMe = True
+                    End If
+                End If
+            End If
+        Next k
+    End With
+    Exit Sub
+MarkReplacedRadarEffects_Err:
+    Call TraceError(Err.Number, Err.Description, "Radar.MarkReplacedRadarEffects", Erl)
+End Sub
+
+Private Sub MergeRadarProfile(ByRef src As t_RadarProfile, ByRef mask As Long, ByRef radius As Integer, ByRef wholeMap As Boolean, ByRef penetration As Byte, ByRef protection As Byte)
+    If src.Mask <> 0 Then
+        mask = mask Or src.Mask
+        If src.Radius = 0 Then
+            wholeMap = True
+        ElseIf src.Radius > radius Then
+            radius = src.Radius
+        End If
+        If src.Penetration > penetration Then penetration = src.Penetration
+    End If
+    If src.Protection > protection Then protection = src.Protection
+End Sub
+
+Private Sub MergeObjRadar(ByVal ObjIndex As Integer, ByRef mask As Long, ByRef radius As Integer, ByRef wholeMap As Boolean, ByRef penetration As Byte, ByRef protection As Byte)
+    If ObjIndex <= 0 Or ObjIndex > UBound(ObjData) Then Exit Sub
+    Call MergeRadarProfile(ObjData(ObjIndex).Radar, mask, radius, wholeMap, penetration, protection)
+End Sub
+
+' Vacia el perfil guardado: el proximo RefreshRadarProfile lo vuelve a calcular y avisa al cliente.
+Public Sub ResetRadarProfileState(ByVal UserIndex As Integer)
+    With UserList(UserIndex).flags
+        .RadarMask = 0
+        .RadarRadius = 0
+        .RadarPenetration = 0
+        .RadarProtection = 0
+    End With
+End Sub
+
+' Junta el perfil de los efectos de radar activos y de los objetos equipados. Si cambio lo que el
+' jugador detecta, limpia el minimapa y manda lo nuevo. El GM (NpcRadarActive=2) no cambia de modo.
+Public Sub RefreshRadarProfile(ByVal UserIndex As Integer)
+    On Error GoTo RefreshRadarProfile_Err
+    Dim mask As Long
+    Dim radius As Integer
+    Dim wholeMap As Boolean
+    Dim penetration As Byte
+    Dim protection As Byte
+    Dim k As Long
+    With UserList(UserIndex).EffectOverTime
+        For k = 0 To .EffectCount - 1
+            If IsRadarEffect(.EffectList(k)) Then
+                Call MergeRadarProfile(EffectOverTime(.EffectList(k).EotId).Radar, mask, radius, wholeMap, penetration, protection)
+            End If
+        Next k
+    End With
+    With UserList(UserIndex).invent
+        Call MergeObjRadar(.EquippedWeaponObjIndex, mask, radius, wholeMap, penetration, protection)
+        Call MergeObjRadar(.EquippedArmorObjIndex, mask, radius, wholeMap, penetration, protection)
+        Call MergeObjRadar(.EquippedShieldObjIndex, mask, radius, wholeMap, penetration, protection)
+        Call MergeObjRadar(.EquippedHelmetObjIndex, mask, radius, wholeMap, penetration, protection)
+        Call MergeObjRadar(.EquippedRingAccesoryObjIndex, mask, radius, wholeMap, penetration, protection)
+        Call MergeObjRadar(.EquippedAmuletAccesoryObjIndex, mask, radius, wholeMap, penetration, protection)
+        Call MergeObjRadar(.EquippedBackpackObjIndex, mask, radius, wholeMap, penetration, protection)
+    End With
+    If wholeMap Then radius = 0
+    Dim hadMask As Boolean
+    With UserList(UserIndex).flags
+        .RadarProtection = protection
+        If .NpcRadarActive = 2 Then Exit Sub
+        If mask = .RadarMask And radius = .RadarRadius And penetration = .RadarPenetration Then Exit Sub
+        hadMask = (.RadarMask <> 0)
+        .RadarMask = mask
+        .RadarRadius = radius
+        .RadarPenetration = penetration
+        If mask <> 0 Then
+            .NpcRadarActive = 1
+        Else
+            .NpcRadarActive = 0
+        End If
+        If Not .UserLogged Then Exit Sub
+    End With
+    If Not IsFeatureEnabled("npc_minimap_radar") Then Exit Sub
+    If hadMask Then Call SendRadarClearAll(UserIndex)
+    If mask <> 0 Then Call ForceNpcRadarUpdate(UserIndex)
+    Exit Sub
+RefreshRadarProfile_Err:
+    Call TraceError(Err.Number, Err.Description, "Radar.RefreshRadarProfile", Erl)
+End Sub
+
+' Radio del perfil: solo aplica al radar por perfil (NpcRadarActive=1). 0 = mapa entero.
+Private Function InRadarRange(ByVal ObserverIndex As Integer, ByVal x As Long, ByVal y As Long) As Boolean
+    InRadarRange = True
+    With UserList(ObserverIndex)
+        If .flags.NpcRadarActive <> 1 Then Exit Function
+        If .flags.RadarRadius <= 0 Then Exit Function
+        If Abs(x - CLng(.pos.x)) > .flags.RadarRadius Or Abs(y - CLng(.pos.y)) > .flags.RadarRadius Then InRadarRange = False
+    End With
+End Function

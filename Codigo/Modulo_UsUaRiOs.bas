@@ -738,7 +738,7 @@ Dim tStr                        As String
         ' Para no-GM se manda paquete vacio para garantizar que el minimapa empiece limpio.
         Call RadarDebugLog("Login user=" & .name & " priv=" & .flags.Privilegios & " featOn=" & IsFeatureEnabled("npc_minimap_radar"))
         .flags.NpcRadarActive = 0
-        .flags.UserDetectMask = 0
+        Call ResetRadarProfileState(UserIndex)
         If IsFeatureEnabled("npc_minimap_radar") Then
             If .flags.Privilegios And (e_PlayerType.SemiDios Or e_PlayerType.Dios Or e_PlayerType.Admin) Then
                 .flags.NpcRadarActive = 2

@@ -1226,11 +1226,6 @@ Sub HandleHechizoUsuario(ByVal UserIndex As Integer, ByVal uh As Integer)
         End Select
         If b Then
             If Hechizos(uh).EotId > 0 And IsAlive Then
-                ' Hechizo de deteccion de personajes: propagar la mascara configurada
-                ' en Hechizos.dat al flag del target antes de instanciar el EOT.
-                If EffectOverTime(Hechizos(uh).EotId).Type = e_EffectOverTimeType.eMinimapUserDetect Then
-                    UserList(.flags.TargetUser.ArrayIndex).flags.UserDetectMask = Hechizos(uh).UserDetectMask
-                End If
                 If Effect Is Nothing Then
                     Call CreateEffect(UserIndex, eUser, .flags.TargetUser.ArrayIndex, eUser, Hechizos(uh).EotId)
                 Else
