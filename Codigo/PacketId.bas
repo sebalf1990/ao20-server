@@ -247,6 +247,7 @@ Public Enum ServerPacketID
     eProfessionsUpdate  ' Plan 04.001: vista resuelta de profesiones (7 bytes, skills 17..23)
     eGuardianChallenge  ' E4b antitrampas: desafio del guardian (String8 N hex, Int16 intervalo_seg)
     eNpcRadarJefe       ' Plan radar-v2 E4: jefes, count + (x, y, icono) x n
+    eMinimapPingShow    ' Plan radar-v2 E6: marca de party, Byte x, Byte y, String8 nombre
     eMaxPacket
     [PacketCount]
 End Enum
@@ -575,6 +576,7 @@ Public Enum ClientPacketID
     eHooHouseDoorAction
     eNpcRadarToggle
     eGuardianHeartbeat  ' E4b antitrampas: linea firmada del guardian (String8)
+    eMinimapPing        ' Plan radar-v2 E6: marcar un punto, Byte x, Byte y
     eMaxPacket
     [PacketCount]
 End Enum

@@ -23,6 +23,9 @@ Private Const MAX_RADAR_ENTITIES As Integer = 100
 ' jugador recorre solo los NPCs de su mapa (antes recorria NpcList entero 2 a 7 veces por tick).
 ' Orden estable por NpcIndex: mismo orden (y mismo hash) que el recorrido viejo.
 Private Const RADAR_BUCKET_MS As Long = 100
+' Plan radar-v2 E6: una marca de minimapa cada 3 s como mucho por jugador (el cliente espera 3000 ms; el server
+' acepta desde 2800 para que el retraso de red no descarte una marca que el jugador ya vio en su minimapa).
+Private Const MINIMAP_PING_COOLDOWN_MS As Long = 2800
 Private RadarMapStart() As Long
 Private RadarMapNpcs() As Integer
 Private RadarBucketTick As Long
@@ -1140,3 +1143,49 @@ Private Function InRadarRange(ByVal ObserverIndex As Integer, ByVal x As Long, B
         If Abs(x - CLng(.pos.x)) > .flags.RadarRadius Or Abs(y - CLng(.pos.y)) > .flags.RadarRadius Then InRadarRange = False
     End With
 End Function
+
+' ============================================================================
+' Marcar un punto (plan 2026-11-07-radar-v2, E6)
+' ============================================================================
+' El cliente manda (x, y); el server se lo reenvia a la party del mismo mapa con el nombre de quien marco.
+' Sin party, fuera de rango, antes de 3 s o con el radar apagado por toggle: se descarta en silencio.
+' En eventos y retos no cruza bandos (GrupoCruzaBandos, como el radar de party).
+Public Sub HandleMinimapPing(ByVal UserIndex As Integer)
+    On Error GoTo HandleMinimapPing_Err
+    Dim x As Byte
+    Dim y As Byte
+    x = reader.ReadInt8
+    y = reader.ReadInt8
+    If Not IsFeatureEnabled("npc_minimap_radar") Then Exit Sub
+    Dim nowTick As Long
+    Dim leaderIndex As Integer
+    Dim userMap As Integer
+    With UserList(UserIndex)
+        If Not .flags.UserLogged Then Exit Sub
+        If x < 1 Or x > 100 Or y < 1 Or y > 100 Then Exit Sub
+        If Not .Grupo.EnGrupo Then Exit Sub
+        nowTick = GetTickCountRaw()
+        If CooldownActive(nowTick, .Counters.MinimapPingTick, MINIMAP_PING_COOLDOWN_MS) Then Exit Sub
+        .Counters.MinimapPingTick = NonZeroTickFrom(nowTick)
+        leaderIndex = .Grupo.Lider.ArrayIndex
+        userMap = .pos.Map
+    End With
+    If leaderIndex <= 0 Then Exit Sub
+    Dim senderName As String
+    senderName = GetUserDisplayName(UserIndex)
+    Dim i As Integer
+    Dim memberIndex As Integer
+    For i = 1 To UserList(leaderIndex).Grupo.CantidadMiembros
+        memberIndex = UserList(leaderIndex).Grupo.Miembros(i).ArrayIndex
+        If memberIndex > 0 And memberIndex <> UserIndex Then
+            If UserList(memberIndex).flags.UserLogged And UserList(memberIndex).pos.Map = userMap Then
+                If Not UserMod.GrupoCruzaBandos(UserIndex, memberIndex) Then
+                    Call WriteMinimapPingShow(memberIndex, x, y, senderName)
+                End If
+            End If
+        End If
+    Next i
+    Exit Sub
+HandleMinimapPing_Err:
+    Call TraceError(Err.Number, Err.Description, "Radar.HandleMinimapPing", Erl)
+End Sub
