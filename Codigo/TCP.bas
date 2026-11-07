@@ -1361,8 +1361,9 @@ Sub CloseUser(ByVal UserIndex As Integer)
             Call modElementalBalanceLog.LogElementalBalance("session_end", modElementalBalanceLog.ElementalBalanceActorId(False, UserIndex), modElementalBalanceLog.ElementalBalanceActorClass(False, UserIndex), "0", "none", 0, 0, 0, ebSessionMs, ebSessionMs, .pos.Map, modElementalBalanceLog.ElementalBalanceCharId(False, UserIndex), modElementalBalanceLog.ElementalBalanceAccountId(False, UserIndex), 0, 0, 0)
             .Counters.SessionStartTick = 0
         End If
-        Call GuardianLogout(UserIndex)  ' E4b guardian (modGuardian)
+        ' E4e: la vigia va ANTES que el guardian: el logout lleva el id de PC y GuardianLogout limpia el slot.
         Call VigiaLogout(UserIndex)  ' E2 vigia (modVigia)
+        Call GuardianLogout(UserIndex)  ' E4b guardian (modGuardian)
         .flags.UserLogged = False
         .Counters.Saliendo = False
         Call ResetUserSlot(UserIndex)

@@ -550,7 +550,7 @@ Public Sub VigiaLogin(ByVal UserIndex As Integer)
         Call ResetRitmo(UserIndex, i, True)
     Next i
     Call ReiniciarRuta(UserIndex, True)
-    ' Sin id de maquina hasta E4 (H8): solo IP y cuenta (van en los campos fijos de la linea).
+    ' El id de PC no se conoce aun (llega con el primer heartbeat valido, guardian_ok); va en el logout (E4e).
     Call AntitrampaLinea(UserIndex, "login", "gm=" & SiNo(EsGM(UserIndex)) & " oro=" & UserList(UserIndex).Stats.GLD)
     Exit Sub
 VigiaLogin_Err:
@@ -571,7 +571,16 @@ Public Sub VigiaLogout(ByVal UserIndex As Integer)
     Next i
     Call EmitirRuta(UserIndex)
     If m_U(UserIndex).LoginTick <> 0 Then sesionMs = TicksElapsed(m_U(UserIndex).LoginTick, GetTickCountRaw())
-    Call AntitrampaLinea(UserIndex, "logout", "sesion_s=" & NumeroTexto(sesionMs / 1000#) & " oro=" & UserList(UserIndex).Stats.GLD)
+    ' E4e: guardian=si|no (la sesion tuvo al menos un heartbeat valido) y pc=<id de PC re-hasheado> si si. El
+    ' analizador agrupa cuentas por pc y marca a las que siempre juegan sin guardian. Gana la sesion: va en logout.
+    Dim pcLog As String
+    pcLog = GuardianPcLog(UserIndex)
+    If LenB(pcLog) > 0 Then
+        pcLog = " guardian=si pc=" & pcLog
+    Else
+        pcLog = " guardian=no"
+    End If
+    Call AntitrampaLinea(UserIndex, "logout", "sesion_s=" & NumeroTexto(sesionMs / 1000#) & " oro=" & UserList(UserIndex).Stats.GLD & pcLog)
     m_U(UserIndex).LoginTick = 0
     Exit Sub
 VigiaLogout_Err:
