@@ -346,6 +346,8 @@ Public Function HandleIncomingData(ByVal ConnectionID As Long, ByVal Message As 
             Call HandlePickUp(UserIndex)
         Case ClientPacketID.eSafeToggle
             Call HandleSafeToggle(UserIndex)
+        Case ClientPacketID.eMinimapPing
+            Call HandleMinimapPing(UserIndex)
         Case ClientPacketID.eNpcRadarToggle
             Call RadarDebugLog("Dispatch eNpcRadarToggle from user=" & UserList(UserIndex).name)
             Call HandleNpcRadarToggle(UserIndex)

@@ -4952,3 +4952,17 @@ PrepareMessageRadarQuestNpc_Err:
     Call Writer.Clear
     Call TraceError(Err.Number, Err.Description, "Argentum20Server.Protocol_Writes.PrepareMessageRadarQuestNpc", Erl)
 End Function
+
+' Plan radar-v2 E6: marca de un companero de party en el minimapa.
+Public Sub WriteMinimapPingShow(ByVal UserIndex As Integer, ByVal x As Byte, ByVal y As Byte, ByVal senderName As String)
+    On Error GoTo WriteMinimapPingShow_Err
+    Call Writer.WriteInt16(ServerPacketID.eMinimapPingShow)
+    Call Writer.WriteInt8(x)
+    Call Writer.WriteInt8(y)
+    Call Writer.WriteString8(senderName)
+    Call modSendData.SendData(ToIndex, UserIndex)
+    Exit Sub
+WriteMinimapPingShow_Err:
+    Call Writer.Clear
+    Call TraceError(Err.Number, Err.Description, "Protocol_Writes.WriteMinimapPingShow", Erl)
+End Sub

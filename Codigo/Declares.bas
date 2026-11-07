@@ -3229,6 +3229,7 @@ Public Type t_UserCounters
     NpcRadarHashClanMember As Long
     NpcRadarHashJefe As Long
     NpcSymbolRadarTick As Long
+    MinimapPingTick As Long         ' plan radar-v2 E6: ultima marca enviada
     SocialRadarTick As Long
     NpcRadarLastMap As Integer
 End Type
