@@ -110,6 +110,7 @@ Private m_ResumenSeg As Long
 Private m_RateLimitMs As Long
 Private m_FrescuraMs As Long
 Private m_EventoCadaMs As Long
+Private m_GraciaSeg As Long
 Private m_AvisarGm As Boolean
 Private m_UltimoTick As Long
 
@@ -126,13 +127,14 @@ Private Sub CargarDefaults()
     m_RateLimitMs = 5000
     m_FrescuraMs = 45000
     m_EventoCadaMs = 30000
+    m_GraciaSeg = 90
     m_AvisarGm = False
 End Sub
 
 ' La llama General.Main despues de InitVigia (MaxUsers ya esta cargado).
 Public Sub InitGuardian()
     On Error GoTo InitGuardian_Err
-    Dim ini As clsIniManager
+    Dim ini As clsIniManager, topeRate As Long
     Call CargarDefaults
     m_UltimoTick = GetTickCountRaw()
     m_Max = 0
@@ -150,6 +152,7 @@ Public Sub InitGuardian()
     m_RateLimitMs = CLng(val(ini.GetValue(SECCION_CFG, "GuardianRateLimitMs", "5000")))
     m_FrescuraMs = CLng(val(ini.GetValue(SECCION_CFG, "GuardianFrescuraMs", "45000")))
     m_EventoCadaMs = CLng(val(ini.GetValue(SECCION_CFG, "GuardianEventoCadaMs", "30000")))
+    m_GraciaSeg = CLng(val(ini.GetValue(SECCION_CFG, "GuardianGraciaSeg", "90")))
     m_AvisarGm = (LCase$(Trim$(ini.GetValue(SECCION_CFG, "GuardianAccion", "log"))) = "avisar_gm")
     ' Piso de cada valor: el guardian clampea el intervalo a 5 s; un 0 pararia la ausencia o el rate limit.
     If m_IntervaloSeg < 5 Then m_IntervaloSeg = 5
@@ -160,11 +163,16 @@ Public Sub InitGuardian()
     If m_RateLimitMs < 100 Then m_RateLimitMs = 100
     If m_FrescuraMs < 1000 Then m_FrescuraMs = 1000
     If m_EventoCadaMs < 1000 Then m_EventoCadaMs = 1000
+    If m_GraciaSeg < 0 Then m_GraciaSeg = 0
+    ' W1: el guardian firma una linea cada intervalo/2: el rate limit nunca puede ser mayor que eso (con margen).
+    topeRate = ((m_IntervaloSeg * 1000) \ 2) - 500
+    If topeRate < 1000 Then topeRate = 1000
+    If m_RateLimitMs > topeRate Then m_RateLimitMs = topeRate
     Call CargarSecreto
     ' Nunca se loguea ningun secreto: solo cuantas claves hay y si el kid de prueba esta permitido.
     Call LogThis(0, "Guardian: habilitado=" & m_Habilitado & " intervalo_s=" & m_IntervaloSeg & _
             " factor_ausencia=" & m_FactorAusencia & " repetir_ausente_s=" & m_RepetirAusenteSeg & " resumen_s=" & m_ResumenSeg & _
-            " rate_limit_ms=" & m_RateLimitMs & " frescura_ms=" & m_FrescuraMs & " accion=" & GuardianAccionTexto() & " kids=" & m_KidCant & _
+            " gracia_s=" & m_GraciaSeg & " rate_limit_ms=" & m_RateLimitMs & " frescura_ms=" & m_FrescuraMs & " accion=" & GuardianAccionTexto() & " kids=" & m_KidCant & _
             " permitir_dev=" & m_PermitirDev & " slots=" & m_Max, vbLogEventTypeInformation)
     Exit Sub
 InitGuardian_Err:
@@ -190,7 +198,8 @@ Private Sub CargarSecreto()
     m_PermitirDev = (val(ini.GetValue(SECCION_SECRETO, "PermitirDev", "0")) = 1)
     m_SaltLog = Trim$(ini.GetValue(SECCION_SECRETO, "SaltLog", vbNullString))
     For k = 0 To 255
-        texto = LCase$(Trim$(ini.GetValue(SECCION_SECRETO, "Kid" & CStr(k), vbNullString)))
+        texto = vbNullString
+        If k > 0 Or m_PermitirDev Then texto = LCase$(Trim$(ini.GetValue(SECCION_SECRETO, "Kid" & CStr(k), vbNullString)))
         If LenB(texto) > 0 Then
             If m_KidCant >= MAX_KIDS Then
                 Call LogThis(0, "Guardian: se ignora Kid" & k & " (maximo " & MAX_KIDS & " claves)", vbLogEventTypeWarning)
@@ -295,7 +304,6 @@ End Function
 ' KS = HMAC-SHA256(GS, "ao20-guard-v1" || N (16 crudos) || char_id uint32 LE): ancho fijo, 13 + 16 + 4 bytes.
 Private Function DerivarKs(ByRef gs() As Byte, ByRef n() As Byte, ByVal charId As Long) As Byte()
     Dim msg() As Byte, i As Long
-    If charId < 0 Then charId = 0
     ReDim msg(0 To 32)
     For i = 0 To 12
         msg(i) = CByte(Asc(Mid$(KS_LABEL, i + 1, 1)))
@@ -596,6 +604,11 @@ Private Sub ValidarLinea(ByVal UserIndex As Integer, ByVal linea As String, ByVa
         Call Emitir(UserIndex, "guardian_firma_invalida", "motivo=kid kid=" & kid, True)
         Exit Sub
     End If
+    If m_U(UserIndex).CharId < 0 Then
+        Call ContarInvalido(UserIndex)
+        Call Emitir(UserIndex, "guardian_firma_invalida", "motivo=char_id_invalido char_id=" & m_U(UserIndex).CharId, True)
+        Exit Sub
+    End If
     ' (4b) MAC recalculado con la clave de sesion KS y comparado con XOR acumulada.
     ReDim gs(0 To 31)
     For i = 0 To 31
@@ -681,7 +694,7 @@ Private Sub ValidarLinea(ByVal UserIndex As Integer, ByVal linea As String, ByVa
     For i = 0 To 8
         If (flagsVal And bit) <> 0 And (m_U(UserIndex).FlagsVistos And bit) = 0 Then
             m_U(UserIndex).FlagsVistos = m_U(UserIndex).FlagsVistos Or bit
-            Call Emitir(UserIndex, EventoDeFlag(bit), "flags=" & flagsVal &" exe=" & campos(6) & " procs=" & campos(8), bit <> 32)
+            Call Emitir(UserIndex, EventoDeFlag(bit), "flags=" & flagsVal & " exe=" & campos(6) & " procs=" & campos(8), bit <> 32)
         End If
         bit = bit * 2
     Next i
@@ -714,7 +727,7 @@ End Sub
 
 Private Sub TickUsuario(ByVal UserIndex As Integer, ByVal nowRaw As Long)
     On Error GoTo TickUsuario_Err
-    Dim refTick As Long, sinHbMs As Double, motivo As String
+    Dim refTick As Long, sinHbMs As Double, motivo As String, umbralMs As Double
     If Not UserList(UserIndex).flags.UserLogged Then
         Call ResetEstado(UserIndex)
         Exit Sub
@@ -723,7 +736,10 @@ Private Sub TickUsuario(ByVal UserIndex As Integer, ByVal nowRaw As Long)
         refTick = .UltimoOkTick
         If refTick = 0 Then refTick = .DesafioTick
         sinHbMs = TicksElapsed(refTick, nowRaw)
-        If sinHbMs >= CDbl(m_FactorAusencia) * CDbl(m_IntervaloSeg) * 1000# Then
+        umbralMs = CDbl(m_FactorAusencia) * CDbl(m_IntervaloSeg) * 1000#
+        ' W4: antes del primer heartbeat valido hay una gracia (arranque lento del guardian / del pipe).
+        If .UltimoOkTick = 0 And CDbl(m_GraciaSeg) * 1000# > umbralMs Then umbralMs = CDbl(m_GraciaSeg) * 1000#
+        If sinHbMs >= umbralMs Then
             If .AusenteUltTick = 0 Then
                 motivo = "ausente"
             ElseIf TicksElapsed(.AusenteUltTick, nowRaw) >= CDbl(m_RepetirAusenteSeg) * 1000# Then
@@ -736,7 +752,7 @@ Private Sub TickUsuario(ByVal UserIndex As Integer, ByVal nowRaw As Long)
                 Else
                     motivo = "sin_heartbeat"
                 End If
-                Call Emitir(UserIndex, "guardian_ausente", "motivo=" & motivo & " sin_hb_s=" & CLng(Fix(sinHbMs / 1000#)) & " hb_validos=" & .HbValidos, True)
+                Call Emitir(UserIndex, "guardian_ausente", "motivo=" & motivo & " sin_hb_s=" & CLng(Fix(sinHbMs / 1000#)) & " hb_validos=" & .HbValidos, motivo <> "sin_heartbeat")
             End If
         End If
         If TicksElapsed(.ResumenTick, nowRaw) >= CDbl(m_ResumenSeg) * 1000# Then
