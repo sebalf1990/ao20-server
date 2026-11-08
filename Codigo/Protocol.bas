@@ -7402,14 +7402,27 @@ Private Sub HandleResponderPregunta(ByVal UserIndex As Integer)
                     End If
                 Case 5
                     Dim i As Integer, j As Integer
+                    Dim specialFishGold As Double
                     With UserList(UserIndex)
+                        ' Plan 2026-11-08-revision-profesiones-y-navegacion: revalidate NPC, distance and profession when
+                        ' the answer arrives; the gold is capped at MAXORO below.
+                        If Not IsValidNpcRef(.flags.TargetNPC) Then
+                            .flags.pregunta = 0
+                            Exit Sub
+                        End If
+                        If Not CanDeliverSpecialFish(UserIndex, .flags.TargetNPC.ArrayIndex) Then
+                            .flags.pregunta = 0
+                            Exit Sub
+                        End If
                         For i = 1 To MAX_INVENTORY_SLOTS
                             For j = 1 To UBound(PecesEspeciales)
                                 If .invent.Object(i).ObjIndex = PecesEspeciales(j).ObjIndex Then
                                     Call VigiaFuente(UserIndex, "pesca_especial")  ' E2 vigia (modVigia)
                                     .Stats.PuntosPesca = .Stats.PuntosPesca + (ObjData(.invent.Object(i).ObjIndex).PuntosPesca * .invent.Object(i).amount)
-                                    .Stats.GLD = .Stats.GLD + (ObjData(.invent.Object(i).ObjIndex).Valor * .invent.Object(i).amount * SvrConfig.GetValue( _
+                                    specialFishGold = CDbl(.Stats.GLD) + (CDbl(ObjData(.invent.Object(i).ObjIndex).Valor) * .invent.Object(i).amount * SvrConfig.GetValue( _
                                             "SpecialFishGoldMultiplier"))
+                                    If specialFishGold > MAXORO Then specialFishGold = MAXORO
+                                    .Stats.GLD = CLng(specialFishGold)
                                     Call WriteUpdateGold(UserIndex)
                                     If IsFeatureEnabled("gain_exp_while_working") Then
                                         .Stats.Exp = .Stats.Exp + (ObjData(.invent.Object(i).ObjIndex).Valor * .invent.Object(i).amount * SvrConfig.GetValue( _
