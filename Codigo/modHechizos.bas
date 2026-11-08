@@ -26,6 +26,9 @@ Attribute VB_Name = "modHechizos"
 '
 '
 Option Explicit
+' StaRequerido at or above this value marks an ability switched off in the data.
+Public Const SPELL_UNAVAILABLE_STA_COST As Integer = 5000
+
 
 
 Sub NpcLanzaSpellSobreUser(ByVal NpcIndex As Integer, ByVal UserIndex As Integer, ByVal Spell As Integer, Optional ByVal IgnoreVisibilityCheck As Boolean = False)
@@ -491,9 +494,6 @@ Sub DecirPalabrasMagicas(ByVal Hechizo As Integer, ByVal UserIndex As Integer)
 DecirPalabrasMagicas_Err:
     Call TraceError(Err.Number, Err.Description, "modHechizos.DecirPalabrasMagicas", Erl)
 End Sub
-
-' StaRequerido at or above this value marks an ability switched off in the data.
-Public Const SPELL_UNAVAILABLE_STA_COST As Integer = 5000
 
 Public Function IsSpellUnavailable(ByVal staRequired As Integer) As Boolean
     IsSpellUnavailable = (staRequired >= SPELL_UNAVAILABLE_STA_COST)
