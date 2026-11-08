@@ -1279,7 +1279,7 @@ Sub HandleHechizoUsuario(ByVal UserIndex As Integer, ByVal uh As Integer)
             End If
             Call WriteUpdateMana(UserIndex)
             Call WriteUpdateHP(UserIndex)
-            Call WriteUpdateSta(UserIndex)
+            If Not HungerThirstStaminaDisabled Then Call WriteUpdateSta(UserIndex)
         End If
     End With
     Exit Sub
