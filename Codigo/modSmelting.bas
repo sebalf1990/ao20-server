@@ -88,6 +88,19 @@ Public Sub CraftIngots(ByVal UserIndex As Integer)
     Dim obji       As Integer
     Dim cant       As Byte
     Dim necesarios As Integer
+    ' Plan 2026-11-08-revision-profesiones-y-navegacion: the ingot comes from TargetObjInvIndex, so the slot must still hold that
+    ' same ore. Swapping the ore mid-smelt (iron in, gold out) minted gold ingots.
+    Slot = UserList(UserIndex).flags.TargetObjInvSlot
+    If Slot < 1 Or Slot > UserList(UserIndex).CurrentInventorySlots Then
+        Call ResetUserAutomatedActions(UserIndex)
+        Exit Sub
+    End If
+    If UserList(UserIndex).invent.Object(Slot).ObjIndex <> UserList(UserIndex).flags.TargetObjInvIndex Then
+        ' Msg645=No tienes suficientes minerales para hacer un lingote.
+        Call WriteLocaleMsg(UserIndex, MSG_NO_TIENES_SUFICIENTES_MINERALES_HACER_LINGOTE, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
+        Call ResetUserAutomatedActions(UserIndex)
+        Exit Sub
+    End If
     If UserList(UserIndex).Stats.MinSta > 2 Then
         Call QuitarSta(UserIndex, 2)
     Else
@@ -96,7 +109,6 @@ Public Sub CraftIngots(ByVal UserIndex As Integer)
         Call WriteMacroTrabajoToggle(UserIndex, False)
         Exit Sub
     End If
-    Slot = UserList(UserIndex).flags.TargetObjInvSlot
     obji = UserList(UserIndex).invent.Object(Slot).ObjIndex
     cant = RandomNumber(10, 20)
     necesarios = MineralsRequiredPerIngot(obji, cant)
