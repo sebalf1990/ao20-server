@@ -1926,6 +1926,8 @@ Public Type t_Hechizo
     SpellRequirementMask As Long
     RequireWeaponType As e_WeaponType
     MaxLevelCasteable As Byte
+    MinLevel As Byte                    ' 0 = no level requirement (Hechizos.dat MinLevel)
+    FixedCooldown As Byte               ' 1 = Cooldown is not reduced by elven wood items
     IsElementalTagsOnly As Boolean
     UserDetectMask As Byte
     ' --- Sistema de venenos (TOGGLE26 new_poison_system) ---

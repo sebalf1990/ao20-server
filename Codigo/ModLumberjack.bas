@@ -78,6 +78,7 @@ Public Sub ChopWood(ByVal UserIndex As Integer)
             Call SendData(SendTarget.ToPCAliveArea, UserIndex, PrepareMessagePlayWave(64, .pos.x, .pos.y))
         End If
         .Counters.Trabajando = .Counters.Trabajando + 1
+        Call WorkFatigue_RegisterWork(UserIndex, WF_KIND_TOOL_AUTO)
         Call SubirSkill(UserIndex, e_Skill.Talar)
     End With
 End Sub

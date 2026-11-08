@@ -263,6 +263,7 @@ SkillImprovement:
             Call SubirSkill(UserIndex, e_Skill.Pescar)
         End If
         .Counters.Trabajando = .Counters.Trabajando + 1
+        Call WorkFatigue_RegisterWork(UserIndex, WF_KIND_TOOL_AUTO)
     End With
     Exit Sub
 ErrHandler:

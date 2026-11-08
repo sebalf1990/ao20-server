@@ -38,6 +38,7 @@ Public Sub RunAutomatedActions()
     For UserIndex = 1 To LastUser
         With UserList(UserIndex)
             If .flags.UserLogged Then
+                Call WorkFatigue_Update(UserIndex)
                 If .AutomatedAction.IsActive Then
                     ' Plan 04.001: revalidar la profesion en cada tick. Olvidarla en pleno
                     ' loop cortaba el permiso pero la accion seguia corriendo y subiendo skill.
@@ -87,8 +88,13 @@ Public Sub StartAutomatedAction(ByVal x As Byte, ByVal y As Byte, ByVal skill As
 End Sub
 
 Public Function DecreaseUserStamina(ByVal UserIndex As Integer, ByVal StaminaRequirement As Integer) As Boolean
+    ' Work fatigue (plan 2026-11-08): every extraction tick (logging, mining, fishing) passes here first.
+    If Not WorkFatigue_CanWork(UserIndex, WF_KIND_TOOL_AUTO) Then
+        DecreaseUserStamina = False
+        Exit Function
+    End If
     ' Toggle: acciones automaticas no consumen stamina
-    If IsFeatureEnabled("disable_hunger_thirst_stamina") Then
+    If HungerThirstStaminaDisabled Then
         DecreaseUserStamina = True
         Exit Function
     End If

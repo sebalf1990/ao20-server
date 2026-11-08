@@ -83,6 +83,7 @@ End Sub
 Public Sub CraftIngots(ByVal UserIndex As Integer)
     On Error GoTo CraftIngots_Err
     Call VigiaFuente(UserIndex, "trabajo")  ' E2 vigia (modVigia)
+    If Not WorkFatigue_CanWork(UserIndex, WF_KIND_SMELT) Then Exit Sub
     Dim Slot       As Integer
     Dim obji       As Integer
     Dim cant       As Byte
@@ -122,6 +123,7 @@ Public Sub CraftIngots(ByVal UserIndex As Integer)
     Call SendData(SendTarget.ToPCAliveArea, UserIndex, PrepareMessagePlayWave(41, UserList(UserIndex).pos.x, UserList(UserIndex).pos.y))
     Call SubirSkill(UserIndex, e_Skill.Mineria)
     UserList(UserIndex).Counters.Trabajando = UserList(UserIndex).Counters.Trabajando + 1
+    Call WorkFatigue_RegisterWork(UserIndex, WF_KIND_SMELT)
     Exit Sub
 CraftIngots_Err:
     Call TraceError(Err.Number, Err.Description, "ModSmelting.CraftIngots", Erl)

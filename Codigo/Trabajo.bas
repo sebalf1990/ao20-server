@@ -1063,6 +1063,7 @@ End Function
 Public Sub HerreroConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As Integer)
     On Error GoTo HerreroConstruirItem_Err
     Call VigiaFuente(UserIndex, "trabajo")  ' E2 vigia (modVigia)
+    If Not WorkFatigue_CanWork(UserIndex, WF_KIND_CRAFT) Then Exit Sub
     If Not IntervaloPermiteTrabajarConstruir(UserIndex) Then Exit Sub
     ' Plan 04.001: gate de ejecucion — eCraftBlacksmith llegaba directo sin validar profesion.
     ' Plan 27.001 (05.002 wave 7): the 4 crafts had NO position, map or event gate. The gate lives
@@ -1095,8 +1096,10 @@ Public Sub HerreroConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As I
         MiObj.ObjIndex = ItemIndex
         MiObj.ElementalTags = ObjData(ItemIndex).ElementalTags
         If Not ConsumeCraftingMaterials(UserIndex, MiObj, e_JobsTypes.Blacksmith) Then Exit Sub
-        UserList(UserIndex).Stats.MinSta = UserList(UserIndex).Stats.MinSta - 2
-        Call WriteUpdateSta(UserIndex)
+        If Not HungerThirstStaminaDisabled Then
+            UserList(UserIndex).Stats.MinSta = UserList(UserIndex).Stats.MinSta - 2
+            Call WriteUpdateSta(UserIndex)
+        End If
         ' AGREGAR FX
         Call SendData(SendTarget.ToIndex, UserIndex, PrepareMessageParticleFX(UserList(UserIndex).Char.charindex, 253, 25, False, ObjData(ItemIndex).GrhIndex))
         Select Case ObjData(ItemIndex).OBJType
@@ -1122,6 +1125,7 @@ Public Sub HerreroConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As I
         Call UpdateUserInv(True, UserIndex, 0)
         Call SendData(SendTarget.ToPCAliveArea, UserIndex, PrepareMessagePlayWave(MARTILLOHERRERO, UserList(UserIndex).pos.x, UserList(UserIndex).pos.y))
         UserList(UserIndex).Counters.Trabajando = UserList(UserIndex).Counters.Trabajando + 1
+        Call WorkFatigue_RegisterWork(UserIndex, WF_KIND_CRAFT)
         If IsFeatureEnabled("gain_exp_while_working") Then
             Call GiveExpWhileWorking(UserIndex, MiObj, e_JobsTypes.Blacksmith)
             Call WriteUpdateExp(UserIndex)
@@ -1184,6 +1188,7 @@ End Function
 Public Sub CarpinteroConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As Integer, ByVal Cantidad As Long, ByVal cantidad_maxima As Integer)
     On Error GoTo CarpinteroConstruirItem_Err
     Call VigiaFuente(UserIndex, "trabajo")  ' E2 vigia (modVigia)
+    If Not WorkFatigue_CanWork(UserIndex, WF_KIND_CRAFT) Then Exit Sub
     If Not IntervaloPermiteTrabajarConstruir(UserIndex) Then Exit Sub
     ' Plan 04.001: gate de ejecucion, no solo al equipar la herramienta.
     ' Plan 27.001 (05.002 wave 7): carpentry crafts in the server timer (t_Extraer_Timer -> Trabajar),
@@ -1257,6 +1262,7 @@ Public Sub CarpinteroConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex A
         End If
         Call SendData(SendTarget.ToPCAliveArea, UserIndex, PrepareMessagePlayWave(LABUROCARPINTERO, UserList(UserIndex).pos.x, UserList(UserIndex).pos.y))
         UserList(UserIndex).Counters.Trabajando = UserList(UserIndex).Counters.Trabajando + 1
+        Call WorkFatigue_RegisterWork(UserIndex, WF_KIND_CRAFT)
     Else
         ' Grupo 7 (plan 10.001, punto 7b): craft_fail, motivo por prioridad materiales>skill>receta>herramienta.
         Call modElementalBalanceLog.LogCraftFail(UserIndex, CLng(ItemIndex), IIf(Not ebHasMats, 0, IIf(Not ebHasSkill, 1, IIf(Not ebValidRecipeType Or Not ebKnowsRecipe, 2, 3))))
@@ -1269,6 +1275,7 @@ End Sub
 Public Sub AlquimistaConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As Integer)
     On Error GoTo AlquimistaConstruirItem_Err
     Call VigiaFuente(UserIndex, "trabajo")  ' E2 vigia (modVigia)
+    If Not WorkFatigue_CanWork(UserIndex, WF_KIND_CRAFT) Then Exit Sub
     ' Plan 04.001: gate de ejecucion, no solo al equipar la herramienta.
     ' Plan 27.001 (05.002 wave 7): no working inside a duel or an event. It goes at the top, next to
     ' the profession gate: this Sub's error handler ends in Resume Next, so an Exit Sub placed among
@@ -1324,8 +1331,10 @@ Public Sub AlquimistaConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex A
         MiObj.ObjIndex = ItemIndex
         MiObj.ElementalTags = ObjData(ItemIndex).ElementalTags
         If Not ConsumeCraftingMaterials(UserIndex, MiObj, e_JobsTypes.Alchemist) Then Exit Sub
-        UserList(UserIndex).Stats.MinSta = UserList(UserIndex).Stats.MinSta - 1
-        Call WriteUpdateSta(UserIndex)
+        If Not HungerThirstStaminaDisabled Then
+            UserList(UserIndex).Stats.MinSta = UserList(UserIndex).Stats.MinSta - 1
+            Call WriteUpdateSta(UserIndex)
+        End If
         ' AGREGAR FX
         Call SendData(SendTarget.ToIndex, UserIndex, PrepareMessageParticleFX(UserList(UserIndex).Char.charindex, 253, 25, False, ObjData(ItemIndex).GrhIndex))
         Call SendData(SendTarget.ToPCAliveArea, UserIndex, PrepareMessagePlayWave(1152, UserList(UserIndex).pos.x, UserList(UserIndex).pos.y))
@@ -1343,6 +1352,7 @@ Public Sub AlquimistaConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex A
             Call CheckUserLevel(UserIndex)
         End If
         UserList(UserIndex).Counters.Trabajando = UserList(UserIndex).Counters.Trabajando + 1
+        Call WorkFatigue_RegisterWork(UserIndex, WF_KIND_CRAFT)
     Else
         ' Grupo 7 (plan 10.001, punto 7b): craft_fail, motivo por prioridad materiales>skill>receta>herramienta.
         Call modElementalBalanceLog.LogCraftFail(UserIndex, CLng(ItemIndex), IIf(Not ebHasMats, 0, IIf(Not ebHasSkill, 1, IIf(Not ebValidRecipeType Or Not ebKnowsRecipe, 2, 3))))
@@ -1355,6 +1365,7 @@ End Sub
 Public Sub SastreConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As Integer)
     On Error GoTo SastreConstruirItem_Err
     Call VigiaFuente(UserIndex, "trabajo")  ' E2 vigia (modVigia)
+    If Not WorkFatigue_CanWork(UserIndex, WF_KIND_CRAFT) Then Exit Sub
     If Not IntervaloPermiteTrabajarConstruir(UserIndex) Then Exit Sub
     ' Plan 04.001: gate de ejecucion, no solo al equipar la herramienta.
     ' Plan 27.001 (05.002 wave 7): no working inside a duel or an event (4th and last twin copy).
@@ -1390,8 +1401,10 @@ Public Sub SastreConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As In
         MiObj.ObjIndex = ItemIndex
         MiObj.ElementalTags = ObjData(ItemIndex).ElementalTags
         If Not ConsumeCraftingMaterials(UserIndex, MiObj, e_JobsTypes.Tailor) Then Exit Sub
-        UserList(UserIndex).Stats.MinSta = UserList(UserIndex).Stats.MinSta - 2
-        Call WriteUpdateSta(UserIndex)
+        If Not HungerThirstStaminaDisabled Then
+            UserList(UserIndex).Stats.MinSta = UserList(UserIndex).Stats.MinSta - 2
+            Call WriteUpdateSta(UserIndex)
+        End If
         If IsFeatureEnabled("gain_exp_while_working") Then
             Call GiveExpWhileWorking(UserIndex, MiObj, e_JobsTypes.Tailor)
             Call WriteUpdateExp(UserIndex)
@@ -1408,6 +1421,7 @@ Public Sub SastreConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As In
         End If
         Call UpdateUserInv(True, UserIndex, 0)
         UserList(UserIndex).Counters.Trabajando = UserList(UserIndex).Counters.Trabajando + 1
+        Call WorkFatigue_RegisterWork(UserIndex, WF_KIND_CRAFT)
     Else
         ' Grupo 7 (plan 10.001, punto 7b): craft_fail, motivo por prioridad materiales>skill>receta>herramienta.
         Call modElementalBalanceLog.LogCraftFail(UserIndex, CLng(ItemIndex), IIf(Not ebHasMats, 0, IIf(Not ebHasSkill, 1, IIf(Not ebValidRecipeType Or Not ebKnowsRecipe, 2, 3))))
@@ -1871,7 +1885,7 @@ End Sub
 Public Sub QuitarSta(ByVal UserIndex As Integer, ByVal Cantidad As Integer)
     On Error GoTo QuitarSta_Err
     ' Toggle: stamina no se consume
-    If IsFeatureEnabled("disable_hunger_thirst_stamina") Then Exit Sub
+    If HungerThirstStaminaDisabled Then Exit Sub
     UserList(UserIndex).Stats.MinSta = UserList(UserIndex).Stats.MinSta - Cantidad
     If UserList(UserIndex).Stats.MinSta < 0 Then UserList(UserIndex).Stats.MinSta = 0
     If UserList(UserIndex).Stats.MinSta = 0 Then Exit Sub

@@ -26,6 +26,9 @@ Attribute VB_Name = "modHechizos"
 '
 '
 Option Explicit
+' StaRequerido at or above this value marks an ability switched off in the data.
+Public Const SPELL_UNAVAILABLE_STA_COST As Integer = 5000
+
 
 
 Sub NpcLanzaSpellSobreUser(ByVal NpcIndex As Integer, ByVal UserIndex As Integer, ByVal Spell As Integer, Optional ByVal IgnoreVisibilityCheck As Boolean = False)
@@ -492,10 +495,25 @@ DecirPalabrasMagicas_Err:
     Call TraceError(Err.Number, Err.Description, "modHechizos.DecirPalabrasMagicas", Erl)
 End Sub
 
+Public Function IsSpellUnavailable(ByVal staRequired As Integer) As Boolean
+    IsSpellUnavailable = (staRequired >= SPELL_UNAVAILABLE_STA_COST)
+End Function
+
+' minLevel 0 = no level requirement.
+Public Function SpellMeetsMinLevel(ByVal userLevel As Integer, ByVal minLevel As Integer) As Boolean
+    SpellMeetsMinLevel = (userLevel >= minLevel)
+End Function
+
 Private Function PuedeLanzar(ByVal UserIndex As Integer, ByVal HechizoIndex As Integer, Optional ByVal Slot As Integer = 0) As Boolean
     On Error GoTo PuedeLanzar_Err
     PuedeLanzar = False
     If HechizoIndex = 0 Then Exit Function
+    ' Abilities switched off in the data (StaRequerido 5000): not available. First of all,
+    ' so a disabled ability never cancels an effect or reaches any other gate.
+    If IsSpellUnavailable(Hechizos(HechizoIndex).StaRequerido) Then
+        Call WriteLocaleMsg(UserIndex, MSG_ABILITY_NOT_AVAILABLE, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_New_Naranja)
+        Exit Function
+    End If
     With UserList(UserIndex)
         'Si lanza a un npc y este es solo atacable para clanes y el usuario no tiene clan, le avisa y sale de la funcion
         If IsValidNpcRef(.flags.TargetNPC) Then
@@ -603,20 +621,16 @@ Private Function PuedeLanzar(ByVal UserIndex As Integer, ByVal HechizoIndex As I
             Dim nowRaw            As Long
             Dim SegundosFaltantes As Long
             nowRaw = GetTickCountRaw()
-            Dim Cooldown As Long
-            Cooldown = Hechizos(HechizoIndex).Cooldown
-            'cooldown reduction for Elven Wood items
+            Dim Cooldown As Double
+            Dim elvenWoodItems As Long
+            'cooldown reduction for Elven Wood items (FixedCooldown spells ignore it)
             If .invent.EquippedWeaponObjIndex > 0 Then
-                If ObjData(.invent.EquippedWeaponObjIndex).MaderaElfica > 0 Then
-                    Cooldown = Cooldown / 2
-                End If
+                If ObjData(.invent.EquippedWeaponObjIndex).MaderaElfica > 0 Then elvenWoodItems = elvenWoodItems + 1
             End If
             If .invent.EquippedRingAccesoryObjIndex > 0 Then
-                If ObjData(.invent.EquippedRingAccesoryObjIndex).MaderaElfica > 0 Then
-                    Cooldown = Cooldown / 2
-                End If
+                If ObjData(.invent.EquippedRingAccesoryObjIndex).MaderaElfica > 0 Then elvenWoodItems = elvenWoodItems + 1
             End If
-            Cooldown = Cooldown * 1000
+            Cooldown = SpellCooldown_EffectiveSeconds(Hechizos(HechizoIndex).Cooldown, Hechizos(HechizoIndex).FixedCooldown <> 0, elvenWoodItems) * 1000#
             Dim elapsedMs As Double
             elapsedMs = TicksElapsed(.Counters.UserHechizosInterval(Slot), nowRaw)
             If elapsedMs < Cooldown Then
@@ -627,6 +641,10 @@ Private Function PuedeLanzar(ByVal UserIndex As Integer, ByVal HechizoIndex As I
         End If
         If .Stats.UserSkills(e_Skill.Magia) < Hechizos(HechizoIndex).MinSkill Then
             Call WriteLocaleMsg(UserIndex, MSG_NO_TIENES_SUFICIENTES_PUNTOS_MAGIA_LANZAR_HECHIZO_NECESITAS_PUNTOS, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_New_Naranja, Hechizos(HechizoIndex).MinSkill) 'Msg1636=No tienes suficientes puntos de magia para lanzar este hechizo, necesitas ¬1 puntos.
+            Exit Function
+        End If
+        If Not SpellMeetsMinLevel(.Stats.ELV, Hechizos(HechizoIndex).MinLevel) Then
+            Call WriteLocaleMsg(UserIndex, MSG_SPELL_MIN_LEVEL, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_New_Naranja, Hechizos(HechizoIndex).MinLevel)
             Exit Function
         End If
         If Hechizos(HechizoIndex).MaxLevelCasteable > 0 And .Stats.ELV > Hechizos(HechizoIndex).MaxLevelCasteable Then
@@ -641,7 +659,7 @@ Private Function PuedeLanzar(ByVal UserIndex As Integer, ByVal HechizoIndex As I
             Call WriteLocaleMsg(UserIndex, MSG_NOT_ENOUGH_MANA, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
             Exit Function
         End If
-        If .Stats.MinSta < GetSpellStaminaCost(UserIndex, Hechizos(HechizoIndex)) Then
+        If Not HungerThirstStaminaDisabled And .Stats.MinSta < GetSpellStaminaCost(UserIndex, Hechizos(HechizoIndex)) Then
             'Msg93=Estás muy cansado
             Call WriteLocaleMsg(UserIndex, MSG_MUY_CANSADO, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
             'Msg2129=¡No tengo energía!
@@ -1066,10 +1084,12 @@ Sub HandleHechizoTerreno(ByVal UserIndex As Integer, ByVal uh As Integer)
             End If
             .Stats.MinMAN = .Stats.MinMAN - GetSpellManaCostModifierByClass(UserIndex, Hechizos(uh), uh)
             If .Stats.MinMAN < 0 Then .Stats.MinMAN = 0
-            .Stats.MinSta = .Stats.MinSta - GetSpellStaminaCost(UserIndex, Hechizos(uh))
-            If .Stats.MinSta < 0 Then .Stats.MinSta = 0
+            If Not HungerThirstStaminaDisabled Then
+                .Stats.MinSta = .Stats.MinSta - GetSpellStaminaCost(UserIndex, Hechizos(uh))
+                If .Stats.MinSta < 0 Then .Stats.MinSta = 0
+            End If
             Call WriteUpdateMana(UserIndex)
-            Call WriteUpdateSta(UserIndex)
+            If Not HungerThirstStaminaDisabled Then Call WriteUpdateSta(UserIndex)
         End If
     End With
     Exit Sub
@@ -1109,10 +1129,12 @@ Function HandlePetSpell(ByVal UserIndex As Integer, ByVal uh As Integer) As Bool
         End If
         .Stats.MinMAN = .Stats.MinMAN - GetSpellManaCostModifierByClass(UserIndex, Hechizos(uh), uh)
         If .Stats.MinMAN < 0 Then .Stats.MinMAN = 0
-        .Stats.MinSta = .Stats.MinSta - GetSpellStaminaCost(UserIndex, Hechizos(uh))
-        If .Stats.MinSta < 0 Then .Stats.MinSta = 0
+        If Not HungerThirstStaminaDisabled Then
+            .Stats.MinSta = .Stats.MinSta - GetSpellStaminaCost(UserIndex, Hechizos(uh))
+            If .Stats.MinSta < 0 Then .Stats.MinSta = 0
+        End If
         Call WriteUpdateMana(UserIndex)
-        Call WriteUpdateSta(UserIndex)
+        If Not HungerThirstStaminaDisabled Then Call WriteUpdateSta(UserIndex)
         HandlePetSpell = True
     End With
 End Function
@@ -1242,8 +1264,10 @@ Sub HandleHechizoUsuario(ByVal UserIndex As Integer, ByVal uh As Integer)
             If Hechizos(uh).RequiredHP > 0 Then
                 Call UserMod.ModifyHealth(UserIndex, -Hechizos(uh).RequiredHP, 1)
             End If
-            .Stats.MinSta = .Stats.MinSta - GetSpellStaminaCost(UserIndex, Hechizos(uh))
-            If .Stats.MinSta < 0 Then .Stats.MinSta = 0
+            If Not HungerThirstStaminaDisabled Then
+                .Stats.MinSta = .Stats.MinSta - GetSpellStaminaCost(UserIndex, Hechizos(uh))
+                If .Stats.MinSta < 0 Then .Stats.MinSta = 0
+            End If
             If IsSet(Hechizos(uh).Effects, e_SpellEffects.Resurrect) Then
                 If Not PeleaSegura(UserIndex, .flags.TargetUser.ArrayIndex) Then
                     If MapInfo(.pos.Map).Seguro = 0 Then
@@ -1255,7 +1279,7 @@ Sub HandleHechizoUsuario(ByVal UserIndex As Integer, ByVal uh As Integer)
             End If
             Call WriteUpdateMana(UserIndex)
             Call WriteUpdateHP(UserIndex)
-            Call WriteUpdateSta(UserIndex)
+            If Not HungerThirstStaminaDisabled Then Call WriteUpdateSta(UserIndex)
         End If
     End With
     Exit Sub
@@ -1339,10 +1363,12 @@ Sub HandleHechizoNPC(ByVal UserIndex As Integer, ByVal uh As Integer)
                 If .Stats.MinMAN < 0 Then .Stats.MinMAN = 0
                 Call UserMod.ModifyHealth(UserIndex, -Hechizos(uh).RequiredHP, 1)
             End If
-            .Stats.MinSta = .Stats.MinSta - GetSpellStaminaCost(UserIndex, Hechizos(uh))
-            If .Stats.MinSta < 0 Then .Stats.MinSta = 0
+            If Not HungerThirstStaminaDisabled Then
+                .Stats.MinSta = .Stats.MinSta - GetSpellStaminaCost(UserIndex, Hechizos(uh))
+                If .Stats.MinSta < 0 Then .Stats.MinSta = 0
+            End If
             Call WriteUpdateMana(UserIndex)
-            Call WriteUpdateSta(UserIndex)
+            If Not HungerThirstStaminaDisabled Then Call WriteUpdateSta(UserIndex)
         End If
     End With
     Exit Sub
@@ -2407,7 +2433,7 @@ Sub HechizoEstadoUsuario(ByVal UserIndex As Integer, ByRef b As Boolean)
                     Exit Sub
                 End If
             End If
-            If UserList(UserIndex).Stats.MinSta < UserList(UserIndex).Stats.MaxSta Then
+            If Not HungerThirstStaminaDisabled And UserList(UserIndex).Stats.MinSta < UserList(UserIndex).Stats.MaxSta Then
                 'Msg810= Deberás tener la barra de energía llena para poder resucitar.
                 Call WriteLocaleMsg(UserIndex, MSG_DEBERAS_TENER_BARRA_ENERGIA_LLENA_PODER_RESUCITAR, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_PROMEDIO_MAYOR)
                 b = False

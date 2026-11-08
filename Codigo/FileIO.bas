@@ -712,6 +712,8 @@ Public Sub CargarHechizos()
         ' NeuroInpifiable: por default 0 (todo hechizo puede pifiar). 1 lo hace inmune.
         Hechizos(Hechizo).NeuroInpifiable = val(Leer.GetValue("Hechizo" & Hechizo, "NeuroInpifiable"))
         Hechizos(Hechizo).MaxLevelCasteable = val(Leer.GetValue("Hechizo" & Hechizo, "MaxLevelCasteable"))
+        Hechizos(Hechizo).MinLevel = val(Leer.GetValue("Hechizo" & Hechizo, "MinLevel"))
+        Hechizos(Hechizo).FixedCooldown = val(Leer.GetValue("Hechizo" & Hechizo, "FixedCooldown"))
         If val(Leer.GetValue("Hechizo" & Hechizo, "RequireArmor")) > 0 Then Call SetMask(Hechizos(Hechizo).SpellRequirementMask, e_SpellRequirementMask.eArmor)
         If val(Leer.GetValue("Hechizo" & Hechizo, "RequireShip")) > 0 Then Call SetMask(Hechizos(Hechizo).SpellRequirementMask, e_SpellRequirementMask.eShip)
         If val(Leer.GetValue("Hechizo" & Hechizo, "RequireHelm")) > 0 Then Call SetMask(Hechizos(Hechizo).SpellRequirementMask, e_SpellRequirementMask.eHelm)
@@ -2446,6 +2448,7 @@ Sub LoadFeatureToggles()
     Dim Lector   As clsIniManager
     Dim Temporal As Long
     Set FeatureToggles = New Dictionary
+    Call WorkFatigue_ResetToggleCache
     ' 06.002 Ola 3: el check de existencia era relativo al CWD pero la carga usa IniPath;
     ' arrancado desde otra carpeta los toggles no cargaban y TODO quedaba apagado en silencio.
     If Not FileExist(IniPath & "feature_toggle.ini") Then
@@ -2776,6 +2779,8 @@ Sub LoadIntervalos()
     IntervaloTimerGuardarUsuarios = val(Lector.GetValue("INTERVALOS", "IntervaloTimerGuardarUsuarios"))
     IntervaloMensajeGlobal = val(Lector.GetValue("INTERVALOS", "IntervaloMensajeGlobal"))
     IntervalAutomatedAction = val(Lector.GetValue("INTERVALOS", "IntervalAutomatedAction"))
+    ' Work fatigue (plan 2026-11-08): missing keys fall back to 12 / 18 minutes and 5 seconds.
+    Call WorkFatigue_SetConfig(val(Lector.GetValue("WORKFATIGUE", "MinMinutos", CStr(WF_DEFAULT_MIN_MINUTES))), val(Lector.GetValue("WORKFATIGUE", "MaxMinutos", CStr(WF_DEFAULT_MAX_MINUTES))), val(Lector.GetValue("WORKFATIGUE", "SegundosDescanso", CStr(WF_DEFAULT_REST_SECONDS))))
     IntervalChangeGlobalQuestsState = val(Lector.GetValue("INTERVALOS", "IntervalChangeGlobalQuestsState"))
     IntervalPhoenixSpawn = val(Lector.GetValue("INTERVALOS", "IntervalPhoenixSpawn"))
     IntervalUnderworldSpawn = val(Lector.GetValue("INTERVALOS", "IntervalUnderworldSpawn"))
@@ -3319,6 +3324,7 @@ Public Sub SetFeatureToggle(ByVal name As String, ByVal State As Boolean)
         FeatureToggles.Remove name
     End If
     Call FeatureToggles.Add(name, State)
+    Call WorkFatigue_OnToggleChanged(name, State)
     If name = NPC_CROSS_MAP_PURSUIT_FEATURE Then
         If State Then
             Call LoadAdjacentTopology
