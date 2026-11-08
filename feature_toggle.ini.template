@@ -3,7 +3,7 @@
 ' el server lo crea desde este template al boot y lo loguea como WARNING.
 ' elemental_system viene APAGADO a proposito: encenderlo es un gate del dueno, no del deploy.
 [INIT]
-TOGGLECOUNT=43
+TOGGLECOUNT=44
 [TOGGLE1]
 name=bandit_unequip_bonus
 value=1
@@ -132,4 +132,7 @@ name=kill_regla_misma_ip
 value=1
 [TOGGLE43]
 name=kill_regla_misma_pc
+value=1
+[TOGGLE44]
+name=work_fatigue
 value=1

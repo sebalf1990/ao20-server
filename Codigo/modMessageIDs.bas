@@ -1520,3 +1520,10 @@ Public Const MSG_DENUNCIA_SATURADO As Integer = 9019
 Public Const MSG_BLODIUM_PICKAXE_REQUIRED As Integer = 597
 Public Const MSG_ONLY_ELVISH_AXE_ALLOWED As Integer = 601
 Public Const MSG_GOLD_PICKAXE_REQUIRED As Integer = 1022
+' Work fatigue / spell gates (plan 2026-11-08-reemplazo-hambre-sed-energia). Private range 9020+.
+Public Const MSG_WORK_FATIGUE_TIRED As Integer = 9020
+Public Const MSG_WORK_FATIGUE_STILL_TIRED As Integer = 9021
+Public Const MSG_WORK_FATIGUE_SMELT As Integer = 9022
+Public Const MSG_WORK_FATIGUE_RESTED As Integer = 9023
+Public Const MSG_SPELL_MIN_LEVEL As Integer = 9024
+Public Const MSG_ABILITY_NOT_AVAILABLE As Integer = 9025
