@@ -1046,7 +1046,7 @@ Public Sub HerreroConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As I
         Exit Sub
     End If
     If Not TieneProfesionAprendida(UserIndex, e_Skill.Herreria) Then
-        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_ECONOMY, e_FontTypeNames.FONTTYPE_INFO), CStr(e_Skill.Herreria)
+        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_ECONOMY, e_FontTypeNames.FONTTYPE_INFO, CStr(e_Skill.Herreria))
         Exit Sub
     End If
     If Not HerreroTieneMartilloYYunque(UserIndex) Then Exit Sub
@@ -1219,7 +1219,7 @@ Public Sub CarpinteroConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex A
         Exit Sub
     End If
     If Not TieneProfesionAprendida(UserIndex, e_Skill.Carpinteria) Then
-        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO), CStr(e_Skill.Carpinteria)
+        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO, CStr(e_Skill.Carpinteria))
         Exit Sub
     End If
     If UserList(UserIndex).flags.Privilegios And (e_PlayerType.Consejero Or e_PlayerType.SemiDios Or e_PlayerType.Dios) Then
@@ -1305,7 +1305,7 @@ Public Sub AlquimistaConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex A
         Exit Sub
     End If
     If Not TieneProfesionAprendida(UserIndex, e_Skill.Alquimia) Then
-        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO), CStr(e_Skill.Alquimia)
+        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO, CStr(e_Skill.Alquimia))
         Exit Sub
     End If
     If Not UserList(UserIndex).Stats.MinSta > 0 Then
@@ -1394,7 +1394,7 @@ Public Sub SastreConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As In
         Exit Sub
     End If
     If Not TieneProfesionAprendida(UserIndex, e_Skill.Sastreria) Then
-        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO), CStr(e_Skill.Sastreria)
+        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO, CStr(e_Skill.Sastreria))
         Exit Sub
     End If
     If Not UserList(UserIndex).Stats.MinSta > 0 Then
