@@ -508,6 +508,12 @@ Private Function PuedeLanzar(ByVal UserIndex As Integer, ByVal HechizoIndex As I
     On Error GoTo PuedeLanzar_Err
     PuedeLanzar = False
     If HechizoIndex = 0 Then Exit Function
+    ' Abilities switched off in the data (StaRequerido 5000): not available. First of all,
+    ' so a disabled ability never cancels an effect or reaches any other gate.
+    If IsSpellUnavailable(Hechizos(HechizoIndex).StaRequerido) Then
+        Call WriteLocaleMsg(UserIndex, MSG_ABILITY_NOT_AVAILABLE, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_New_Naranja)
+        Exit Function
+    End If
     With UserList(UserIndex)
         'Si lanza a un npc y este es solo atacable para clanes y el usuario no tiene clan, le avisa y sale de la funcion
         If IsValidNpcRef(.flags.TargetNPC) Then
@@ -611,31 +617,20 @@ Private Function PuedeLanzar(ByVal UserIndex As Integer, ByVal HechizoIndex As I
                 End If
             End If
         End If
-        ' Abilities switched off in the data (StaRequerido 5000): not available, before any other gate.
-        If IsSpellUnavailable(Hechizos(HechizoIndex).StaRequerido) Then
-            Call WriteLocaleMsg(UserIndex, MSG_ABILITY_NOT_AVAILABLE, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_New_Naranja)
-            Exit Function
-        End If
         If Hechizos(HechizoIndex).Cooldown > 0 And TickStampIsSet(.Counters.UserHechizosInterval(Slot)) Then
             Dim nowRaw            As Long
             Dim SegundosFaltantes As Long
             nowRaw = GetTickCountRaw()
-            Dim Cooldown As Long
-            Cooldown = Hechizos(HechizoIndex).Cooldown
+            Dim Cooldown As Double
+            Dim elvenWoodItems As Long
             'cooldown reduction for Elven Wood items (FixedCooldown spells ignore it)
-            If Hechizos(HechizoIndex).FixedCooldown = 0 Then
-                If .invent.EquippedWeaponObjIndex > 0 Then
-                    If ObjData(.invent.EquippedWeaponObjIndex).MaderaElfica > 0 Then
-                        Cooldown = Cooldown / 2
-                    End If
-                End If
-                If .invent.EquippedRingAccesoryObjIndex > 0 Then
-                    If ObjData(.invent.EquippedRingAccesoryObjIndex).MaderaElfica > 0 Then
-                        Cooldown = Cooldown / 2
-                    End If
-                End If
+            If .invent.EquippedWeaponObjIndex > 0 Then
+                If ObjData(.invent.EquippedWeaponObjIndex).MaderaElfica > 0 Then elvenWoodItems = elvenWoodItems + 1
             End If
-            Cooldown = Cooldown * 1000
+            If .invent.EquippedRingAccesoryObjIndex > 0 Then
+                If ObjData(.invent.EquippedRingAccesoryObjIndex).MaderaElfica > 0 Then elvenWoodItems = elvenWoodItems + 1
+            End If
+            Cooldown = SpellCooldown_EffectiveSeconds(Hechizos(HechizoIndex).Cooldown, Hechizos(HechizoIndex).FixedCooldown <> 0, elvenWoodItems) * 1000#
             Dim elapsedMs As Double
             elapsedMs = TicksElapsed(.Counters.UserHechizosInterval(Slot), nowRaw)
             If elapsedMs < Cooldown Then

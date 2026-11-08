@@ -28,6 +28,7 @@ Option Explicit
 ' are cleared). Lost when the server restarts (no database column).
 ' ==========================================================================
 Private m_Stamps As Dictionary
+Public Const SPELL_COOLDOWN_MAX_AGE_MINUTES As Long = 60
 
 Private Function StampKey(ByVal charName As String, ByVal spellId As Integer) As String
     StampKey = UCase$(charName) & "#" & CStr(spellId)
@@ -51,22 +52,31 @@ Public Function SpellCooldown_EffectiveSeconds(ByVal baseSeconds As Long, ByVal 
     Next i
 End Function
 
-Public Sub SpellCooldown_Store(ByVal charName As String, ByVal spellId As Integer, ByVal stampTick As Long)
+Public Sub SpellCooldown_Store(ByVal charName As String, ByVal spellId As Integer, ByVal stampTick As Long, ByVal savedAt As Date)
     If m_Stamps Is Nothing Then Set m_Stamps = New Dictionary
     Dim key As String
     key = StampKey(charName, spellId)
     If m_Stamps.Exists(key) Then m_Stamps.Remove key
-    Call m_Stamps.Add(key, stampTick)
+    Call m_Stamps.Add(key, CStr(stampTick) & "|" & Trim$(Str$(CDbl(savedAt))))
 End Sub
 
-' Returns the stored stamp and forgets it (0 when there is none).
-Public Function SpellCooldown_Take(ByVal charName As String, ByVal spellId As Integer) As Long
+' Returns the stored stamp and forgets it (0 when there is none, or when it was saved more
+' than SPELL_COOLDOWN_MAX_AGE_MINUTES ago: a long break counts as rest).
+Public Function SpellCooldown_Take(ByVal charName As String, ByVal spellId As Integer, ByVal nowDate As Date) As Long
+    On Error GoTo SpellCooldown_Take_Err
     If m_Stamps Is Nothing Then Exit Function
-    Dim key As String
+    Dim key   As String
+    Dim parts() As String
     key = StampKey(charName, spellId)
     If Not m_Stamps.Exists(key) Then Exit Function
-    SpellCooldown_Take = CLng(m_Stamps.Item(key))
+    parts = Split(CStr(m_Stamps.Item(key)), "|")
     m_Stamps.Remove key
+    If UBound(parts) <> 1 Then Exit Function
+    If (CDbl(nowDate) - val(parts(1))) * 1440# > SPELL_COOLDOWN_MAX_AGE_MINUTES Then Exit Function
+    SpellCooldown_Take = CLng(parts(0))
+    Exit Function
+SpellCooldown_Take_Err:
+    SpellCooldown_Take = 0
 End Function
 
 Public Sub SpellCooldown_OnLogout(ByVal UserIndex As Integer)
@@ -82,7 +92,7 @@ Public Sub SpellCooldown_OnLogout(ByVal UserIndex As Integer)
             If spellId > 0 Then
                 If Hechizos(spellId).Cooldown > 0 Then
                     If SpellCooldown_IsActive(.Counters.UserHechizosInterval(slot), nowTick, Hechizos(spellId).Cooldown) Then
-                        Call SpellCooldown_Store(.name, spellId, .Counters.UserHechizosInterval(slot))
+                        Call SpellCooldown_Store(.name, spellId, .Counters.UserHechizosInterval(slot), Now)
                     End If
                 End If
             End If
@@ -106,7 +116,7 @@ Public Sub SpellCooldown_OnLogin(ByVal UserIndex As Integer)
             .Counters.UserHechizosInterval(slot) = 0
             spellId = .Stats.UserHechizos(slot)
             If spellId > 0 Then
-                stamp = SpellCooldown_Take(.name, spellId)
+                stamp = SpellCooldown_Take(.name, spellId, Now)
                 If stamp <> 0 Then
                     If SpellCooldown_IsActive(stamp, nowTick, Hechizos(spellId).Cooldown) Then
                         .Counters.UserHechizosInterval(slot) = stamp

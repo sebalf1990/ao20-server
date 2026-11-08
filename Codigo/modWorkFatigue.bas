@@ -48,6 +48,9 @@ Public Const HUNGER_THIRST_STAMINA_TOGGLE As String = "disable_hunger_thirst_sta
 Public Const WF_DEFAULT_MIN_MINUTES As Long = 12
 Public Const WF_DEFAULT_MAX_MINUTES As Long = 18
 Public Const WF_DEFAULT_REST_SECONDS As Long = 5
+Public Const WF_CONFIG_MAX As Long = 600
+' Saved states older than this are dropped on login (a long break counts as rest).
+Public Const WF_STATE_MAX_AGE_MINUTES As Long = 60
 ' Longest pause between two executed work actions that still counts as continuous work.
 Public Const WF_MAX_GAP_MS As Long = 15000
 ' Minimum time between two repeated "still tired" messages (macro spam guard).
@@ -94,9 +97,13 @@ Private m_Saved        As Dictionary
 ' Config and toggle cache
 ' --------------------------------------------------------------------------
 Public Sub WorkFatigue_SetConfig(ByVal minMinutes As Long, ByVal maxMinutes As Long, ByVal restSeconds As Long)
+    ' Clamp to 1..600 so a typo in the ini can neither disable the fatigue nor overflow a Long.
     If minMinutes <= 0 Then minMinutes = WF_DEFAULT_MIN_MINUTES
+    If minMinutes > WF_CONFIG_MAX Then minMinutes = WF_CONFIG_MAX
     If maxMinutes < minMinutes Then maxMinutes = minMinutes
+    If maxMinutes > WF_CONFIG_MAX Then maxMinutes = WF_CONFIG_MAX
     If restSeconds <= 0 Then restSeconds = WF_DEFAULT_REST_SECONDS
+    If restSeconds > WF_CONFIG_MAX Then restSeconds = WF_CONFIG_MAX
     m_MinMinutes = minMinutes
     m_MaxMinutes = maxMinutes
     m_RestSeconds = restSeconds
@@ -169,7 +176,14 @@ Public Function WF_Gate(ByRef s As t_WorkFatigue, ByVal nowTick As Long, ByVal r
         Case WF_PHASE_WORKING
             Exit Function
         Case WF_PHASE_WAIT_UNEQUIP
-            WF_Gate = WF_EVT_BLOCKED_TIRED
+            If toolEquipped Then
+                WF_Gate = WF_EVT_BLOCKED_TIRED
+            Else
+                ' No tool in hand (a blacksmith can craft without one): nothing to drop, the rest starts now.
+                s.Phase = WF_PHASE_RESTING
+                s.RestStart = nowTick
+                WF_Gate = WF_EVT_BLOCKED_STILL
+            End If
         Case WF_PHASE_RESTING
             If s.NeedsUnequip Then
                 ' A tool in hand means it was equipped again before the rest was over.
@@ -224,26 +238,35 @@ Public Function WF_OnEquip(ByRef s As t_WorkFatigue, ByVal nowTick As Long, ByVa
 End Function
 
 ' Compact text form used to keep the state of a character that is offline.
-Public Function WF_Serialize(ByRef s As t_WorkFatigue) As String
-    WF_Serialize = s.Phase & "|" & s.ThresholdMs & "|" & s.ActiveMs & "|" & s.LastWorkTick & "|" & s.RestStart & "|" & IIf(s.NeedsUnequip, "1", "0")
+' The last field is the wall-clock time of the save (days as a Double, "." decimal).
+Public Function WF_Serialize(ByRef s As t_WorkFatigue, ByVal savedAt As Date) As String
+    WF_Serialize = s.Phase & "|" & s.ThresholdMs & "|" & s.ActiveMs & "|" & s.LastWorkTick & "|" & s.RestStart & "|" & IIf(s.NeedsUnequip, "1", "0") & "|" & Trim$(Str$(CDbl(savedAt)))
 End Function
 
-Public Function WF_Deserialize(ByVal Text As String, ByRef s As t_WorkFatigue) As Boolean
+' False (and a default state) when the text is corrupt or older than WF_STATE_MAX_AGE_MINUTES.
+Public Function WF_Deserialize(ByVal Text As String, ByRef s As t_WorkFatigue, ByVal nowDate As Date) As Boolean
+    On Error GoTo WF_Deserialize_Err
     Dim parts() As String
+    Dim ageMinutes As Double
     Call WF_InitState(s)
     parts = Split(Text, "|")
-    If UBound(parts) <> 5 Then Exit Function
+    If UBound(parts) <> 6 Then Exit Function
     s.Phase = val(parts(0))
     s.ThresholdMs = val(parts(1))
     s.ActiveMs = val(parts(2))
     s.LastWorkTick = CLng(parts(3))
     s.RestStart = CLng(parts(4))
     s.NeedsUnequip = (parts(5) = "1")
-    If s.Phase < WF_PHASE_WORKING Or s.Phase > WF_PHASE_RESTING Then
+    ageMinutes = (CDbl(nowDate) - val(parts(6))) * 1440#
+    If s.Phase < WF_PHASE_WORKING Or s.Phase > WF_PHASE_RESTING Or ageMinutes > WF_STATE_MAX_AGE_MINUTES Then
         Call WF_InitState(s)
         Exit Function
     End If
     WF_Deserialize = True
+    Exit Function
+WF_Deserialize_Err:
+    Call WF_InitState(s)
+    WF_Deserialize = False
 End Function
 
 Public Function WF_IsDefault(ByRef s As t_WorkFatigue) As Boolean
@@ -253,25 +276,28 @@ End Function
 ' --------------------------------------------------------------------------
 ' Offline store (by character name) - survives a relog, not a server restart
 ' --------------------------------------------------------------------------
-Public Sub WF_StoreByName(ByVal charName As String, ByRef s As t_WorkFatigue)
+Public Sub WF_StoreByName(ByVal charName As String, ByRef s As t_WorkFatigue, ByVal savedAt As Date)
     If m_Saved Is Nothing Then Set m_Saved = New Dictionary
     Dim key As String
     key = UCase$(charName)
     If m_Saved.Exists(key) Then m_Saved.Remove key
-    If Not WF_IsDefault(s) Then Call m_Saved.Add(key, WF_Serialize(s))
+    If Not WF_IsDefault(s) Then Call m_Saved.Add(key, WF_Serialize(s, savedAt))
 End Sub
 
-Public Function WF_LoadByName(ByVal charName As String, ByRef s As t_WorkFatigue) As Boolean
+Public Function WF_LoadByName(ByVal charName As String, ByRef s As t_WorkFatigue, ByVal nowDate As Date) As Boolean
     Call WF_InitState(s)
     If m_Saved Is Nothing Then Exit Function
     Dim key As String
     key = UCase$(charName)
     If Not m_Saved.Exists(key) Then Exit Function
-    WF_LoadByName = WF_Deserialize(CStr(m_Saved.Item(key)), s)
+    WF_LoadByName = WF_Deserialize(CStr(m_Saved.Item(key)), s, nowDate)
+    m_Saved.Remove key
 End Function
 
 ' --------------------------------------------------------------------------
 ' UserIndex level wrappers (game code)
+' Every public wrapper has its own error handler: an error here must never abort
+' the RunAutomatedActions loop or a work action (the gate fails open).
 ' --------------------------------------------------------------------------
 Private Sub EnsureSlot(ByVal UserIndex As Integer)
     If UserIndex <= m_Capacity Then Exit Sub
@@ -308,23 +334,38 @@ Private Sub SendRestedMessage(ByVal UserIndex As Integer)
     Call WriteLocaleMsg(UserIndex, MSG_WORK_FATIGUE_RESTED, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
 End Sub
 
+' Msg9020 takes the rest seconds as parameter 1.
+Private Sub SendTiredMessage(ByVal UserIndex As Integer)
+    Call WriteLocaleMsg(UserIndex, MSG_WORK_FATIGUE_TIRED, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO, WorkFatigue_RestSeconds())
+End Sub
+
 ' Loads the state of the character that is logging in (also clears what a previous
-' occupant of the UserIndex left behind).
+' occupant of the UserIndex left behind). States saved more than WF_STATE_MAX_AGE_MINUTES
+' ago are discarded: a long break counts as rest.
 Public Sub WorkFatigue_OnLogin(ByVal UserIndex As Integer)
+    On Error GoTo WorkFatigue_OnLogin_Err
     Call EnsureSlot(UserIndex)
-    Call WF_LoadByName(UserList(UserIndex).name, m_States(UserIndex))
+    Call WF_LoadByName(UserList(UserIndex).name, m_States(UserIndex), Now)
+    Exit Sub
+WorkFatigue_OnLogin_Err:
+    Call TraceError(Err.Number, Err.Description, "modWorkFatigue.WorkFatigue_OnLogin", Erl)
 End Sub
 
 Public Sub WorkFatigue_OnLogout(ByVal UserIndex As Integer)
+    On Error GoTo WorkFatigue_OnLogout_Err
     If UserIndex > m_Capacity Then Exit Sub
     If LenB(UserList(UserIndex).name) = 0 Then Exit Sub
-    Call WF_StoreByName(UserList(UserIndex).name, m_States(UserIndex))
+    Call WF_StoreByName(UserList(UserIndex).name, m_States(UserIndex), Now)
     Call WF_InitState(m_States(UserIndex))
+    Exit Sub
+WorkFatigue_OnLogout_Err:
+    Call TraceError(Err.Number, Err.Description, "modWorkFatigue.WorkFatigue_OnLogout", Erl)
 End Sub
 
 ' Gate used before a work action. False = do not work (the work was stopped and the
 ' player was told why).
 Public Function WorkFatigue_CanWork(ByVal UserIndex As Integer, ByVal kind As e_WorkFatigueKind) As Boolean
+    On Error GoTo WorkFatigue_CanWork_Err
     WorkFatigue_CanWork = True
     If Not WorkFatigueEnabled Then Exit Function
     Call EnsureSlot(UserIndex)
@@ -338,9 +379,7 @@ Public Function WorkFatigue_CanWork(ByVal UserIndex As Integer, ByVal kind As e_
         Case WF_EVT_BLOCKED_TIRED
             WorkFatigue_CanWork = False
             Call StopWork(UserIndex, kind)
-            If ShouldNotify(UserIndex, nowTick) Then
-                Call WriteLocaleMsg(UserIndex, MSG_WORK_FATIGUE_TIRED, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
-            End If
+            If ShouldNotify(UserIndex, nowTick) Then Call SendTiredMessage(UserIndex)
         Case WF_EVT_BLOCKED_STILL
             WorkFatigue_CanWork = False
             Call StopWork(UserIndex, kind)
@@ -348,10 +387,15 @@ Public Function WorkFatigue_CanWork(ByVal UserIndex As Integer, ByVal kind As e_
                 Call WriteLocaleMsg(UserIndex, MSG_WORK_FATIGUE_STILL_TIRED, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO, WorkFatigue_RestSeconds())
             End If
     End Select
+    Exit Function
+WorkFatigue_CanWork_Err:
+    WorkFatigue_CanWork = True
+    Call TraceError(Err.Number, Err.Description, "modWorkFatigue.WorkFatigue_CanWork", Erl)
 End Function
 
 ' Call once per work action that was really executed (not for rejected attempts).
 Public Sub WorkFatigue_RegisterWork(ByVal UserIndex As Integer, ByVal kind As e_WorkFatigueKind)
+    On Error GoTo WorkFatigue_RegisterWork_Err
     If Not WorkFatigueEnabled Then Exit Sub
     Call EnsureSlot(UserIndex)
     Dim evt As e_WorkFatigueEvent
@@ -362,17 +406,25 @@ Public Sub WorkFatigue_RegisterWork(ByVal UserIndex As Integer, ByVal kind As e_
     If kind = WF_KIND_SMELT Then
         Call WriteLocaleMsg(UserIndex, MSG_WORK_FATIGUE_SMELT, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO, WorkFatigue_RestSeconds())
     Else
-        Call WriteLocaleMsg(UserIndex, MSG_WORK_FATIGUE_TIRED, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+        Call SendTiredMessage(UserIndex)
     End If
+    Exit Sub
+WorkFatigue_RegisterWork_Err:
+    Call TraceError(Err.Number, Err.Description, "modWorkFatigue.WorkFatigue_RegisterWork", Erl)
 End Sub
 
 Public Sub WorkFatigue_OnToolUnequipped(ByVal UserIndex As Integer)
+    On Error GoTo WorkFatigue_OnToolUnequipped_Err
     If Not WorkFatigueEnabled Then Exit Sub
     Call EnsureSlot(UserIndex)
     Call WF_OnUnequip(m_States(UserIndex), GetTickCountRaw())
+    Exit Sub
+WorkFatigue_OnToolUnequipped_Err:
+    Call TraceError(Err.Number, Err.Description, "modWorkFatigue.WorkFatigue_OnToolUnequipped", Erl)
 End Sub
 
 Public Sub WorkFatigue_OnToolEquipped(ByVal UserIndex As Integer)
+    On Error GoTo WorkFatigue_OnToolEquipped_Err
     If Not WorkFatigueEnabled Then Exit Sub
     Call EnsureSlot(UserIndex)
     Dim nowTick As Long
@@ -387,14 +439,21 @@ Public Sub WorkFatigue_OnToolEquipped(ByVal UserIndex As Integer)
                 Call WriteLocaleMsg(UserIndex, MSG_WORK_FATIGUE_STILL_TIRED, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO, WorkFatigue_RestSeconds())
             End If
     End Select
+    Exit Sub
+WorkFatigue_OnToolEquipped_Err:
+    Call TraceError(Err.Number, Err.Description, "modWorkFatigue.WorkFatigue_OnToolEquipped", Erl)
 End Sub
 
 ' Periodic call (RunAutomatedActions): tells the player when the rest is over.
 Public Sub WorkFatigue_Update(ByVal UserIndex As Integer)
+    On Error GoTo WorkFatigue_Update_Err
     If Not WorkFatigueEnabled Then Exit Sub
     If UserIndex > m_Capacity Then Exit Sub
     If m_States(UserIndex).Phase <> WF_PHASE_RESTING Then Exit Sub
     If WF_Poll(m_States(UserIndex), GetTickCountRaw(), GetRestMs()) = WF_EVT_REST_DONE Then
         Call SendRestedMessage(UserIndex)
     End If
+    Exit Sub
+WorkFatigue_Update_Err:
+    Call TraceError(Err.Number, Err.Description, "modWorkFatigue.WorkFatigue_Update", Erl)
 End Sub

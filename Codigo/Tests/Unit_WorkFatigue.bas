@@ -8,6 +8,7 @@ Option Explicit
 ' rules of modSpellCooldowns and the MinLevel / 5000 guards of modHechizos.
 ' ==========================================================================
 Private Const REST_MS As Long = 5000
+Private Const TEST_NOW As Date = #6/15/2026 12:00:00 PM#
 
 Public Function test_suite_work_fatigue() As Boolean
     Call UnitTesting.RunTest("test_wf_threshold_in_range", test_wf_threshold_in_range())
@@ -27,6 +28,10 @@ Public Function test_suite_work_fatigue() As Boolean
     Call UnitTesting.RunTest("test_wf_relog_keeps_partial_count", test_wf_relog_keeps_partial_count())
     Call UnitTesting.RunTest("test_wf_default_state_not_stored", test_wf_default_state_not_stored())
     Call UnitTesting.RunTest("test_wf_bad_saved_text_is_default", test_wf_bad_saved_text_is_default())
+    Call UnitTesting.RunTest("test_wf_no_tool_in_wait_starts_rest", test_wf_no_tool_in_wait_starts_rest())
+    Call UnitTesting.RunTest("test_wf_old_saved_state_discarded", test_wf_old_saved_state_discarded())
+    Call UnitTesting.RunTest("test_wf_config_clamped", test_wf_config_clamped())
+    Call UnitTesting.RunTest("test_spell_cooldown_old_stamp_discarded", test_spell_cooldown_old_stamp_discarded())
     Call UnitTesting.RunTest("test_spell_cooldown_active_window", test_spell_cooldown_active_window())
     Call UnitTesting.RunTest("test_spell_cooldown_fixed_ignores_elven_wood", test_spell_cooldown_fixed_ignores_elven_wood())
     Call UnitTesting.RunTest("test_spell_cooldown_store_take", test_spell_cooldown_store_take())
@@ -284,8 +289,8 @@ Private Function test_wf_relog_persists_fatigue() As Boolean
     On Error GoTo Err_Handler
     Dim s As t_WorkFatigue, back As t_WorkFatigue
     Call MakeFatigued(s, True, 10000)
-    Call WF_StoreByName("Pepe_Test_Fatiga", s)
-    If Not WF_LoadByName("pepe_test_fatiga", back) Then Exit Function
+    Call WF_StoreByName("Pepe_Test_Fatiga", s, TEST_NOW)
+    If Not WF_LoadByName("pepe_test_fatiga", back, TEST_NOW) Then Exit Function
     If back.Phase <> WF_PHASE_WAIT_UNEQUIP Then Exit Function
     If Not back.NeedsUnequip Then Exit Function
     If WF_Gate(back, 99999, REST_MS, True) <> WF_EVT_BLOCKED_TIRED Then Exit Function
@@ -304,8 +309,8 @@ Private Function test_wf_relog_keeps_partial_count() As Boolean
     Call WF_RegisterWork(s, 1000, True, 1, 1)
     Call WF_RegisterWork(s, 5000, True, 1, 1)
     Call WF_RegisterWork(s, 9000, True, 1, 1)
-    Call WF_StoreByName("Pepe_Test_Parcial", s)
-    If Not WF_LoadByName("Pepe_Test_Parcial", back) Then Exit Function
+    Call WF_StoreByName("Pepe_Test_Parcial", s, TEST_NOW)
+    If Not WF_LoadByName("Pepe_Test_Parcial", back, TEST_NOW) Then Exit Function
     If back.ActiveMs <> 8000 Or back.ThresholdMs <> 60000 Then Exit Function
     ' first action after the relog (long pause): counts nothing
     Call WF_RegisterWork(back, 9000 + 300000, True, 1, 1)
@@ -320,8 +325,8 @@ Private Function test_wf_default_state_not_stored() As Boolean
     On Error GoTo Err_Handler
     Dim s As t_WorkFatigue, back As t_WorkFatigue
     Call WF_InitState(s)
-    Call WF_StoreByName("Pepe_Test_Default", s)
-    If WF_LoadByName("Pepe_Test_Default", back) Then Exit Function
+    Call WF_StoreByName("Pepe_Test_Default", s, TEST_NOW)
+    If WF_LoadByName("Pepe_Test_Default", back, TEST_NOW) Then Exit Function
     If Not WF_IsDefault(back) Then Exit Function
     test_wf_default_state_not_stored = True
     Exit Function
@@ -332,14 +337,80 @@ End Function
 Private Function test_wf_bad_saved_text_is_default() As Boolean
     On Error GoTo Err_Handler
     Dim s As t_WorkFatigue
-    If WF_Deserialize("basura", s) Then Exit Function
+    If WF_Deserialize("basura", s, TEST_NOW) Then Exit Function
     If Not WF_IsDefault(s) Then Exit Function
-    If WF_Deserialize("9|1|1|1|1|1", s) Then Exit Function
+    If WF_Deserialize("9|1|1|1|1|1|45000.5", s, TEST_NOW) Then Exit Function
     If Not WF_IsDefault(s) Then Exit Function
     test_wf_bad_saved_text_is_default = True
     Exit Function
 Err_Handler:
     test_wf_bad_saved_text_is_default = False
+End Function
+
+' Blacksmith without a tool in hand: nothing to drop, the rest starts at the next attempt.
+Private Function test_wf_no_tool_in_wait_starts_rest() As Boolean
+    On Error GoTo Err_Handler
+    Dim s As t_WorkFatigue
+    Call MakeFatigued(s, True, 10000)
+    If s.Phase <> WF_PHASE_WAIT_UNEQUIP Then Exit Function
+    If WF_Gate(s, 20000, REST_MS, False) <> WF_EVT_BLOCKED_STILL Then Exit Function
+    If s.Phase <> WF_PHASE_RESTING Then Exit Function
+    If WF_Gate(s, 24999, REST_MS, False) <> WF_EVT_BLOCKED_STILL Then Exit Function
+    If WF_Gate(s, 25000, REST_MS, False) <> WF_EVT_REST_DONE Then Exit Function
+    test_wf_no_tool_in_wait_starts_rest = True
+    Exit Function
+Err_Handler:
+    test_wf_no_tool_in_wait_starts_rest = False
+End Function
+
+' A state saved more than 60 minutes ago is dropped (a long break counts as rest).
+Private Function test_wf_old_saved_state_discarded() As Boolean
+    On Error GoTo Err_Handler
+    Dim s As t_WorkFatigue, back As t_WorkFatigue
+    Call MakeFatigued(s, True, 10000)
+    Call WF_StoreByName("Pepe_Test_Viejo", s, TEST_NOW)
+    If Not WF_LoadByName("Pepe_Test_Viejo", back, DateAdd("n", 59, TEST_NOW)) Then Exit Function
+    Call WF_StoreByName("Pepe_Test_Viejo", s, TEST_NOW)
+    If WF_LoadByName("Pepe_Test_Viejo", back, DateAdd("n", 61, TEST_NOW)) Then Exit Function
+    If Not WF_IsDefault(back) Then Exit Function
+    test_wf_old_saved_state_discarded = True
+    Exit Function
+Err_Handler:
+    test_wf_old_saved_state_discarded = False
+End Function
+
+Private Function test_wf_config_clamped() As Boolean
+    On Error GoTo Err_Handler
+    Dim oldMin As Long, oldMax As Long, oldRest As Long
+    oldMin = WorkFatigue_MinMinutes()
+    oldMax = WorkFatigue_MaxMinutes()
+    oldRest = WorkFatigue_RestSeconds()
+    Call WorkFatigue_SetConfig(0, 99999, 99999)
+    If WorkFatigue_MinMinutes() <> WF_DEFAULT_MIN_MINUTES Then GoTo Restore
+    If WorkFatigue_MaxMinutes() <> 600 Then GoTo Restore
+    If WorkFatigue_RestSeconds() <> 600 Then GoTo Restore
+    Call WorkFatigue_SetConfig(900, 5, 5)
+    If WorkFatigue_MinMinutes() <> 600 Or WorkFatigue_MaxMinutes() <> 600 Then GoTo Restore
+    Call WorkFatigue_SetConfig(3, 7, 5)
+    If WorkFatigue_MinMinutes() <> 3 Or WorkFatigue_MaxMinutes() <> 7 Then GoTo Restore
+    test_wf_config_clamped = True
+Restore:
+    Call WorkFatigue_SetConfig(oldMin, oldMax, oldRest)
+    Exit Function
+Err_Handler:
+    test_wf_config_clamped = False
+End Function
+
+Private Function test_spell_cooldown_old_stamp_discarded() As Boolean
+    On Error GoTo Err_Handler
+    Call SpellCooldown_Store("Pepe_Test_Cd2", 14, 777, TEST_NOW)
+    If SpellCooldown_Take("Pepe_Test_Cd2", 14, DateAdd("n", 59, TEST_NOW)) <> 777 Then Exit Function
+    Call SpellCooldown_Store("Pepe_Test_Cd2", 14, 777, TEST_NOW)
+    If SpellCooldown_Take("Pepe_Test_Cd2", 14, DateAdd("n", 61, TEST_NOW)) <> 0 Then Exit Function
+    test_spell_cooldown_old_stamp_discarded = True
+    Exit Function
+Err_Handler:
+    test_spell_cooldown_old_stamp_discarded = False
 End Function
 
 Private Function test_spell_cooldown_active_window() As Boolean
@@ -370,11 +441,11 @@ End Function
 
 Private Function test_spell_cooldown_store_take() As Boolean
     On Error GoTo Err_Handler
-    Call SpellCooldown_Store("Pepe_Test_Cd", 14, 123456)
-    If SpellCooldown_Take("pepe_test_cd", 15) <> 0 Then Exit Function
-    If SpellCooldown_Take("pepe_test_cd", 14) <> 123456 Then Exit Function
+    Call SpellCooldown_Store("Pepe_Test_Cd", 14, 123456, TEST_NOW)
+    If SpellCooldown_Take("pepe_test_cd", 15, TEST_NOW) <> 0 Then Exit Function
+    If SpellCooldown_Take("pepe_test_cd", 14, TEST_NOW) <> 123456 Then Exit Function
     ' taken once: gone
-    If SpellCooldown_Take("pepe_test_cd", 14) <> 0 Then Exit Function
+    If SpellCooldown_Take("pepe_test_cd", 14, TEST_NOW) <> 0 Then Exit Function
     test_spell_cooldown_store_take = True
     Exit Function
 Err_Handler:
