@@ -210,6 +210,7 @@ Sub LimpiarInventario(ByVal UserIndex As Integer)
         .invent.EquippedWeaponSlot = 0
         .invent.EquippedWorkingToolObjIndex = 0
         .invent.EquippedWorkingToolSlot = 0
+        Call WorkFatigue_OnToolUnequipped(UserIndex)
         .invent.EquippedHelmetObjIndex = 0
         .invent.EquippedHelmetSlot = 0
         .invent.EquippedShieldObjIndex = 0
@@ -810,6 +811,7 @@ Dim obj                         As t_ObjData
                             Call WriteMacroTrabajoToggle(UserIndex, False)
                         End If
                         Call ResetUserAutomatedActions(UserIndex)
+                        Call WorkFatigue_OnToolUnequipped(UserIndex)
                         .Char.WeaponAnim = NingunArma
                         If .flags.Montado = 0 Then
                             Call ChangeUserChar(UserIndex, .Char.body, .Char.head, .Char.Heading, .Char.WeaponAnim, .Char.ShieldAnim, .Char.CascoAnim, .Char.CartAnim, .Char.BackpackAnim)
@@ -1372,6 +1374,7 @@ Dim Ropaje                      As Integer
                 .invent.Object(Slot).Equipped = 1
                 .invent.EquippedWorkingToolObjIndex = ObjIndex
                 .invent.EquippedWorkingToolSlot = Slot
+                If Not UserIsLoggingIn Then Call WorkFatigue_OnToolEquipped(UserIndex)
                 If .flags.Montado = 0 Then
                     If .flags.Navegando = 0 Then
                         .Char.WeaponAnim = obj.WeaponAnim
@@ -2943,7 +2946,7 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
                 End If
                 If ClasePuedeUsarItem(UserIndex, .invent.Object(Slot).ObjIndex, Slot) And RazaPuedeUsarItem(UserIndex, .invent.Object(Slot).ObjIndex, Slot) Then
                     'If .Stats.MaxMAN > 0 Then
-                    If .Stats.MinHam > 0 And .Stats.MinAGU > 0 Then
+                    If HungerThirstStaminaDisabled Or (.Stats.MinHam > 0 And .Stats.MinAGU > 0) Then
                         Call AgregarHechizo(UserIndex, Slot)
                         Call UpdateUserInv(False, UserIndex, Slot)
                     Else
@@ -3110,10 +3113,12 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
                 End If
                 Call WarpUserChar(UserIndex, obj.HastaMap, obj.HastaX, obj.HastaY, True)
                 'Msg921= Has viajado por varios días, te sientes exhausto!
-                Call WriteLocaleMsg(UserIndex, MSG_VIAJADO_VARIOS_DIAS_SIENTES_EXHAUSTO, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_PROMEDIO_MAYOR)
-                .Stats.MinAGU = 0
-                .Stats.MinHam = 0
-                Call WriteUpdateHungerAndThirst(UserIndex)
+                If Not HungerThirstStaminaDisabled Then
+                    Call WriteLocaleMsg(UserIndex, MSG_VIAJADO_VARIOS_DIAS_SIENTES_EXHAUSTO, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_PROMEDIO_MAYOR)
+                    .Stats.MinAGU = 0
+                    .Stats.MinHam = 0
+                    Call WriteUpdateHungerAndThirst(UserIndex)
+                End If
                 Call QuitarUserInvItem(UserIndex, Slot, 1)
                 Call UpdateUserInv(False, UserIndex, Slot)
             Case e_OBJType.otRecallStones

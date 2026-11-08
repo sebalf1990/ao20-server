@@ -1684,7 +1684,7 @@ Public Sub TimerQuestOrco()
                     Dim Prob As Long, estimatedProb As Long
                     Prob = RandomNumber(1, LastUser)
                     estimatedProb = LastUser / 3
-                    If Prob < estimatedProb And Not EsGM(UserIndex) Then
+                    If Prob < estimatedProb And Not EsGM(UserIndex) And Not HungerThirstStaminaDisabled Then
                         UserList(UserIndex).Stats.MinHam = 0
                         UserList(UserIndex).Stats.MinAGU = 0
                         Call WriteUpdateHungerAndThirst(UserIndex)

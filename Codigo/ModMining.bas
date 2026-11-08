@@ -74,6 +74,7 @@ Public Sub MineMinerals(ByVal UserIndex As Integer)
             Call SendData(SendTarget.ToPCAliveArea, UserIndex, PrepareMessagePlayWave(e_SoundEffects.FailToExtractOre, .pos.x, .pos.y))
         End If
         .Counters.Trabajando = .Counters.Trabajando + 1
+        Call WorkFatigue_RegisterWork(UserIndex, WF_KIND_TOOL_AUTO)
         Call SubirSkill(UserIndex, e_Skill.Mineria)
     End With
     Exit Sub

@@ -315,6 +315,7 @@ Public Sub ConnectUser_Prepare(ByVal UserIndex As Integer, ByVal name As String)
         .Char.FX = 0
         .Counters.CuentaRegresiva = -1
         .name = name
+        Call WorkFatigue_OnLogin(UserIndex)
         Dim UserRef As New clsUserRefWrapper
         UserRef.SetFromIndex (UserIndex)
         Set m_NameIndex(UCase$(name)) = UserRef
@@ -335,6 +336,7 @@ Dim tStr                        As String
     
     ConnectUser_Complete = False
     Call SendData(SendTarget.ToIndex, UserIndex, PrepareActiveToggles)
+    Call SpellCooldown_OnLogin(UserIndex)
     
     With UserList(UserIndex)
 #If LOGIN_STRESS_TEST = 1 Then
@@ -941,10 +943,12 @@ Sub RevivirUsuario(ByVal UserIndex As Integer, Optional ByVal MedianteHechizo As
                 .Stats.MinHp = .Stats.MaxHp
             Else
                 .Stats.MinHp = 1
-                .Stats.MinHam = 0
-                .Stats.MinAGU = 0
+                If Not HungerThirstStaminaDisabled Then
+                    .Stats.MinHam = 0
+                    .Stats.MinAGU = 0
+                End If
                 .Stats.MinMAN = 0
-                Call WriteUpdateHungerAndThirst(UserIndex)
+                If Not HungerThirstStaminaDisabled Then Call WriteUpdateHungerAndThirst(UserIndex)
             End If
         End If
         Call WriteUpdateHP(UserIndex)
@@ -1277,7 +1281,7 @@ Sub CheckUserLevel(ByVal UserIndex As Integer)
                 'Msg197=Has ganado ¬1 puntos de vida. Tu vida actual es: ¬2
                 Call WriteLocaleMsg(UserIndex, MSG_GANADO_PUNTOS_VIDA_VIDA_ACTUAL, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_PROMEDIO_MAYOR, AumentoHP & "¬" & .Stats.MaxHp)
             End If
-            If AumentoSta > 0 Then
+            If AumentoSta > 0 And Not HungerThirstStaminaDisabled Then
                 'Msg198=Has ganado ¬1 puntos de energía. Tu energía actual es: ¬2
                 Call WriteLocaleMsg(UserIndex, MSG_GANADO_PUNTOS_ENERGIA_ENERGIA_ACTUAL, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_PROMEDIO_MAYOR, AumentoSta & "¬" & .Stats.MaxSta)
             End If
@@ -1896,7 +1900,7 @@ Sub UserDie(ByVal UserIndex As Integer)
         'Quitar el dialogo del user muerto
         Call SendData(SendTarget.ToPCArea, UserIndex, PrepareMessageRemoveCharDialog(.Char.charindex))
         .Stats.MinHp = 0
-        .Stats.MinSta = 0
+        If Not HungerThirstStaminaDisabled Then .Stats.MinSta = 0
         .Stats.shield = 0
         .flags.AtacadoPorUser = 0
         .flags.incinera = 0
@@ -1919,7 +1923,7 @@ Sub UserDie(ByVal UserIndex As Integer)
         Call ClearModifiers(.Modifiers)
         .flags.Muerto = 1
         Call WriteUpdateHP(UserIndex)
-        Call WriteUpdateSta(UserIndex)
+        If Not HungerThirstStaminaDisabled Then Call WriteUpdateSta(UserIndex)
         Call ClearAttackerNpc(UserIndex)
         '<< Guardar o matar mascotas >>
         Call HandleUserPetsOnDeath(UserIndex)
@@ -3189,7 +3193,7 @@ End Function
 Public Function ModifyStamina(ByVal UserIndex As Integer, ByVal amount As Integer, ByVal CancelIfNotEnought As Boolean, Optional ByVal MinValue = 0) As Boolean
     ' Toggle: con stamina desactivada retornamos False (no cancelado).
     ' True implicaria 'no alcanzo la sta' y abortaria DoTs con TickStaminaConsumption.
-    If IsFeatureEnabled("disable_hunger_thirst_stamina") Then
+    If HungerThirstStaminaDisabled Then
         ModifyStamina = False
         Exit Function
     End If

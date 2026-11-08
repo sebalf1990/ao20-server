@@ -1305,6 +1305,9 @@ Sub ClearAndSaveUser(ByVal UserIndex As Integer)
         'Save statistics
         'Call Statistics.UserDisconnected(UserIndex)
         ' Grabamos el personaje del usuario
+        errordesc = "ERROR AL GUARDAR FATIGA Y COOLDOWNS"
+        Call WorkFatigue_OnLogout(UserIndex)
+        Call SpellCooldown_OnLogout(UserIndex)
         errordesc = "ERROR AL GRABAR PJ"
         Call SaveUser(UserIndex, True)
     End With
