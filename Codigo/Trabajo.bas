@@ -1276,6 +1276,8 @@ Public Sub AlquimistaConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex A
     On Error GoTo AlquimistaConstruirItem_Err
     Call VigiaFuente(UserIndex, "trabajo")  ' E2 vigia (modVigia)
     If Not WorkFatigue_CanWork(UserIndex, WF_KIND_CRAFT) Then Exit Sub
+    ' Plan 2026-11-08-revision-profesiones-y-navegacion: same craft interval as the other 3 trades (alchemy had none).
+    If Not IntervaloPermiteTrabajarConstruir(UserIndex) Then Exit Sub
     ' Plan 04.001: gate de ejecucion, no solo al equipar la herramienta.
     ' Plan 27.001 (05.002 wave 7): no working inside a duel or an event. It goes at the top, next to
     ' the profession gate: this Sub's error handler ends in Resume Next, so an Exit Sub placed among
