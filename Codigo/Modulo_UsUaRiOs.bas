@@ -645,9 +645,13 @@ Dim tStr                        As String
             For iSlot = 1 To UBound(.invent.Object)
                 If .invent.Object(iSlot).ObjIndex > 0 Then
                     If ObjData(.invent.Object(iSlot).ObjIndex).OBJType = otShips And ObjData(.invent.Object(iSlot).ObjIndex).Subtipo > 0 Then
-                        .invent.EquippedShipObjIndex = .invent.Object(iSlot).ObjIndex
-                        .invent.EquippedShipSlot = iSlot
-                        Exit For
+                        ' Plan 2026-11-08-revision-profesiones-y-navegacion: only a ship this character may use (level, class,
+                        ' faction), same check as UseInvItem. With none, the old "no ship" path stays.
+                        If CanUseObject(UserIndex, .invent.Object(iSlot).ObjIndex) = 0 Then
+                            .invent.EquippedShipObjIndex = .invent.Object(iSlot).ObjIndex
+                            .invent.EquippedShipSlot = iSlot
+                            Exit For
+                        End If
                     End If
                 End If
             Next
