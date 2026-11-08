@@ -7279,7 +7279,8 @@ Private Sub HandleInvitarGrupo(ByVal UserIndex As Integer)
             'Msg77=¡¡Estás muerto!!.
             Call WriteLocaleMsg(UserIndex, MSG_MUERTO, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         Else
-            If .Grupo.CantidadMiembros <= UBound(.Grupo.Miembros) Then
+            ' Plan 2026-11-08-revision-profesiones-y-navegacion: cap of 5 (the old check let a full group of 6 keep inviting).
+            If .Grupo.CantidadMiembros < MAX_GROUP_MEMBERS Then
                 Call WriteWorkRequestTarget(UserIndex, e_Skill.Grupo)
             Else
                 ' Msg751=¡No podés invitar a más personas!

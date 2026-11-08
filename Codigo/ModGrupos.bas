@@ -59,8 +59,8 @@ Public Sub InvitarMiembro(ByVal UserIndex As Integer, ByVal InvitadoIndex As Int
         Call WriteLocaleMsg(UserIndex, MSG_USUARIO_DEBE_DESACTIVAR_SEGURO_GRUPOS_PODER_INVITARLO, e_TextChannel.TEXTCHANNEL_GROUP, e_FontTypeNames.FONTTYPE_New_GRUPO) ' Msg2044="El usuario debe desactivar el seguro de grupos para poder invitarlo."
         Exit Sub
     End If
-    If Remitente.Grupo.CantidadMiembros >= UBound(Remitente.Grupo.Miembros) Then
-        Call WriteLocaleMsg(UserIndex, MSG_PUEDES_INVITAR_MAS_PERSONAS_LIMITE, e_TextChannel.TEXTCHANNEL_GROUP, e_FontTypeNames.FONTTYPE_New_GRUPO, CStr(UBound(Remitente.Grupo.Miembros))) ' Msg2045="No puedes invitar a mas personas. (Límite: ¬1)"
+    If Remitente.Grupo.CantidadMiembros >= MAX_GROUP_MEMBERS Then
+        Call WriteLocaleMsg(UserIndex, MSG_PUEDES_INVITAR_MAS_PERSONAS_LIMITE, e_TextChannel.TEXTCHANNEL_GROUP, e_FontTypeNames.FONTTYPE_New_GRUPO, CStr(MAX_GROUP_MEMBERS)) ' Msg2045="No puedes invitar a mas personas. (Límite: ¬1)"
         Exit Sub
     End If
     If (Status(UserIndex) = 0 And Status(InvitadoIndex) = 1) Or (Status(UserIndex) = 1 And Status(InvitadoIndex) = 0) Or (Status(UserIndex) = 1 And Status(InvitadoIndex) = 2) Or _
@@ -488,6 +488,15 @@ Public Sub AddUserToGRoup(ByVal UserIndex As Integer, ByVal GroupLiderIndex As I
             Exit Sub
         End If
     Next Index
+    ' Plan 2026-11-08-revision-profesiones-y-navegacion: the cap is checked again on accept. Several invitations sent
+    ' while there was room could all be accepted and overflow the group.
+    If UserList(GroupLiderIndex).Grupo.CantidadMiembros >= MAX_GROUP_MEMBERS Then
+        ' Msg724=Servidor: solicitud de grupo invalida, reintente...
+        Call WriteLocaleMsg(UserIndex, MSG_SERVIDOR_SOLICITUD_GRUPO_INVALIDA_REINTENTE, e_TextChannel.TEXTCHANNEL_GROUP, e_FontTypeNames.FONTTYPE_New_GRUPO)
+        ' Msg2045=No puedes invitar a mas personas. (Limite: 1)
+        Call WriteLocaleMsg(GroupLiderIndex, MSG_PUEDES_INVITAR_MAS_PERSONAS_LIMITE, e_TextChannel.TEXTCHANNEL_GROUP, e_FontTypeNames.FONTTYPE_New_GRUPO, CStr(MAX_GROUP_MEMBERS))
+        Exit Sub
+    End If
     UserList(GroupLiderIndex).Grupo.CantidadMiembros = UserList(GroupLiderIndex).Grupo.CantidadMiembros + 1
     Call SetUserRef(UserList(GroupLiderIndex).Grupo.Miembros(UserList(GroupLiderIndex).Grupo.CantidadMiembros), UserIndex)
     Call SetUserRef(UserList(UserIndex).Grupo.Lider, GroupLiderIndex)

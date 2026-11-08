@@ -3308,6 +3308,10 @@ Public Type t_UserPersistSnapshot
     LastQuestsDone() As Integer
 End Type
 
+' Plan 2026-11-08-revision-profesiones-y-navegacion: party cap is 5. Miembros keeps 6 slots on purpose: the client reads
+' a variable count, TCP.bas clears slot 6, and a group of 6 made before the change stays valid.
+Public Const MAX_GROUP_MEMBERS As Byte = 5
+
 Type Tgrupo
     EnGrupo As Boolean
     CantidadMiembros As Byte
