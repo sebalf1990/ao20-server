@@ -35,16 +35,9 @@ End Function
 
 Public Sub InvitarMiembro(ByVal UserIndex As Integer, ByVal InvitadoIndex As Integer)
     On Error GoTo InvitarMiembro_Err
-    Dim skillsNecesarios As Integer
     Dim Remitente        As t_User: Remitente = UserList(UserIndex)
     Dim Invitado         As t_User: Invitado = UserList(InvitadoIndex)
-    ' Comentando linea importante abajo, solo temporalmente hasta que el sistema de grupo nuevo este implementado 3/5/2025 - ako
-    ' skillsNecesarios = 15 - Remitente.Stats.UserAtributos(e_Atributos.Carisma) \ 2
-    skillsNecesarios = 0
-    If Remitente.Stats.UserSkills(e_Skill.liderazgo) < skillsNecesarios Then
-        Call WriteLocaleMsg(UserIndex, MSG_FALTAN_PUNTOS_LIDERAZGO_LIDERAR_GRUPO, e_TextChannel.TEXTCHANNEL_GROUP, e_FontTypeNames.FONTTYPE_New_GRUPO, (skillsNecesarios - Remitente.Stats.UserSkills(e_Skill.liderazgo))) ' Msg2041="Te faltan ¬1 puntos en Liderazgo para liderar un grupo."
-        Exit Sub
-    End If
+    ' Plan 2026-11-08-revision-profesiones-y-navegacion: leading a group needs no Leadership points (Msg2041 retired).
     'HarThaoS: Si invita a un gm no lo dejo
     If EsGM(InvitadoIndex) Then
         Call WriteLocaleMsg(UserIndex, MSG_PUEDES_INVITAR_GRUPO_GM, e_TextChannel.TEXTCHANNEL_GROUP, e_FontTypeNames.FONTTYPE_New_GRUPO) ' Msg2042="No puedes invitar a un grupo a un GM."
@@ -69,19 +62,11 @@ Public Sub InvitarMiembro(ByVal UserIndex As Integer, ByVal InvitadoIndex As Int
         Call WriteLocaleMsg(UserIndex, MSG_PODES_CREAR_GRUPO_PERSONAJES_DIFERENTES_FACCIONES, e_TextChannel.TEXTCHANNEL_GROUP, e_FontTypeNames.FONTTYPE_New_GRUPO) ' Msg2046="No podes crear un grupo con personajes de diferentes facciones."
         Exit Sub
     End If
-    If (CInt(Remitente.Stats.UserSkills(e_Skill.liderazgo)) >= (15 - Remitente.Stats.UserAtributos(e_Atributos.Carisma) / 2)) Then
-        ' Si el lider tiene liderazgo asignado segun su raza, se permite una diferencia de 1 nivel mas
-        If Abs(CInt(Invitado.Stats.ELV) - CInt(Remitente.Stats.ELV)) > (SvrConfig.GetValue("PartyELVwLeadership")) Then
-            'Msg1438=No podes crear un grupo con personajes con diferencia de más de ¬1 niveles.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_PODES_CREAR_GRUPO_PERSONAJES_DIFERENCIA_MAS_NIVELES, e_TextChannel.TEXTCHANNEL_GROUP, e_FontTypeNames.FONTTYPE_New_GRUPO, SvrConfig.GetValue("PartyELVwLeadership"))
-            Exit Sub
-        End If
-    Else
-        If Abs(CInt(Invitado.Stats.ELV) - CInt(Remitente.Stats.ELV)) > SvrConfig.GetValue("PartyELV") Then
-            'Msg1438=No podes crear un grupo con personajes con diferencia de más de ¬1 niveles.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_PODES_CREAR_GRUPO_PERSONAJES_DIFERENCIA_MAS_NIVELES, e_TextChannel.TEXTCHANNEL_GROUP, e_FontTypeNames.FONTTYPE_New_GRUPO, SvrConfig.GetValue("PartyELV"))
-            Exit Sub
-        End If
+    ' Plan 2026-11-08-revision-profesiones-y-navegacion: one level gap for everyone (PartyELV, 5); Leadership is ignored.
+    If Abs(CInt(Invitado.Stats.ELV) - CInt(Remitente.Stats.ELV)) > SvrConfig.GetValue("PartyELV") Then
+        'Msg1438=No podes crear un grupo con personajes con diferencia de mas de 1 niveles.
+        Call WriteLocaleMsg(UserIndex, MSG_NO_PODES_CREAR_GRUPO_PERSONAJES_DIFERENCIA_MAS_NIVELES, e_TextChannel.TEXTCHANNEL_GROUP, e_FontTypeNames.FONTTYPE_New_GRUPO, SvrConfig.GetValue("PartyELV"))
+        Exit Sub
     End If
     If Invitado.Grupo.EnGrupo Then
         Call WriteLocaleMsg(UserIndex, MSG_CHARACTER_ALREADY_IN_GROUP, e_TextChannel.TEXTCHANNEL_GROUP, e_FontTypeNames.FONTTYPE_New_GRUPO)
