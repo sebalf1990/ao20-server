@@ -1937,7 +1937,7 @@ Private Sub CalcularDarExpGrupal(ByVal UserIndex As Integer, ByVal NpcIndex As I
             ExpaDar = ExpaDar * SvrConfig.GetValue("ExpMult")
         End If
         ExpaDar = ExpaDar / CantidadMiembrosValidos
-        Dim ExpUser As Long, DeltaLevel As Integer, ExpBonusForUser As Double
+        Dim ExpUser As Long, DeltaLevel As Integer
         If ExpaDar > 0 Then
             For i = 1 To UserList(LiderIndex).Grupo.CantidadMiembros
                 If IsValidUserRef(UserList(LiderIndex).Grupo.Miembros(i)) Then
@@ -1973,12 +1973,9 @@ Private Sub CalcularDarExpGrupal(ByVal UserIndex As Integer, ByVal NpcIndex As I
                                     End If
                                 End If
                                 
-                                If (UserList(Index).Stats.UserSkills(e_Skill.liderazgo) >= (15 - UserList(Index).Stats.UserAtributos(e_Atributos.Carisma) / 2)) Then
-                                    ExpBonusForUser = ExpUser * SvrConfig.GetValue("LeadershipExpPartyBonus")
-                                    UserList(Index).Stats.Exp = UserList(Index).Stats.Exp + ExpBonusForUser
-                                Else
-                                    UserList(Index).Stats.Exp = UserList(Index).Stats.Exp + ExpUser
-                                End If
+                                ' Plan 2026-11-08-revision-profesiones-y-navegacion: no party exp bonus for anyone (it hung on the
+                                ' hidden Leadership skill).
+                                UserList(Index).Stats.Exp = UserList(Index).Stats.Exp + ExpUser
                                 If UserList(Index).Stats.Exp > MAXEXP Then UserList(Index).Stats.Exp = MAXEXP
                                 If UserList(Index).ChatCombate = 1 Then
                                     Call WriteLocaleMsg(Index, MSG_EL_GRUPO_HA_GANADO_PUNTOS_DE_EXPERIENCIA, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT, ExpUser)
