@@ -63,7 +63,8 @@ Public Function CanUseObject(ByVal UserIndex As Integer, ByVal ObjIndex As Integ
         ElseIf Not ClasePuedeUsarItem(UserIndex, ObjIndex) Then
             CanUseObject = 2
             If IsFeatureEnabled("professions_learnable") And ProfesionDelItem(ObjIndex) > 0 Then
-                msg = CStr(MSG_PROF_ITEM_NO_USABLE) ' No podes usar este item sin aprender la profesion requerida.
+                msg = CStr(MSG_PROF_ITEM_NO_USABLE) ' Msg9007: needs the profession (param 1 = skill id, the client shows its localized name).
+                Extra = CStr(ProfesionDelItem(ObjIndex))
             Else
                 msg = "265"  ' Class cannot use this item.
             End If
@@ -390,7 +391,7 @@ Public Function CanDeliverSpecialFish(ByVal UserIndex As Integer, ByVal NpcIndex
     If Not EnsureNpcWithinDistance(UserIndex, NpcIndex, 4, MSG_DEMASIADO_LEJOS_1163, e_FontTypeNames.FONTTYPE_New_Naranja) Then Exit Function
     If IsFeatureEnabled("professions_learnable") Then
         If Not TieneProfesionAprendida(UserIndex, e_Skill.Pescar) Then
-            Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO, CStr(e_Skill.Pescar))
             Exit Function
         End If
     ElseIf UserList(UserIndex).clase <> Trabajador Then

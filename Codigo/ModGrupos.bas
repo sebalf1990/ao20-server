@@ -476,8 +476,8 @@ Public Sub AddUserToGRoup(ByVal UserIndex As Integer, ByVal GroupLiderIndex As I
     ' Plan 2026-11-08-revision-profesiones-y-navegacion: the cap is checked again on accept. Several invitations sent
     ' while there was room could all be accepted and overflow the group.
     If UserList(GroupLiderIndex).Grupo.CantidadMiembros >= MAX_GROUP_MEMBERS Then
-        ' Msg724=Servidor: solicitud de grupo invalida, reintente...
-        Call WriteLocaleMsg(UserIndex, MSG_SERVIDOR_SOLICITUD_GRUPO_INVALIDA_REINTENTE, e_TextChannel.TEXTCHANNEL_GROUP, e_FontTypeNames.FONTTYPE_New_GRUPO)
+        ' Msg9027=El grupo ya esta completo (maximo {0}).
+        Call WriteLocaleMsg(UserIndex, MSG_GRUPO_COMPLETO, e_TextChannel.TEXTCHANNEL_GROUP, e_FontTypeNames.FONTTYPE_New_GRUPO, CStr(MAX_GROUP_MEMBERS))
         ' Msg2045=No puedes invitar a mas personas. (Limite: 1)
         Call WriteLocaleMsg(GroupLiderIndex, MSG_PUEDES_INVITAR_MAS_PERSONAS_LIMITE, e_TextChannel.TEXTCHANNEL_GROUP, e_FontTypeNames.FONTTYPE_New_GRUPO, CStr(MAX_GROUP_MEMBERS))
         Exit Sub

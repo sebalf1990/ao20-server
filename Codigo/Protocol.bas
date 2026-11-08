@@ -2895,7 +2895,7 @@ Private Sub HandleWork(ByVal UserIndex As Integer)
         If IsFeatureEnabled("professions_learnable") Then
             If Skill = e_Skill.Pescar Or Skill = e_Skill.Talar Or Skill = e_Skill.Mineria Or Skill = e_Skill.Carpinteria Or Skill = e_Skill.Herreria Or Skill = e_Skill.Sastreria Or Skill = e_Skill.Alquimia Then
                 If Not TieneProfesionAprendida(UserIndex, CInt(Skill)) Then
-                    Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+                    Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO, CStr(CInt(Skill)))
                     Exit Sub
                 End If
             End If
@@ -8814,7 +8814,7 @@ Public Function HandleStartAutomatedAction(ByVal UserIndex As Integer)
     If IsFeatureEnabled("professions_learnable") Then
         If skill = e_Skill.Pescar Or skill = e_Skill.Talar Or skill = e_Skill.Mineria Then
             If Not TieneProfesionAprendida(UserIndex, CInt(skill)) Then
-                Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+                Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO, CStr(CInt(skill)))
                 Exit Function
             End If
         End If

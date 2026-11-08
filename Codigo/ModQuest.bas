@@ -748,7 +748,7 @@ Public Function CanUserAcceptQuest(ByVal UserIndex As Integer, ByVal NpcIndex As
             ' Si la quest no declara RequiredProfession (=0), no se restringe por clase.
             If tmpQuest.RequiredProfession > 0 Then
                 If Not TieneProfesionAprendida(UserIndex, tmpQuest.RequiredProfession) Then
-                    Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_QUEST, e_FontTypeNames.FONTTYPE_INFOBOLD)
+                    Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_QUEST, e_FontTypeNames.FONTTYPE_INFOBOLD, CStr(tmpQuest.RequiredProfession))
                     Exit Function
                 End If
             End If
