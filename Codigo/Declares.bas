@@ -2022,6 +2022,11 @@ Public Type t_EffectOverTime
     Type As e_EffectOverTimeType
     SharedTypeId As e_EotTypeId
     Limit As e_EOTTargetLimit
+    ' D8 (plan revision-motor-elemental): familia de efecto (1 Quemadura, 2 Congelacion, 3 Corrosion,
+    ' 4 Sangrado; 0 = sin familia) y nivel dentro de la familia (1 Leve .. 4 Mayor). Por blanco y por
+    ' caster solo puede haber una instancia por familia: la de mayor nivel manda.
+    Family As Byte
+    Level As Byte
     SubType As Integer
     TickPowerMin As Single
     TickPowerMax As Single
@@ -2927,6 +2932,11 @@ Public Type t_UserFlags
     PoisonMinorActive As Byte
     PoisonHemoStacks As Integer
     PoisonNeuroActive As Byte
+    ' D7: foto de los parametros reales de los venenos activos (texto compacto, ver
+    ' EffectsOverTime.BuildPoisonSnapshot). PoisonStateTaken = la foto se tomo antes de limpiar los
+    ' efectos al desloguear; si no, el guardado la arma de los efectos vivos.
+    PoisonState As String
+    PoisonStateTaken As Boolean
     ' Penalidades activas de Neuro (cacheadas para no consultar EOT en cada calculo)
     PoisonNeuroPenalidadPunteriaPct As Long
     PoisonNeuroPenalidadEvasionPct As Long

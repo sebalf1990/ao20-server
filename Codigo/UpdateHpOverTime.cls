@@ -349,7 +349,7 @@ Public Sub PerformAction()
             TickHP = -modElementalCombat.ApplyDotTickResist(False, DotInfo.TargetRef.ArrayIndex, DotDamageType, Abs(TickHP))
         End If
         If DotDamageType <= 0 Or TickHP <> 0 Then
-            If IsValidRef(Source) Then
+            If EffectsOverTime.DotSourceCanCredit(Source, UserList(DotInfo.TargetRef.ArrayIndex).pos.Map) Then
                 Call UserMod.DoDamageOrHeal(DotInfo.TargetRef.ArrayIndex, Source.ArrayIndex, Source.RefType, TickHP, e_dot, DotInfo.EotId, DamageColor:=TickDmgColor)
             Else
                 Call UserMod.DoDamageOrHeal(DotInfo.TargetRef.ArrayIndex, 0, e_ReferenceType.eNone, TickHP, e_dot, DotInfo.EotId, DamageColor:=TickDmgColor)
@@ -382,7 +382,7 @@ Public Sub PerformAction()
         If DotDamageType <= 0 Or TickHP <> 0 Then
             ' Plan 03.001 M2: se propaga DotDamageType (ya calculado por M6) para que Msg2211
             ' resuelva el nombre del tipo por id, no por color.
-            If IsValidRef(Source) Then
+            If EffectsOverTime.DotSourceCanCredit(Source, NpcList(DotInfo.TargetRef.ArrayIndex).pos.Map) Then
                 Call NPCs.DoDamageOrHeal(DotInfo.TargetRef.ArrayIndex, Source.ArrayIndex, Source.RefType, TickHP, e_dot, DotInfo.EotId, TickDmgColor, DotDamageType)
             Else
                 Call NPCs.DoDamageOrHeal(DotInfo.TargetRef.ArrayIndex, 0, e_ReferenceType.eNone, TickHP, e_dot, DotInfo.EotId, TickDmgColor, DotDamageType)

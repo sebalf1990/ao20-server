@@ -1389,6 +1389,177 @@ FindEffectOnTarget_Err:
     Call TraceError(Err.Number, Err.Description, "EffectsOverTime.FindEffectOnTarget", Erl)
 End Function
 
+' ============================================================================
+' D8 (plan revision-motor-elemental): una instancia por familia de efecto y por caster.
+' Familia/Nivel salen de EffectsOverTime.dat (Familia=, Nivel=). Busca en la lista del blanco un
+' efecto del MISMO caster y de la MISMA familia que EffectId. Si el existente tiene nivel menor que
+' el que llega, lo remueve (el llamador crea el nuevo; devuelve Nothing). Si es igual o mayor
+' devuelve el existente para que el llamador solo lo refresque (nunca baja de nivel). Otro caster
+' no se ve afectado: cada caster mantiene su propia instancia.
+' ============================================================================
+Public Function ResolveFamilyEffect(ByVal CasterIndex As Integer, ByVal CasterType As e_ReferenceType, ByRef EffectList As t_EffectOverTimeList, ByVal EffectId As Integer) As IBaseEffectOverTime
+    On Error GoTo ResolveFamilyEffect_Err
+    Set ResolveFamilyEffect = Nothing
+    If EffectId < LBound(EffectOverTime) Or EffectId > UBound(EffectOverTime) Then Exit Function
+    Dim family As Byte
+    family = EffectOverTime(EffectId).Family
+    If family = 0 Or CasterIndex <= 0 Then Exit Function
+    Dim i As Integer
+    Dim otherId As Integer
+    Dim sameCaster As Boolean
+    For i = 0 To EffectList.EffectCount - 1
+        If Not EffectList.EffectList(i) Is Nothing Then
+            otherId = EffectList.EffectList(i).EotId
+            If otherId >= LBound(EffectOverTime) And otherId <= UBound(EffectOverTime) And Not EffectList.EffectList(i).RemoveMe Then
+                If EffectOverTime(otherId).Family = family And EffectList.EffectList(i).CasterRefType = CasterType Then
+                    sameCaster = False
+                    If CasterType = eUser Then
+                        sameCaster = (EffectList.EffectList(i).CasterUserId = UserList(CasterIndex).Id)
+                    ElseIf CasterType = eNpc Then
+                        sameCaster = (EffectList.EffectList(i).CasterIsValid And EffectList.EffectList(i).CasterArrayIndex = CasterIndex)
+                    End If
+                    If sameCaster Then
+                        If EffectOverTime(otherId).Level < EffectOverTime(EffectId).Level Then
+                            ' Llega uno mas fuerte: el viejo se va ahora (OnRemove revierte sus modificadores);
+                            ' el barrido global lo recicla despues por RemoveMe.
+                            EffectList.EffectList(i).RemoveMe = True
+                            Call RemoveEffectAtPos(EffectList, i)
+                            Exit Function
+                        Else
+                            Set ResolveFamilyEffect = EffectList.EffectList(i)
+                            Exit Function
+                        End If
+                    End If
+                End If
+            End If
+        End If
+    Next i
+    Exit Function
+ResolveFamilyEffect_Err:
+    Call TraceError(Err.Number, Err.Description, "EffectsOverTime.ResolveFamilyEffect", Erl)
+End Function
+
+' E1: un DoT solo acredita exp, kill, ContarMuerte y oro mientras su caster USUARIO siga vivo,
+' conectado y en el mismo mapa que el blanco. Si no, el tick se aplica sin fuente (eNone), igual que
+' cuando el caster ya no es resoluble. Un caster NPC se evalua como siempre (referencia valida).
+Public Function DotSourceCanCredit(ByRef Source As t_AnyReference, ByVal TargetMap As Integer) As Boolean
+    If Not IsValidRef(Source) Then Exit Function
+    If Source.RefType = eUser Then
+        If UserList(Source.ArrayIndex).flags.Muerto <> 0 Then Exit Function
+        If Not UserList(Source.ArrayIndex).flags.UserLogged Then Exit Function
+        If UserList(Source.ArrayIndex).pos.Map <> TargetMap Then Exit Function
+    End If
+    DotSourceCanCredit = True
+End Function
+
+' ============================================================================
+' D7: persistencia del veneno real. Foto de los venenos activos (Menor/Hemo/Neuro) de un usuario
+' como texto compacto "M,...;H,...;N,..." (cada clase arma su tramo en SnapshotString). Vacio = sin
+' venenos nuevos activos. Se guarda en user.poison_state y se restaura en el login.
+' ============================================================================
+Public Function SnapNum(ByVal v As Double) As String
+    SnapNum = Trim$(Str$(v))
+End Function
+
+Public Function BuildPoisonSnapshot(ByRef EffectList As t_EffectOverTimeList) As String
+    On Error GoTo BuildPoisonSnapshot_Err
+    Dim i As Integer
+    Dim part As String
+    Dim snapMinor As PoisonMinorEffect
+    Dim snapHemo As PoisonHemoEffect
+    Dim snapNeuro As PoisonNeuroEffect
+    For i = 0 To EffectList.EffectCount - 1
+        If Not EffectList.EffectList(i) Is Nothing Then
+            part = vbNullString
+            If Not EffectList.EffectList(i).RemoveMe Then
+                Select Case EffectList.EffectList(i).TypeId
+                    Case e_EffectOverTimeType.ePoisonMinor
+                        Set snapMinor = EffectList.EffectList(i)
+                        part = snapMinor.SnapshotString()
+                    Case e_EffectOverTimeType.ePoisonHemo
+                        Set snapHemo = EffectList.EffectList(i)
+                        part = snapHemo.SnapshotString()
+                    Case e_EffectOverTimeType.ePoisonNeuro
+                        Set snapNeuro = EffectList.EffectList(i)
+                        part = snapNeuro.SnapshotString()
+                End Select
+            End If
+            If LenB(part) > 0 Then
+                If LenB(BuildPoisonSnapshot) > 0 Then BuildPoisonSnapshot = BuildPoisonSnapshot & ";"
+                BuildPoisonSnapshot = BuildPoisonSnapshot & part
+            End If
+        End If
+    Next i
+    Exit Function
+BuildPoisonSnapshot_Err:
+    Call TraceError(Err.Number, Err.Description, "EffectsOverTime.BuildPoisonSnapshot", Erl)
+End Function
+
+' Recrea los venenos de una foto sobre un usuario recien logueado, con los parametros guardados y el
+' tiempo restante real. Devuelve True si recreo al menos uno (entonces la foto manda sobre los
+' valores por defecto del flag viejo). Tolerante: tramos invalidos se saltean.
+Public Function RestorePoisonSnapshot(ByVal UserIndex As Integer, ByVal Snapshot As String) As Boolean
+    On Error GoTo RestorePoisonSnapshot_Err
+    If LenB(Snapshot) = 0 Then Exit Function
+    Dim parts() As String
+    Dim f() As String
+    Dim i As Integer
+    Dim eotId As Integer
+    Dim leftMs As Long
+    Dim created As IBaseEffectOverTime
+    Dim rMinor As PoisonMinorEffect
+    Dim rHemo As PoisonHemoEffect
+    Dim rNeuro As PoisonNeuroEffect
+    parts = Split(Snapshot, ";")
+    For i = LBound(parts) To UBound(parts)
+        f = Split(parts(i), ",")
+        If UBound(f) >= 4 Then
+            eotId = CInt(val(f(1)))
+            leftMs = CLng(val(f(3)))
+            If eotId >= LBound(EffectOverTime) And eotId <= UBound(EffectOverTime) And leftMs > 0 Then
+                Select Case f(0)
+                    Case "M"
+                        If UBound(f) = 9 And EffectOverTime(eotId).Type = e_EffectOverTimeType.ePoisonMinor Then
+                            Call CreatePoisonMinor(0, e_ReferenceType.eNone, UserIndex, eUser, eotId, CLng(val(f(2))), CLng(val(f(4))), CByte(val(f(5))), CLng(val(f(6))), CLng(val(f(7))), CSng(val(f(8))), CSng(val(f(9))))
+                            Set created = FindEffectOnTarget(UserIndex, UserList(UserIndex).EffectOverTime, eotId)
+                            If Not created Is Nothing Then
+                                Set rMinor = created
+                                Call rMinor.RestoreProgress(leftMs)
+                                RestorePoisonSnapshot = True
+                            End If
+                        End If
+                    Case "H"
+                        If UBound(f) = 17 And EffectOverTime(eotId).Type = e_EffectOverTimeType.ePoisonHemo Then
+                            Call CreatePoisonHemo(0, e_ReferenceType.eNone, UserIndex, eUser, eotId, CLng(val(f(2))), CLng(val(f(4))), CByte(val(f(5))), CLng(val(f(6))), CLng(val(f(7))), _
+                                    CByte(val(f(8))), CLng(val(f(9))), CLng(val(f(10))), CInt(val(f(12))), CInt(val(f(13))), CLng(val(f(14))), CByte(val(f(15))), _
+                                    CSng(val(f(16))), CSng(val(f(17))), CInt(val(f(11))))
+                            Set created = FindEffectOnTarget(UserIndex, UserList(UserIndex).EffectOverTime, eotId)
+                            If Not created Is Nothing Then
+                                Set rHemo = created
+                                Call rHemo.RestoreProgress(leftMs)
+                                RestorePoisonSnapshot = True
+                            End If
+                        End If
+                    Case "N"
+                        If UBound(f) = 11 And EffectOverTime(eotId).Type = e_EffectOverTimeType.ePoisonNeuro Then
+                            Call CreatePoisonNeuro(0, e_ReferenceType.eNone, UserIndex, eUser, eotId, CLng(val(f(2))), CLng(val(f(4))), CLng(val(f(5))), CLng(val(f(6))), CLng(val(f(7))), _
+                                    CLng(val(f(8))), CLng(val(f(9))), CLng(val(f(10))), CByte(val(f(11))))
+                            Set created = FindEffectOnTarget(UserIndex, UserList(UserIndex).EffectOverTime, eotId)
+                            If Not created Is Nothing Then
+                                Set rNeuro = created
+                                Call rNeuro.RestoreProgress(leftMs)
+                                RestorePoisonSnapshot = True
+                            End If
+                        End If
+                End Select
+            End If
+        End If
+    Next i
+    Exit Function
+RestorePoisonSnapshot_Err:
+    Call TraceError(Err.Number, Err.Description, "EffectsOverTime.RestorePoisonSnapshot", Erl)
+End Function
+
 Public Sub ClearEffectList(ByRef EffectList As t_EffectOverTimeList, Optional ByVal Filter As e_EffectType = e_EffectType.eAny, Optional ByVal ClearForDeath As Boolean = False)
     On Error GoTo ClearEffectList_Err
     Dim i As Integer

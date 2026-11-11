@@ -401,6 +401,9 @@ Private Sub SetupUserFlags(ByRef User As t_User, ByRef RS As ADODB.Recordset)
         .PoisonMinorActive = SanitizeNullValue(RS!poison_minor_active, 0)
         .PoisonHemoStacks = SanitizeNullValue(RS!poison_hemo_stacks, 0)
         .PoisonNeuroActive = SanitizeNullValue(RS!poison_neuro_active, 0)
+        ' D7: parametros reales de los venenos activos (vacio en personajes guardados antes de la columna).
+        .PoisonState = SanitizeNullValue(RS!poison_state, vbNullString)
+        .PoisonStateTaken = False
         ' --- Fin sistema de venenos nuevo ---
         .Incinerado = RS!is_incinerated
         .Escondido = False
@@ -666,7 +669,7 @@ End Sub
 Private Sub SaveCharacterMainDB(ByRef U As t_User, ByRef QueryBreakdown As String, Optional ByVal Logout As Boolean = False)
     Dim QueryTimer As Long
     Dim Params() As Variant
-    ReDim Params(66)
+    ReDim Params(67)
     Dim i As Integer
     Params(post_increment(i)) = U.Stats.ELV
     Params(post_increment(i)) = U.Stats.Exp
@@ -734,6 +737,12 @@ Private Sub SaveCharacterMainDB(ByRef U As t_User, ByRef QueryBreakdown As Strin
     Params(post_increment(i)) = U.flags.PoisonMinorActive
     Params(post_increment(i)) = U.flags.PoisonHemoStacks
     Params(post_increment(i)) = U.flags.PoisonNeuroActive
+    ' D7: si el logout ya tomo la foto (antes de limpiar los efectos) se usa esa; si no, de los efectos vivos.
+    If U.flags.PoisonStateTaken Then
+        Params(post_increment(i)) = U.flags.PoisonState
+    Else
+        Params(post_increment(i)) = EffectsOverTime.BuildPoisonSnapshot(U.EffectOverTime)
+    End If
     ' --- Fin sistema de venenos nuevo ---
     Params(post_increment(i)) = U.Stats.RemortCount
     ' WHERE block

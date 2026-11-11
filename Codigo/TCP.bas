@@ -1281,6 +1281,9 @@ Sub ClearAndSaveUser(ByVal UserIndex As Integer)
             .Counters.Mimetismo = 0
             .flags.Mimetizado = e_EstadoMimetismo.Desactivado
         End If
+        ' D7: foto de los venenos con sus parametros reales ANTES de limpiar los efectos; SaveUser la persiste.
+        .flags.PoisonState = EffectsOverTime.BuildPoisonSnapshot(.EffectOverTime)
+        .flags.PoisonStateTaken = True
         Call ClearEffectList(.EffectOverTime, e_EffectType.eAny, False)
         ' 06.002 Ola 1: untados y encantamientos (no persisten) se limpian SIEMPRE, sin gate de toggle.
         Call ClearPoisonedWeapon(UserIndex)

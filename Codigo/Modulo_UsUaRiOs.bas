@@ -776,6 +776,13 @@ Dim tStr                        As String
         .Counters.LastSave = GetTickCountRaw()
         ' --- Sistema de venenos nuevo (TOGGLE26): recrear EOTs persistidos ---
         If IsFeatureEnabled("new_poison_system") Then
+            ' D7: si el personaje trae la foto de sus venenos (user.poison_state), se recrean con los parametros
+            ' y el tiempo restante reales. Sin foto (guardado viejo) o foto invalida: valores por defecto de abajo.
+            Dim poisonRestored As Boolean
+            If LenB(.flags.PoisonState) > 0 Then poisonRestored = EffectsOverTime.RestorePoisonSnapshot(UserIndex, .flags.PoisonState)
+            .flags.PoisonState = vbNullString
+            .flags.PoisonStateTaken = False
+            If Not poisonRestored Then
             If .flags.PoisonMinorActive = 1 Then
                 Call CreatePoisonMinor(0, e_ReferenceType.eNone, UserIndex, eUser, 63, _
                     EffectOverTime(63).TickTime, EffectOverTime(63).TickTime * EffectOverTime(63).Ticks, _
@@ -799,6 +806,7 @@ Dim tStr                        As String
                     2000, 20000, _
                     100, 100, 0, _
                     85, 100, 0, 0)
+            End If
             End If
         End If
         MapInfo(.pos.Map).NumUsers = MapInfo(.pos.Map).NumUsers + 1
@@ -3669,7 +3677,7 @@ Public Function GetUserMRForNpc(ByVal UserIndex As Integer) As Integer
         If .invent.EquippedHelmetObjIndex > 0 Then
             MR = MR + ObjData(.invent.EquippedHelmetObjIndex).ResistenciaMagica
         End If
-        If IsFeatureEnabled("mr-magic-bonus-damage") Then
+        If modElementalCombat.MagicBonusDamageEnabled() Then
             MR = MR + .Stats.UserSkills(Resistencia) * MRSkillNpcProtectionModifier
         End If
         GetUserMRForNpc = MR + 100 * ModClase(.clase).ResistenciaMagica
@@ -3695,7 +3703,7 @@ Public Function GetUserMR(ByVal UserIndex As Integer) As Integer
         If .invent.EquippedHelmetObjIndex > 0 Then
             MR = MR + ObjData(.invent.EquippedHelmetObjIndex).ResistenciaMagica
         End If
-        If IsFeatureEnabled("mr-magic-bonus-damage") Then
+        If modElementalCombat.MagicBonusDamageEnabled() Then
             MR = MR + .Stats.UserSkills(Resistencia) * MRSkillProtectionModifier
         End If
         GetUserMR = MR + 100 * ModClase(.clase).ResistenciaMagica

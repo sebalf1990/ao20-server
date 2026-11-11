@@ -2882,7 +2882,7 @@ Sub HechizoPropNPC(ByVal hIndex As Integer, ByVal NpcIndex As Integer, ByVal Use
         Damage = RandomNumber(Hechizos(hIndex).MinHp, Hechizos(hIndex).MaxHp)
         Damage = Damage + Porcentaje(Damage, UserMod.GetMagicLevelDamageBonus(UserList(UserIndex)) * UserList(UserIndex).Stats.ELV)
         ' F3 (plan 02.001 Ola 3): bonus de dano magico por skill Magia (toggle mr-magic-bonus-damage)
-        If IsFeatureEnabled("mr-magic-bonus-damage") Then Damage = Damage + Porcentaje(Damage, UserList(UserIndex).Stats.UserSkills(e_Skill.Magia) * MagicSkillBonusDamageModifier)
+        If modElementalCombat.MagicBonusDamageEnabled() Then Damage = Damage + Porcentaje(Damage, UserList(UserIndex).Stats.UserSkills(e_Skill.Magia) * MagicSkillBonusDamageModifier)
         Dim MagicPenetration As Integer
         If UserList(UserIndex).invent.EquippedWeaponObjIndex > 0 Then
             Damage = Damage + Porcentaje(Damage, ObjData(UserList(UserIndex).invent.EquippedWeaponObjIndex).MagicDamageBonus)
@@ -3281,7 +3281,7 @@ End Sub
 Sub HechizoPropUsuario(ByVal UserIndex As Integer, ByRef b As Boolean, ByRef IsAlive As Boolean)
     On Error GoTo HechizoPropUsuario_Err
     Dim h         As Integer
-    Dim Damage    As Integer
+    Dim Damage    As Long ' E1: Long, hechizos GM de 10000 + bonus desbordaban Integer
     Dim DamageStr As String
     Dim tempChr   As Integer
     h = UserList(UserIndex).Stats.UserHechizos(UserList(UserIndex).flags.Hechizo)
@@ -3584,7 +3584,7 @@ Sub HechizoPropUsuario(ByVal UserIndex As Integer, ByRef b As Boolean, ByRef IsA
         Damage = RandomNumber(Hechizos(h).MinHp, Hechizos(h).MaxHp)
         Damage = Damage + Porcentaje(Damage, UserMod.GetMagicLevelDamageBonus(UserList(UserIndex)) * UserList(UserIndex).Stats.ELV)
         ' F3 (plan 02.001 Ola 3): bonus de dano magico por skill Magia (toggle mr-magic-bonus-damage)
-        If IsFeatureEnabled("mr-magic-bonus-damage") Then Damage = Damage + Porcentaje(Damage, UserList(UserIndex).Stats.UserSkills(e_Skill.Magia) * MagicSkillBonusDamageModifier)
+        If modElementalCombat.MagicBonusDamageEnabled() Then Damage = Damage + Porcentaje(Damage, UserList(UserIndex).Stats.UserSkills(e_Skill.Magia) * MagicSkillBonusDamageModifier)
         ' Si al hechizo le afecta el daño mágico
         Dim PorcentajeRM As Integer
         If UserList(UserIndex).invent.EquippedWeaponObjIndex > 0 Then
@@ -3696,7 +3696,7 @@ Sub HechizoCombinados(ByVal UserIndex As Integer, ByRef b As Boolean, ByRef IsAl
     '***************************************************
     On Error GoTo HechizoCombinados_Err
     Dim h                 As Integer
-    Dim Damage            As Integer
+    Dim Damage            As Long ' E1: Long (ver HechizoPropUsuario)
     Dim targetUserIndex   As Integer
     Dim enviarInfoHechizo As Boolean
     enviarInfoHechizo = False
@@ -3868,7 +3868,7 @@ Sub HechizoCombinados(ByVal UserIndex As Integer, ByRef b As Boolean, ByRef IsAl
         Damage = RandomNumber(Hechizos(h).MinHp, Hechizos(h).MaxHp)
         Damage = Damage + Porcentaje(Damage, UserMod.GetMagicLevelDamageBonus(UserList(UserIndex)) * UserList(UserIndex).Stats.ELV)
         ' F3 (plan 02.001 Ola 3): bonus de dano magico por skill Magia (toggle mr-magic-bonus-damage)
-        If IsFeatureEnabled("mr-magic-bonus-damage") Then Damage = Damage + Porcentaje(Damage, UserList(UserIndex).Stats.UserSkills(e_Skill.Magia) * MagicSkillBonusDamageModifier)
+        If modElementalCombat.MagicBonusDamageEnabled() Then Damage = Damage + Porcentaje(Damage, UserList(UserIndex).Stats.UserSkills(e_Skill.Magia) * MagicSkillBonusDamageModifier)
         ' mage has 30% damage reduction
         If UserList(UserIndex).clase = e_Class.Mage Then
             Damage = Damage * 0.7
@@ -4426,7 +4426,7 @@ Private Sub AreaHechizo(UserIndex As Integer, NpcIndex As Integer, x As Byte, y 
     Dim tilDif         As Integer
     Dim h2             As Integer
     Dim Hit            As Integer
-    Dim Damage         As Integer
+    Dim Damage         As Long ' E1: Long (ver HechizoPropUsuario)
     Dim porcentajeDesc As Integer
     h2 = UserList(UserIndex).Stats.UserHechizos(UserList(UserIndex).flags.Hechizo)
     'Calculo de descuesto de golpe por cercania.

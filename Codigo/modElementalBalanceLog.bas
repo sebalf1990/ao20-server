@@ -567,14 +567,14 @@ Private Function ElementalBalanceRunId() As String
 End Function
 
 Public Function ElementalBalanceLogEnabled() As Boolean
-    ElementalBalanceLogEnabled = IsFeatureEnabled("elemental_balance_log")
+    ElementalBalanceLogEnabled = modElementalCombat.ElementalBalanceLogToggleOn()
 End Function
 
 ' TOGGLE33 (plan 10.001, decision 7): telemetria de eventos de jugador,
 ' independiente del log de calibracion por golpe. Ver el bloque "Toggle de
 ' jugadores" arriba del todo de este archivo.
 Public Function ElementalPlayerTelemetryEnabled() As Boolean
-    ElementalPlayerTelemetryEnabled = IsFeatureEnabled("elemental_player_telemetry")
+    ElementalPlayerTelemetryEnabled = modElementalCombat.ElementalPlayerTelemetryToggleOn()
 End Function
 
 ' Arma el identificador "U<idx>"/"N<idx>" para attacker/victim. "0" si idx<=0.

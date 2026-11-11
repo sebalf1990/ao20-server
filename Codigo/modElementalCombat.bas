@@ -38,8 +38,58 @@ Private mElementalSlowFloor As Single
 ' ============================================================================
 ' Toggle maestro
 ' ============================================================================
+' E1 (plan revision-motor-elemental): los toggles que se consultan por golpe/tick se cachean en
+' Boolean. Se refrescan desde FileIO.SetFeatureToggle (carga del .ini y cambio en vivo por GM) y se
+' borran en FileIO.LoadFeatureToggles antes de cargar. Un IsFeatureEnabled() es un lookup por
+' string en un Dictionary: decenas por golpe era costo puro.
+Private mElementalSystemOn As Boolean
+Private mElementalDebugLogOn As Boolean
+Private mMagicBonusDamageOn As Boolean
+Private mElementalBalanceLogOn As Boolean
+Private mElementalPlayerTelemetryOn As Boolean
+
+Public Sub ElementalToggleCache_Reset()
+    mElementalSystemOn = False
+    mElementalDebugLogOn = False
+    mMagicBonusDamageOn = False
+    mElementalBalanceLogOn = False
+    mElementalPlayerTelemetryOn = False
+End Sub
+
+Public Sub ElementalToggleCache_OnChanged(ByVal toggleName As String, ByVal State As Boolean)
+    Select Case toggleName
+        Case "elemental_system"
+            mElementalSystemOn = State
+        Case "elemental_debug_log"
+            mElementalDebugLogOn = State
+        Case "mr-magic-bonus-damage"
+            mMagicBonusDamageOn = State
+        Case "elemental_balance_log"
+            mElementalBalanceLogOn = State
+        Case "elemental_player_telemetry"
+            mElementalPlayerTelemetryOn = State
+    End Select
+End Sub
+
 Public Function ElementalSystemEnabled() As Boolean
-    ElementalSystemEnabled = IsFeatureEnabled("elemental_system")
+    ElementalSystemEnabled = mElementalSystemOn
+End Function
+
+' Toggle "mr-magic-bonus-damage" (bonus de dano magico por skill Magia), cacheado.
+Public Function MagicBonusDamageEnabled() As Boolean
+    MagicBonusDamageEnabled = mMagicBonusDamageOn
+End Function
+
+Public Function ElementalDebugLogEnabled() As Boolean
+    ElementalDebugLogEnabled = mElementalDebugLogOn
+End Function
+
+Public Function ElementalBalanceLogToggleOn() As Boolean
+    ElementalBalanceLogToggleOn = mElementalBalanceLogOn
+End Function
+
+Public Function ElementalPlayerTelemetryToggleOn() As Boolean
+    ElementalPlayerTelemetryToggleOn = mElementalPlayerTelemetryOn
 End Function
 
 ' ============================================================================
@@ -455,10 +505,15 @@ Private Function FireProcs(ByRef src As t_ElementalSource, ByVal trig As e_ProcT
                         If src.Proc(i).EotId > UBound(EffectOverTime) Then
                             Call ElementalLog(logCtx & " PROC applyState EotId=" & src.Proc(i).EotId & " FUERA DE CATALOGO (ignorado)")
                         ElseIf src.Proc(i).EotId > 0 Then
+                            ' E1: la resistencia/inmunidad sale del DamageType del EOT del catalogo (lo que el
+                            ' tick realmente hace); si el EOT no lo declara (0), el del proc como antes.
+                            Dim procDmgType As Integer
+                            procDmgType = src.Proc(i).DamageType
+                            If EffectOverTime(src.Proc(i).EotId).DamageType > 0 Then procDmgType = EffectOverTime(src.Proc(i).EotId).DamageType
                             Dim rr As t_ElementalResist
-                            rr = GetTargetResist(targetIsNpc, targetIndex, src.Proc(i).DamageType)
+                            rr = GetTargetResist(targetIsNpc, targetIndex, procDmgType)
                             If rr.Immune <> 0 Or rr.ImmuneEffect <> 0 Then
-                                Call ElementalLog(logCtx & " PROC applyState BLOQUEADO (inmune " & DamageTypeName(src.Proc(i).DamageType) & ")")
+                                Call ElementalLog(logCtx & " PROC applyState BLOQUEADO (inmune " & DamageTypeName(procDmgType) & ")")
                             ElseIf rr.ReduceEffectChancePct > 0 And RandomNumber(1, 100) <= rr.ReduceEffectChancePct Then
                                 Call ElementalLog(logCtx & " PROC applyState resistido (chance efecto)")
                             Else
@@ -466,7 +521,15 @@ Private Function FireProcs(ByRef src As t_ElementalSource, ByVal trig As e_ProcT
                                 If targetIsNpc Then trt = eNpc Else trt = eUser
                                 ' Limit-aware: si ya existe (segun Limit), Reset (refresca/suma stack); si no, crear.
                                 Dim existEff As IBaseEffectOverTime
-                                If targetIsNpc Then
+                                If EffectOverTime(src.Proc(i).EotId).Family > 0 Then
+                                    ' D8: una instancia por familia y por caster; la de mayor nivel manda (si llega una
+                                    ' mas fuerte reemplaza a la vieja, si llega igual o mas debil solo refresca la existente).
+                                    If targetIsNpc Then
+                                        Set existEff = EffectsOverTime.ResolveFamilyEffect(attackerIndex, attackerType, NpcList(targetIndex).EffectOverTime, src.Proc(i).EotId)
+                                    Else
+                                        Set existEff = EffectsOverTime.ResolveFamilyEffect(attackerIndex, attackerType, UserList(targetIndex).EffectOverTime, src.Proc(i).EotId)
+                                    End If
+                                ElseIf targetIsNpc Then
                                     Set existEff = EffectsOverTime.FindEffectOnTarget(attackerIndex, NpcList(targetIndex).EffectOverTime, src.Proc(i).EotId)
                                 Else
                                     Set existEff = EffectsOverTime.FindEffectOnTarget(attackerIndex, UserList(targetIndex).EffectOverTime, src.Proc(i).EotId)
@@ -474,11 +537,11 @@ Private Function FireProcs(ByRef src As t_ElementalSource, ByVal trig As e_ProcT
                                 If existEff Is Nothing Then
                                     Call EffectsOverTime.CreateEffect(attackerIndex, attackerType, targetIndex, trt, src.Proc(i).EotId)
                                 Else
-                                    Call existEff.Reset(attackerIndex, attackerType, src.Proc(i).EotId)
+                                    Call existEff.Reset(attackerIndex, attackerType, existEff.EotId)
                                 End If
                                 If attackerType = eUser And LenB(EffectOverTime(src.Proc(i).EotId).ApplyMsg) > 0 Then Call WriteConsoleMsg(attackerIndex, EffectOverTime(src.Proc(i).EotId).ApplyMsg, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
                                 Call ElementalLog(logCtx & " PROC applyState EotId=" & src.Proc(i).EotId & IIf(existEff Is Nothing, " aplicado", " refrescado"))
-                                If ElementalBalanceLogEnabled() Then Call LogElementalBalance("proc_apply_state", ElementalBalanceActorId(attackerType = eNpc, attackerIndex), ElementalBalanceActorClass(attackerType = eNpc, attackerIndex), ElementalBalanceActorId(targetIsNpc, targetIndex), IIf(targetIsNpc, "npc", "user"), itemObjIndex, ElementalBalanceCatalogTier(itemObjIndex), src.Proc(i).DamageType, 0, 0, ElementalBalanceMap(targetIsNpc, targetIndex), ElementalBalanceCharId(attackerType = eNpc, attackerIndex), ElementalBalanceAccountId(attackerType = eNpc, attackerIndex), ElementalBalanceCharId(targetIsNpc, targetIndex), srcItemObjIndex, ElementalBalanceFightId(ElementalBalanceCharId(attackerType = eNpc, attackerIndex), ElementalBalanceCharId(targetIsNpc, targetIndex)))
+                                If ElementalBalanceLogEnabled() Then Call LogElementalBalance("proc_apply_state", ElementalBalanceActorId(attackerType = eNpc, attackerIndex), ElementalBalanceActorClass(attackerType = eNpc, attackerIndex), ElementalBalanceActorId(targetIsNpc, targetIndex), IIf(targetIsNpc, "npc", "user"), itemObjIndex, ElementalBalanceCatalogTier(itemObjIndex), procDmgType, 0, 0, ElementalBalanceMap(targetIsNpc, targetIndex), ElementalBalanceCharId(attackerType = eNpc, attackerIndex), ElementalBalanceAccountId(attackerType = eNpc, attackerIndex), ElementalBalanceCharId(targetIsNpc, targetIndex), srcItemObjIndex, ElementalBalanceFightId(ElementalBalanceCharId(attackerType = eNpc, attackerIndex), ElementalBalanceCharId(targetIsNpc, targetIndex)))
                             End If
                         Else
                             Call ElementalLog(logCtx & " PROC applyState sin EotId (ignorado)")
@@ -513,6 +576,11 @@ Public Sub ResolveThorns(ByRef defenderSrc As t_ElementalSource, ByVal defenderI
     On Error GoTo ErrHandler
     If Not ElementalSystemEnabled() Then Exit Sub
     If attackerIndex <= 0 Then Exit Sub
+    ' E1: un GM atacante no recibe espinas (mismo criterio que la capa elemental NPC->user: solo
+    ' Privilegios = User sufren dano elemental; ver SistemaCombate.bas, rama NPC->user).
+    If Not attackerIsNpc Then
+        If (UserList(attackerIndex).flags.Privilegios And e_PlayerType.User) = 0 Then Exit Sub
+    End If
     Dim i As Integer
     For i = 1 To defenderSrc.ProcCount
         If defenderSrc.Proc(i).Trigger = eProcOnDamaged And defenderSrc.Proc(i).Kind = eProcDamageBonus Then
@@ -1117,6 +1185,9 @@ End Function
 ' ============================================================================
 Public Sub ElementalLog(ByVal msg As String)
     On Error GoTo ErrHandler
+    ' E1: toggle propio (elemental_debug_log, default 0). Antes abria/escribia/cerraba el archivo en
+    ' cada componente, proc, espina y tick con solo tener el motor encendido.
+    If Not mElementalDebugLogOn Then Exit Sub
     If Not ElementalSystemEnabled() Then Exit Sub
     Dim fname As String
     fname = App.Path & "\Logs\Elemental_" & Format$(Date, "yyyy-mm-dd") & ".log"
