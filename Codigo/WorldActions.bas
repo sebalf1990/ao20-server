@@ -63,7 +63,8 @@ Public Function CanUseObject(ByVal UserIndex As Integer, ByVal ObjIndex As Integ
         ElseIf Not ClasePuedeUsarItem(UserIndex, ObjIndex) Then
             CanUseObject = 2
             If IsFeatureEnabled("professions_learnable") And ProfesionDelItem(ObjIndex) > 0 Then
-                msg = CStr(MSG_PROF_ITEM_NO_USABLE) ' No podes usar este item sin aprender la profesion requerida.
+                msg = CStr(MSG_PROF_ITEM_NO_USABLE) ' Msg9007: needs the profession (param 1 = skill id, the client shows its localized name).
+                Extra = CStr(ProfesionDelItem(ObjIndex))
             Else
                 msg = "265"  ' Class cannot use this item.
             End If
@@ -381,17 +382,28 @@ Private Sub HandleGovernorNpcInteraction(ByVal UserIndex As Integer, ByVal NpcIn
     Call WritePreguntaBox(UserIndex, MSG_TE_GUSTARIA_SER_CIUDADANO_DE, DeDonde)
 End Sub
 
-Private Sub HandleFishingDeliveryNpcInteraction(ByVal UserIndex As Integer, ByVal NpcIndex As Integer)
+Public Function CanDeliverSpecialFish(ByVal UserIndex As Integer, ByVal NpcIndex As Integer) As Boolean
+    ' Plan 2026-11-08-revision-profesiones-y-navegacion: one gate for opening the delivery and for the answer
+    ' (Protocol.HandleResponderPregunta Case 5), which used to pay with no NPC, distance or profession check.
+    If NpcIndex <= 0 Then Exit Function
+    If NpcList(NpcIndex).npcType <> e_NPCType.EntregaPesca Then Exit Function
+    ' Same reach as the merchant and banker interactions (4 tiles).
+    If Not EnsureNpcWithinDistance(UserIndex, NpcIndex, 4, MSG_DEMASIADO_LEJOS_1163, e_FontTypeNames.FONTTYPE_New_Naranja) Then Exit Function
     If IsFeatureEnabled("professions_learnable") Then
         If Not TieneProfesionAprendida(UserIndex, e_Skill.Pescar) Then
-            Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
-            Exit Sub
+            Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO, CStr(e_Skill.Pescar))
+            Exit Function
         End If
     ElseIf UserList(UserIndex).clase <> Trabajador Then
         'Msg2168=Solo los trabajadores pueden registrar los peces especiales.
         Call WriteLocaleMsg(UserIndex, MSG_SOLO_TRABAJADORES_PUEDEN_REGISTRAR_PECES_ESPECIALES, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
-        Exit Sub
+        Exit Function
     End If
+    CanDeliverSpecialFish = True
+End Function
+
+Private Sub HandleFishingDeliveryNpcInteraction(ByVal UserIndex As Integer, ByVal NpcIndex As Integer)
+    If Not CanDeliverSpecialFish(UserIndex, NpcIndex) Then Exit Sub
     Dim i                   As Integer, j As Integer
     Dim PuntosTotales       As Long
     Dim CantPecesEspeciales As Long

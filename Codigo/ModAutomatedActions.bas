@@ -42,7 +42,8 @@ Public Sub RunAutomatedActions()
                 If .AutomatedAction.IsActive Then
                     ' Plan 04.001: revalidar la profesion en cada tick. Olvidarla en pleno
                     ' loop cortaba el permiso pero la accion seguia corriendo y subiendo skill.
-                    ' Smelting revalida adentro (modSmelting exige Mineria por su cuenta).
+                    ' Plan 2026-11-08-revision-profesiones-y-navegacion: smelting is revalidated here too (it needs Mineria);
+                    ' CanUserSmelt only checked it when the action started.
                     ' Plan 27.001 (05.002 wave 7): a gate only in the packet is not enough. An action
                     ' started in town kept running tick by tick after the player was summoned into the
                     ' event or the ring. Own branch so the profession and event messages do not mix.
@@ -51,7 +52,10 @@ Public Sub RunAutomatedActions()
                         Call WriteLocaleMsg(UserIndex, MSG_NO_ACCION_PERMITIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                         Call ResetUserAutomatedActions(UserIndex)
                     ElseIf (.AutomatedAction.skill = e_Skill.Talar Or .AutomatedAction.skill = e_Skill.Mineria Or .AutomatedAction.skill = e_Skill.Pescar) And Not TieneProfesionAprendida(UserIndex, CInt(.AutomatedAction.skill)) Then
-                        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+                        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO, CStr(CInt(.AutomatedAction.skill)))
+                        Call ResetUserAutomatedActions(UserIndex)
+                    ElseIf .AutomatedAction.skill = e_Skill.Smelting And Not TieneProfesionAprendida(UserIndex, e_Skill.Mineria) Then
+                        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO, CStr(e_Skill.Mineria))
                         Call ResetUserAutomatedActions(UserIndex)
                     Else
                         Select Case .AutomatedAction.skill

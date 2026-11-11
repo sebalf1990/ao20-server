@@ -315,6 +315,13 @@ Function ConnectNewUser(ByVal UserIndex As Integer, _
             Call WriteShowMessageBox(UserIndex, MSG_PROF_CLASE_TRABAJADOR_NO_DISPONIBLE, vbNullString)
             Exit Function
         End If
+        ' Plan 2026-11-08-revision-profesiones-y-navegacion: Pirata and Ladron cannot be created (the client skips them
+        ' since 2024) and the server did not enforce it. Always, not tied to the professions toggle.
+        If UserClase = e_Class.Pirat Or UserClase = e_Class.Thief Then
+            'Msg997=Opcion no disponible
+            Call WriteShowMessageBox(UserIndex, MSG_NO_OPCION_DISPONIBLE, vbNullString)
+            Exit Function
+        End If
         ' Cabeza válida
 #If LOGIN_STRESS_TEST = 0 Then
         If Not ValidarCabeza(UserRaza, UserSexo, head) Then Exit Function

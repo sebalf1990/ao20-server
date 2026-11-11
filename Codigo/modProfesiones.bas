@@ -18,6 +18,13 @@ Public Const PROF_MAX_SLOTS As Byte = 7
 Public Const PROF_MIN_ID    As Byte = 17
 Public Const PROF_MAX_ID    As Byte = 23
 
+' Feedback al aprender/olvidar (plan 2026-11-08-revision-profesiones-y-navegacion, E5): mismos FX/sonidos que ya
+' existen en el juego (curar = FX 9 + onda 18; pocion = FX 2 curar veneno + onda de beber).
+Private Const PROF_FX_APRENDER  As Integer = 9
+Private Const PROF_SND_APRENDER As Integer = 18
+Private Const PROF_FX_OLVIDAR   As Integer = 2
+Private Const PROF_SND_OLVIDAR  As Integer = 135 ' SND_BEBER
+
 Private Type t_ProfesionConfig
     SkillId            As Integer
     NpcMaestroId       As Integer
@@ -175,7 +182,7 @@ Public Function PuedeOlvidarProfesion(ByVal UserIndex As Integer, ByVal Profesio
     If Not IsFeatureEnabled("professions_learnable") Then Exit Function
     If ProfesionId < PROF_MIN_ID Or ProfesionId > PROF_MAX_ID Then Exit Function
     If Not TieneProfesionEnSlots(UserIndex, ProfesionId) Then
-        If Not EsAccionDeStaff Then Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+        If Not EsAccionDeStaff Then Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_CONOCE, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO, CStr(ProfesionId))
         Exit Function
     End If
     If Not (EsGM(UserIndex) Or EsAccionDeStaff) Then
@@ -189,6 +196,21 @@ Public Function PuedeOlvidarProfesion(ByVal UserIndex As Integer, ByVal Profesio
 PuedeOlvidarProfesion_Err:
     Call TraceError(Err.Number, Err.Description, "modProfesiones.PuedeOlvidarProfesion", Erl)
 End Function
+
+Private Sub EfectoAprenderOlvidar(ByVal UserIndex As Integer, ByVal fxIndex As Integer, ByVal soundIndex As Integer)
+    ' Sale por el area del personaje que aprende/olvida: solo lo ven los que estan cerca de el.
+    ' Un personaje no logueado no tiene Char en el mapa, asi que no se emite nada.
+    On Error GoTo EfectoAprenderOlvidar_Err
+    With UserList(UserIndex)
+        If Not .flags.UserLogged Then Exit Sub
+        .Counters.timeFx = 3
+        Call SendData(SendTarget.ToPCArea, UserIndex, PrepareMessageCreateFX(.Char.charindex, fxIndex, 0, .pos.x, .pos.y))
+        Call SendData(SendTarget.ToPCArea, UserIndex, PrepareMessagePlayWave(soundIndex, .pos.x, .pos.y))
+    End With
+    Exit Sub
+EfectoAprenderOlvidar_Err:
+    Call TraceError(Err.Number, Err.Description, "modProfesiones.EfectoAprenderOlvidar", Erl)
+End Sub
 
 Public Function AprenderProfesion(ByVal UserIndex As Integer, ByVal ProfesionId As Integer, Optional ByVal EsAccionDeStaff As Boolean = False) As Boolean
     On Error GoTo AprenderProfesion_Err
@@ -213,7 +235,8 @@ Public Function AprenderProfesion(ByVal UserIndex As Integer, ByVal ProfesionId 
     Call Execute("INSERT OR REPLACE INTO user_professions (user_id, profession_id, learned_at) VALUES (?, ?, strftime('%s','now'));", UserList(UserIndex).Id, CInt(ProfesionId))
     Call RefrescarHerramientasInventario(UserIndex, ProfesionId)
     Call WriteProfessionsUpdate(UserIndex)
-    Call WriteLocaleMsg(UserIndex, MSG_PROF_APRENDIDA_OK, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO, NombreProfesion(ProfesionId))
+    Call WriteLocaleMsg(UserIndex, MSG_PROF_APRENDIDA_OK, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO, CStr(ProfesionId))
+    Call EfectoAprenderOlvidar(UserIndex, PROF_FX_APRENDER, PROF_SND_APRENDER)
     AprenderProfesion = True
     Exit Function
 AprenderProfesion_Err:
@@ -244,7 +267,8 @@ Public Function OlvidarProfesion(ByVal UserIndex As Integer, ByVal ProfesionId A
     Call Execute("DELETE FROM user_professions WHERE user_id = ? AND profession_id = ?;", UserList(UserIndex).Id, CInt(ProfesionId))
     Call RefrescarHerramientasInventario(UserIndex, ProfesionId)
     Call WriteProfessionsUpdate(UserIndex)
-    Call WriteLocaleMsg(UserIndex, MSG_PROF_OLVIDADA_OK, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO, NombreProfesion(ProfesionId))
+    Call WriteLocaleMsg(UserIndex, MSG_PROF_OLVIDADA_OK, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO, CStr(ProfesionId))
+    Call EfectoAprenderOlvidar(UserIndex, PROF_FX_OLVIDAR, PROF_SND_OLVIDAR)
     OlvidarProfesion = True
     Exit Function
 OlvidarProfesion_Err:
@@ -347,7 +371,7 @@ End Function
 Public Sub UsarManualProfesion(ByVal UserIndex As Integer, ByVal Slot As Byte)
     On Error GoTo UsarManualProfesion_Err
     If Not IsFeatureEnabled("professions_learnable") Then
-        Call WriteLocaleMsg(UserIndex, MSG_PROF_ITEM_NO_USABLE, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteLocaleMsg(UserIndex, MSG_PROF_TOGGLE_APAGADO, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         Exit Sub
     End If
     Dim ObjIndex    As Integer
@@ -368,7 +392,7 @@ End Sub
 Public Sub UsarPocionOlvidoProfesion(ByVal UserIndex As Integer, ByVal Slot As Byte)
     On Error GoTo UsarPocionOlvidoProfesion_Err
     If Not IsFeatureEnabled("professions_learnable") Then
-        Call WriteLocaleMsg(UserIndex, MSG_PROF_ITEM_NO_USABLE, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteLocaleMsg(UserIndex, MSG_PROF_TOGGLE_APAGADO, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         Exit Sub
     End If
     Dim ObjIndex    As Integer

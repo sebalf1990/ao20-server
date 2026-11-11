@@ -211,37 +211,9 @@ Public Sub DoNavega(ByVal UserIndex As Integer, ByRef Barco As t_ObjData, ByVal 
     On Error GoTo DoNavega_Err
     With UserList(UserIndex)
         If .invent.EquippedShipObjIndex <> .invent.Object(Slot).ObjIndex Then
-            ' Plan 04.001: con profesiones activas, el pescador profesional hereda el
-            ' acceso naval que tenia la clase Trabajador (galera y descuento de skill).
-            Dim NavegaConOficio As Boolean
-            If IsFeatureEnabled("professions_learnable") Then
-                NavegaConOficio = TieneProfesionAprendida(UserIndex, e_Skill.Pescar)
-            Else
-                NavegaConOficio = (.clase = e_Class.Trabajador)
-            End If
-            If Not EsGM(UserIndex) Then
-                Select Case Barco.Subtipo
-                    Case 2  'Galera
-                        If Not NavegaConOficio And .clase <> e_Class.Pirat Then
-                            'Msg1025= ¡Solo Piratas y pescadores pueden usar galera!
-                            Call WriteLocaleMsg(UserIndex, MSG_SOLO_PIRATAS_TRABAJADORES_PUEDEN_USAR_GALERA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
-                            Exit Sub
-                        End If
-                    Case 3  'Galeón
-                        If .clase <> e_Class.Pirat Then
-                            'Msg1026= Solo los Piratas pueden usar Galeón!!
-                            Call WriteLocaleMsg(UserIndex, MSG_SOLO_PIRATAS_PUEDEN_USAR_GALEON, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
-                            Exit Sub
-                        End If
-                End Select
-            End If
-            Dim SkillNecesario As Byte
-            SkillNecesario = IIf(NavegaConOficio Or .clase = e_Class.Pirat, Barco.MinSkill \ 2, Barco.MinSkill)
-            ' Tiene el skill necesario?
-            If .Stats.UserSkills(e_Skill.Navegacion) < SkillNecesario Then
-                Call WriteLocaleMsg(UserIndex, MSG_NECESITAS_MENOS_PUNTOS_NAVEGACION_PODER_USAR, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja, SkillNecesario & "¬" & IIf(Barco.Subtipo = 0, "traje", "barco"))  ' Msg1448=Necesitas al menos ¬1 puntos en navegación para poder usar este ¬2
-                Exit Sub
-            End If
+            ' Plan 2026-11-08-revision-profesiones-y-navegacion: every ship is open to any playable class. Gated only by
+            ' level (MinELV) and the generic checks UseInvItem runs first (CanUseObject). No class,
+            ' profession or Navegacion branches anymore (MinSkill is 0 on every ship).
             If .invent.EquippedShipObjIndex = 0 Then
                 Call WriteNavigateToggle(UserIndex, True)
                 .flags.Navegando = 1
@@ -1074,9 +1046,10 @@ Public Sub HerreroConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As I
         Exit Sub
     End If
     If Not TieneProfesionAprendida(UserIndex, e_Skill.Herreria) Then
-        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_ECONOMY, e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_ECONOMY, e_FontTypeNames.FONTTYPE_INFO, CStr(e_Skill.Herreria))
         Exit Sub
     End If
+    If Not HerreroTieneMartilloYYunque(UserIndex) Then Exit Sub
     If Not HayLugarEnInventario(UserIndex, ItemIndex, 1) Then
         ' Msg643=No tienes suficiente espacio en el inventario.
         Call WriteLocaleMsg(UserIndex, MSG_NO_TIENES_SUFICIENTE_ESPACIO_INVENTARIO, e_TextChannel.TEXTCHANNEL_ECONOMY, e_FontTypeNames.FONTTYPE_New_Naranja)
@@ -1140,6 +1113,50 @@ HerreroConstruirItem_Err:
     Call TraceError(Err.Number, Err.Description, "Trabajo.HerreroConstruirItem", Erl)
 End Sub
 
+Private Function HerreroTieneMartilloYYunque(ByVal UserIndex As Integer) As Boolean
+    ' Plan 2026-11-08-revision-profesiones-y-navegacion: the smithing packet arrived without the hammer or the anvil that the
+    ' form requires. Same criteria as WorldActions.HandleAnvilAction (the only way the client opens
+    ' frmHerrero): smith hammer equipped and an anvil (otAnvil) within Distancia <= 2.
+    Dim toolIndex As Integer
+    Dim offsetX   As Long
+    Dim offsetY   As Long
+    Dim tileX     As Long
+    Dim tileY     As Long
+    Dim tileObj   As Integer
+    With UserList(UserIndex)
+        toolIndex = .invent.EquippedWorkingToolObjIndex
+        If toolIndex = 0 Then
+            'Msg1071=Debes tener equipado un martillo de herrero para trabajar con el yunque.
+            Call WriteLocaleMsg(UserIndex, MSG_DEBES_TENER_EQUIPADO_MARTILLO_HERRERO_TRABAJAR_YUNQUE, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
+            Exit Function
+        End If
+        If ObjData(toolIndex).Subtipo <> e_WorkingToolSubType.SmithHammer Then
+            'Msg1072=La herramienta que tienes no es la correcta, necesitas un martillo de herrero para poder trabajar.
+            Call WriteLocaleMsg(UserIndex, MSG_NO_HERRAMIENTA_TIENES_CORRECTA_NECESITAS_MARTILLO_HERRERO_PODER_TRABAJAR, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
+            Exit Function
+        End If
+        For offsetY = -2 To 2
+            For offsetX = -2 To 2
+                If Abs(offsetX) + Abs(offsetY) <= 2 Then
+                    tileX = CLng(.pos.x) + offsetX
+                    tileY = CLng(.pos.y) + offsetY
+                    If InMapBounds(.pos.Map, tileX, tileY) Then
+                        tileObj = MapData(tileX, tileY, .pos.Map).ObjInfo.ObjIndex
+                        If tileObj > 0 Then
+                            If ObjData(tileObj).OBJType = e_OBJType.otAnvil Then
+                                HerreroTieneMartilloYYunque = True
+                                Exit Function
+                            End If
+                        End If
+                    End If
+                End If
+            Next offsetX
+        Next offsetY
+    End With
+    ' Msg8=Estas demasiado lejos (same message as HandleAnvilAction).
+    Call WriteLocaleMsg(UserIndex, MSG_SACERDOTE_PUEDE_CURARTE_DEBIDO_DEMASIADO_LEJOS, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
+End Function
+
 Public Function PuedeConstruirCarpintero(ByVal ItemIndex As Integer) As Boolean
     On Error GoTo PuedeConstruirCarpintero_Err
     Dim i As Long
@@ -1202,7 +1219,7 @@ Public Sub CarpinteroConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex A
         Exit Sub
     End If
     If Not TieneProfesionAprendida(UserIndex, e_Skill.Carpinteria) Then
-        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO, CStr(e_Skill.Carpinteria))
         Exit Sub
     End If
     If UserList(UserIndex).flags.Privilegios And (e_PlayerType.Consejero Or e_PlayerType.SemiDios Or e_PlayerType.Dios) Then
@@ -1276,6 +1293,8 @@ Public Sub AlquimistaConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex A
     On Error GoTo AlquimistaConstruirItem_Err
     Call VigiaFuente(UserIndex, "trabajo")  ' E2 vigia (modVigia)
     If Not WorkFatigue_CanWork(UserIndex, WF_KIND_CRAFT) Then Exit Sub
+    ' Plan 2026-11-08-revision-profesiones-y-navegacion: same craft interval as the other 3 trades (alchemy had none).
+    If Not IntervaloPermiteTrabajarConstruir(UserIndex) Then Exit Sub
     ' Plan 04.001: gate de ejecucion, no solo al equipar la herramienta.
     ' Plan 27.001 (05.002 wave 7): no working inside a duel or an event. It goes at the top, next to
     ' the profession gate: this Sub's error handler ends in Resume Next, so an Exit Sub placed among
@@ -1286,7 +1305,7 @@ Public Sub AlquimistaConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex A
         Exit Sub
     End If
     If Not TieneProfesionAprendida(UserIndex, e_Skill.Alquimia) Then
-        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO, CStr(e_Skill.Alquimia))
         Exit Sub
     End If
     If Not UserList(UserIndex).Stats.MinSta > 0 Then
@@ -1375,7 +1394,7 @@ Public Sub SastreConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As In
         Exit Sub
     End If
     If Not TieneProfesionAprendida(UserIndex, e_Skill.Sastreria) Then
-        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO, CStr(e_Skill.Sastreria))
         Exit Sub
     End If
     If Not UserList(UserIndex).Stats.MinSta > 0 Then

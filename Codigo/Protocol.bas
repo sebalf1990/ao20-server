@@ -2895,7 +2895,7 @@ Private Sub HandleWork(ByVal UserIndex As Integer)
         If IsFeatureEnabled("professions_learnable") Then
             If Skill = e_Skill.Pescar Or Skill = e_Skill.Talar Or Skill = e_Skill.Mineria Or Skill = e_Skill.Carpinteria Or Skill = e_Skill.Herreria Or Skill = e_Skill.Sastreria Or Skill = e_Skill.Alquimia Then
                 If Not TieneProfesionAprendida(UserIndex, CInt(Skill)) Then
-                    Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+                    Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO, CStr(CInt(Skill)))
                     Exit Sub
                 End If
             End If
@@ -7279,7 +7279,8 @@ Private Sub HandleInvitarGrupo(ByVal UserIndex As Integer)
             'Msg77=¡¡Estás muerto!!.
             Call WriteLocaleMsg(UserIndex, MSG_MUERTO, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         Else
-            If .Grupo.CantidadMiembros <= UBound(.Grupo.Miembros) Then
+            ' Plan 2026-11-08-revision-profesiones-y-navegacion: cap of 5 (the old check let a full group of 6 keep inviting).
+            If .Grupo.CantidadMiembros < MAX_GROUP_MEMBERS Then
                 Call WriteWorkRequestTarget(UserIndex, e_Skill.Grupo)
             Else
                 ' Msg751=¡No podés invitar a más personas!
@@ -7402,14 +7403,27 @@ Private Sub HandleResponderPregunta(ByVal UserIndex As Integer)
                     End If
                 Case 5
                     Dim i As Integer, j As Integer
+                    Dim specialFishGold As Double
                     With UserList(UserIndex)
+                        ' Plan 2026-11-08-revision-profesiones-y-navegacion: revalidate NPC, distance and profession when
+                        ' the answer arrives; the gold is capped at MAXORO below.
+                        If Not IsValidNpcRef(.flags.TargetNPC) Then
+                            .flags.pregunta = 0
+                            Exit Sub
+                        End If
+                        If Not CanDeliverSpecialFish(UserIndex, .flags.TargetNPC.ArrayIndex) Then
+                            .flags.pregunta = 0
+                            Exit Sub
+                        End If
                         For i = 1 To MAX_INVENTORY_SLOTS
                             For j = 1 To UBound(PecesEspeciales)
                                 If .invent.Object(i).ObjIndex = PecesEspeciales(j).ObjIndex Then
                                     Call VigiaFuente(UserIndex, "pesca_especial")  ' E2 vigia (modVigia)
                                     .Stats.PuntosPesca = .Stats.PuntosPesca + (ObjData(.invent.Object(i).ObjIndex).PuntosPesca * .invent.Object(i).amount)
-                                    .Stats.GLD = .Stats.GLD + (ObjData(.invent.Object(i).ObjIndex).Valor * .invent.Object(i).amount * SvrConfig.GetValue( _
+                                    specialFishGold = CDbl(.Stats.GLD) + (CDbl(ObjData(.invent.Object(i).ObjIndex).Valor) * .invent.Object(i).amount * SvrConfig.GetValue( _
                                             "SpecialFishGoldMultiplier"))
+                                    If specialFishGold > MAXORO Then specialFishGold = MAXORO
+                                    .Stats.GLD = CLng(specialFishGold)
                                     Call WriteUpdateGold(UserIndex)
                                     If IsFeatureEnabled("gain_exp_while_working") Then
                                         .Stats.Exp = .Stats.Exp + (ObjData(.invent.Object(i).ObjIndex).Valor * .invent.Object(i).amount * SvrConfig.GetValue( _
@@ -8800,7 +8814,7 @@ Public Function HandleStartAutomatedAction(ByVal UserIndex As Integer)
     If IsFeatureEnabled("professions_learnable") Then
         If skill = e_Skill.Pescar Or skill = e_Skill.Talar Or skill = e_Skill.Mineria Then
             If Not TieneProfesionAprendida(UserIndex, CInt(skill)) Then
-                Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+                Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO, CStr(CInt(skill)))
                 Exit Function
             End If
         End If
