@@ -38,8 +38,58 @@ Private mElementalSlowFloor As Single
 ' ============================================================================
 ' Toggle maestro
 ' ============================================================================
+' E1 (plan revision-motor-elemental): los toggles que se consultan por golpe/tick se cachean en
+' Boolean. Se refrescan desde FileIO.SetFeatureToggle (carga del .ini y cambio en vivo por GM) y se
+' borran en FileIO.LoadFeatureToggles antes de cargar. Un IsFeatureEnabled() es un lookup por
+' string en un Dictionary: decenas por golpe era costo puro.
+Private mElementalSystemOn As Boolean
+Private mElementalDebugLogOn As Boolean
+Private mMagicBonusDamageOn As Boolean
+Private mElementalBalanceLogOn As Boolean
+Private mElementalPlayerTelemetryOn As Boolean
+
+Public Sub ElementalToggleCache_Reset()
+    mElementalSystemOn = False
+    mElementalDebugLogOn = False
+    mMagicBonusDamageOn = False
+    mElementalBalanceLogOn = False
+    mElementalPlayerTelemetryOn = False
+End Sub
+
+Public Sub ElementalToggleCache_OnChanged(ByVal toggleName As String, ByVal State As Boolean)
+    Select Case toggleName
+        Case "elemental_system"
+            mElementalSystemOn = State
+        Case "elemental_debug_log"
+            mElementalDebugLogOn = State
+        Case "mr-magic-bonus-damage"
+            mMagicBonusDamageOn = State
+        Case "elemental_balance_log"
+            mElementalBalanceLogOn = State
+        Case "elemental_player_telemetry"
+            mElementalPlayerTelemetryOn = State
+    End Select
+End Sub
+
 Public Function ElementalSystemEnabled() As Boolean
-    ElementalSystemEnabled = IsFeatureEnabled("elemental_system")
+    ElementalSystemEnabled = mElementalSystemOn
+End Function
+
+' Toggle "mr-magic-bonus-damage" (bonus de dano magico por skill Magia), cacheado.
+Public Function MagicBonusDamageEnabled() As Boolean
+    MagicBonusDamageEnabled = mMagicBonusDamageOn
+End Function
+
+Public Function ElementalDebugLogEnabled() As Boolean
+    ElementalDebugLogEnabled = mElementalDebugLogOn
+End Function
+
+Public Function ElementalBalanceLogToggleOn() As Boolean
+    ElementalBalanceLogToggleOn = mElementalBalanceLogOn
+End Function
+
+Public Function ElementalPlayerTelemetryToggleOn() As Boolean
+    ElementalPlayerTelemetryToggleOn = mElementalPlayerTelemetryOn
 End Function
 
 ' ============================================================================
@@ -455,10 +505,15 @@ Private Function FireProcs(ByRef src As t_ElementalSource, ByVal trig As e_ProcT
                         If src.Proc(i).EotId > UBound(EffectOverTime) Then
                             Call ElementalLog(logCtx & " PROC applyState EotId=" & src.Proc(i).EotId & " FUERA DE CATALOGO (ignorado)")
                         ElseIf src.Proc(i).EotId > 0 Then
+                            ' E1: la resistencia/inmunidad sale del DamageType del EOT del catalogo (lo que el
+                            ' tick realmente hace); si el EOT no lo declara (0), el del proc como antes.
+                            Dim procDmgType As Integer
+                            procDmgType = src.Proc(i).DamageType
+                            If EffectOverTime(src.Proc(i).EotId).DamageType > 0 Then procDmgType = EffectOverTime(src.Proc(i).EotId).DamageType
                             Dim rr As t_ElementalResist
-                            rr = GetTargetResist(targetIsNpc, targetIndex, src.Proc(i).DamageType)
+                            rr = GetTargetResist(targetIsNpc, targetIndex, procDmgType)
                             If rr.Immune <> 0 Or rr.ImmuneEffect <> 0 Then
-                                Call ElementalLog(logCtx & " PROC applyState BLOQUEADO (inmune " & DamageTypeName(src.Proc(i).DamageType) & ")")
+                                Call ElementalLog(logCtx & " PROC applyState BLOQUEADO (inmune " & DamageTypeName(procDmgType) & ")")
                             ElseIf rr.ReduceEffectChancePct > 0 And RandomNumber(1, 100) <= rr.ReduceEffectChancePct Then
                                 Call ElementalLog(logCtx & " PROC applyState resistido (chance efecto)")
                             Else
@@ -466,7 +521,15 @@ Private Function FireProcs(ByRef src As t_ElementalSource, ByVal trig As e_ProcT
                                 If targetIsNpc Then trt = eNpc Else trt = eUser
                                 ' Limit-aware: si ya existe (segun Limit), Reset (refresca/suma stack); si no, crear.
                                 Dim existEff As IBaseEffectOverTime
-                                If targetIsNpc Then
+                                If EffectOverTime(src.Proc(i).EotId).Family > 0 Then
+                                    ' D8: una instancia por familia y por caster; la de mayor nivel manda (si llega una
+                                    ' mas fuerte reemplaza a la vieja, si llega igual o mas debil solo refresca la existente).
+                                    If targetIsNpc Then
+                                        Set existEff = EffectsOverTime.ResolveFamilyEffect(attackerIndex, attackerType, NpcList(targetIndex).EffectOverTime, src.Proc(i).EotId)
+                                    Else
+                                        Set existEff = EffectsOverTime.ResolveFamilyEffect(attackerIndex, attackerType, UserList(targetIndex).EffectOverTime, src.Proc(i).EotId)
+                                    End If
+                                ElseIf targetIsNpc Then
                                     Set existEff = EffectsOverTime.FindEffectOnTarget(attackerIndex, NpcList(targetIndex).EffectOverTime, src.Proc(i).EotId)
                                 Else
                                     Set existEff = EffectsOverTime.FindEffectOnTarget(attackerIndex, UserList(targetIndex).EffectOverTime, src.Proc(i).EotId)
@@ -474,11 +537,11 @@ Private Function FireProcs(ByRef src As t_ElementalSource, ByVal trig As e_ProcT
                                 If existEff Is Nothing Then
                                     Call EffectsOverTime.CreateEffect(attackerIndex, attackerType, targetIndex, trt, src.Proc(i).EotId)
                                 Else
-                                    Call existEff.Reset(attackerIndex, attackerType, src.Proc(i).EotId)
+                                    Call existEff.Reset(attackerIndex, attackerType, existEff.EotId)
                                 End If
-                                If attackerType = eUser And LenB(EffectOverTime(src.Proc(i).EotId).ApplyMsg) > 0 Then Call WriteConsoleMsg(attackerIndex, EffectOverTime(src.Proc(i).EotId).ApplyMsg, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
+                                If attackerType = eUser And EffectOverTime(src.Proc(i).EotId).ApplyMsgId > 0 Then Call WriteLocaleMsg(attackerIndex, EffectOverTime(src.Proc(i).EotId).ApplyMsgId, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
                                 Call ElementalLog(logCtx & " PROC applyState EotId=" & src.Proc(i).EotId & IIf(existEff Is Nothing, " aplicado", " refrescado"))
-                                If ElementalBalanceLogEnabled() Then Call LogElementalBalance("proc_apply_state", ElementalBalanceActorId(attackerType = eNpc, attackerIndex), ElementalBalanceActorClass(attackerType = eNpc, attackerIndex), ElementalBalanceActorId(targetIsNpc, targetIndex), IIf(targetIsNpc, "npc", "user"), itemObjIndex, ElementalBalanceCatalogTier(itemObjIndex), src.Proc(i).DamageType, 0, 0, ElementalBalanceMap(targetIsNpc, targetIndex), ElementalBalanceCharId(attackerType = eNpc, attackerIndex), ElementalBalanceAccountId(attackerType = eNpc, attackerIndex), ElementalBalanceCharId(targetIsNpc, targetIndex), srcItemObjIndex, ElementalBalanceFightId(ElementalBalanceCharId(attackerType = eNpc, attackerIndex), ElementalBalanceCharId(targetIsNpc, targetIndex)))
+                                If ElementalBalanceLogEnabled() Then Call LogElementalBalance("proc_apply_state", ElementalBalanceActorId(attackerType = eNpc, attackerIndex), ElementalBalanceActorClass(attackerType = eNpc, attackerIndex), ElementalBalanceActorId(targetIsNpc, targetIndex), IIf(targetIsNpc, "npc", "user"), itemObjIndex, ElementalBalanceCatalogTier(itemObjIndex), procDmgType, 0, 0, ElementalBalanceMap(targetIsNpc, targetIndex), ElementalBalanceCharId(attackerType = eNpc, attackerIndex), ElementalBalanceAccountId(attackerType = eNpc, attackerIndex), ElementalBalanceCharId(targetIsNpc, targetIndex), srcItemObjIndex, ElementalBalanceFightId(ElementalBalanceCharId(attackerType = eNpc, attackerIndex), ElementalBalanceCharId(targetIsNpc, targetIndex)))
                             End If
                         Else
                             Call ElementalLog(logCtx & " PROC applyState sin EotId (ignorado)")
@@ -513,6 +576,11 @@ Public Sub ResolveThorns(ByRef defenderSrc As t_ElementalSource, ByVal defenderI
     On Error GoTo ErrHandler
     If Not ElementalSystemEnabled() Then Exit Sub
     If attackerIndex <= 0 Then Exit Sub
+    ' E1: un GM atacante no recibe espinas (mismo criterio que la capa elemental NPC->user: solo
+    ' Privilegios = User sufren dano elemental; ver SistemaCombate.bas, rama NPC->user).
+    If Not attackerIsNpc Then
+        If (UserList(attackerIndex).flags.Privilegios And e_PlayerType.User) = 0 Then Exit Sub
+    End If
     Dim i As Integer
     For i = 1 To defenderSrc.ProcCount
         If defenderSrc.Proc(i).Trigger = eProcOnDamaged And defenderSrc.Proc(i).Kind = eProcDamageBonus Then
@@ -765,7 +833,7 @@ Public Sub OnEnchantedWeaponSwing(ByVal UserIndex As Integer)
         ' Expiracion por tiempo (igual que el veneno: se chequea al swingear)
         If .EnchantWeaponDeadline <> 0 Then
             If DeadlinePassed(GetTickCountRaw(), .EnchantWeaponDeadline) Then
-                Call ClearEnchantedWeapon(UserIndex, "El encantamiento de tu arma se ha disipado.")
+                Call ClearEnchantedWeapon(UserIndex, MSG_ENCH_WEAPON_DISPELLED)
                 Exit Sub
             End If
         End If
@@ -775,7 +843,7 @@ Public Sub OnEnchantedWeaponSwing(ByVal UserIndex As Integer)
             ' plan 10.001 Ola 5: charge_spent, unico evento nuevo en el hot path (un swing).
             If ElementalPlayerTelemetryEnabled() Then Call LogElementalBalance("charge_spent", ElementalBalanceActorId(False, UserIndex), ElementalBalanceActorClass(False, UserIndex), "0", "none", .EnchantWeaponObjIndex, ElementalBalanceCatalogTier(.EnchantWeaponObjIndex), 0, .EnchantWeaponCargas, 0, ElementalBalanceMap(False, UserIndex), ElementalBalanceCharId(False, UserIndex), ElementalBalanceAccountId(False, UserIndex), 0, .EnchantWeaponSrcItemObjIndex, 0)
             If .EnchantWeaponCargas <= 0 Then
-                Call ClearEnchantedWeapon(UserIndex, "El encantamiento de tu arma se ha agotado.")
+                Call ClearEnchantedWeapon(UserIndex, MSG_ENCH_WEAPON_SPENT)
             Else
                 ' 06.002 Ola 4: contador de cargas vivo en el HUD (espejo de OnEnchantedAmmoSwing).
                 Call WriteUpdatePoisonStacks(UserIndex, .EnchantWeaponObjIndex, .EnchantWeaponCargas)
@@ -796,7 +864,7 @@ Public Sub CheckEnchantedWeaponTick(ByVal UserIndex As Integer)
         If .EnchantWeaponPermanent = 1 Then Exit Sub
         If .EnchantWeaponDeadline = 0 Then Exit Sub
         If DeadlinePassed(GetTickCountRaw(), .EnchantWeaponDeadline) Then
-            Call ClearEnchantedWeapon(UserIndex, "El encantamiento de tu arma se ha disipado.")
+            Call ClearEnchantedWeapon(UserIndex, MSG_ENCH_WEAPON_DISPELLED)
         End If
     End With
     Exit Sub
@@ -805,7 +873,7 @@ ErrHandler:
 End Sub
 
 ' Limpia el cache del encantamiento elemental del arma (cargas agotadas / tiempo expirado).
-Public Sub ClearEnchantedWeapon(ByVal UserIndex As Integer, Optional ByVal msg As String = "")
+Public Sub ClearEnchantedWeapon(ByVal UserIndex As Integer, Optional ByVal msgId As Integer = 0)
     On Error GoTo ErrHandler
     If UserIndex <= 0 Then Exit Sub
     Dim oldObj As Integer
@@ -821,7 +889,7 @@ Public Sub ClearEnchantedWeapon(ByVal UserIndex As Integer, Optional ByVal msg A
     End With
     ' 06.002 Ola 4: apaga el icono de estado (espejo de ClearEnchantedAmmo).
     If oldObj > 0 Then Call WriteSendSkillCdUpdate(UserIndex, CLIENT_EFFECT_ENCHANTED_WEAPON, CLng(oldObj), 0, 0, eDebuff, 0)
-    If LenB(msg) > 0 Then Call WriteConsoleMsg(UserIndex, msg, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+    If msgId > 0 Then Call WriteLocaleMsg(UserIndex, msgId, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
     Exit Sub
 ErrHandler:
     Call TraceError(Err.Number, Err.Description, "modElementalCombat.ClearEnchantedWeapon", Erl)
@@ -858,34 +926,34 @@ Private Function PrimaryElementalType(ByRef src As t_ElementalSource) As Integer
 End Function
 
 ' CP2 (20.002 Step 7): valida que un arma sea encantable (Subtipo=11) y acepte el tipo de la fuente
-' (TiposElementalCompatibles, CSV; vacio = todos). Devuelve False + outMsg de rechazo.
-Public Function CanEnchantWeapon(ByVal UserIndex As Integer, ByVal WeaponObjIndex As Integer, ByRef src As t_ElementalSource, ByRef outMsg As String) As Boolean
+' (TiposElementalCompatibles, CSV; vacio = todos). Devuelve False + outMsgId (id de LocalMsg) de rechazo.
+Public Function CanEnchantWeapon(ByVal UserIndex As Integer, ByVal WeaponObjIndex As Integer, ByRef src As t_ElementalSource, ByRef outMsgId As Integer) As Boolean
     On Error GoTo ErrHandler
-    outMsg = vbNullString
+    outMsgId = 0
     If WeaponObjIndex <= 0 Then
-        outMsg = "No hay un arma equipada para encantar."
+        outMsgId = MSG_ENCH_NO_WEAPON
         Exit Function
     End If
     If ObjData(WeaponObjIndex).Subtipo <> 11 Then
-        outMsg = "Esa arma no se puede encantar."
+        outMsgId = MSG_ENCH_WEAPON_INVALID
         Exit Function
     End If
     ' Plan 03.002 R2: rama inalcanzable retirada (ningun item tiene Subtipo=11 y Proyectil=1 a la vez; el gate de Subtipo ya corta antes)
     ' CP3 (20.002 Step 7): no se puede encantar con un orbe elemental equipado (exclusividad)
     If HasElementalOrbEquipped(UserIndex) Then
-        outMsg = "No podes encantar el arma con un orbe equipado."
+        outMsgId = MSG_ENCH_ORB_BLOCKS
         Exit Function
     End If
     ' Exclusividad (CP2): no encantar un arma ya untada con veneno (untado activo).
     If UserList(UserIndex).flags.PoisonedWeaponObjIndex = WeaponObjIndex And UserList(UserIndex).flags.PoisonedWeaponCargas > 0 Then
-        outMsg = "Tu arma ya esta untada con veneno."
+        outMsgId = MSG_ENCH_WEAPON_POISONED
         Exit Function
     End If
     Dim csv As String
     csv = ObjData(WeaponObjIndex).TiposElementalCompatibles
     If LenB(csv) > 0 Then
         If InStr("," & csv & ",", "," & CStr(PrimaryElementalType(src)) & ",") = 0 Then
-            outMsg = "El arma no acepta este tipo de encantamiento."
+            outMsgId = MSG_ENCH_WEAPON_TYPE
             Exit Function
         End If
     End If
@@ -925,32 +993,32 @@ End Sub
 ' ============================================================================
 ' Encantar Flechas elemental (20.002 CP1 ammo) - espejo de EnchantWeapon para la municion
 ' ============================================================================
-Public Function CanEnchantAmmo(ByVal UserIndex As Integer, ByVal AmmoObjIndex As Integer, ByRef src As t_ElementalSource, ByRef outMsg As String) As Boolean
+Public Function CanEnchantAmmo(ByVal UserIndex As Integer, ByVal AmmoObjIndex As Integer, ByRef src As t_ElementalSource, ByRef outMsgId As Integer) As Boolean
     On Error GoTo ErrHandler
-    outMsg = vbNullString
+    outMsgId = 0
     If AmmoObjIndex <= 0 Then
-        outMsg = "Equipa flechas para encantarlas."
+        outMsgId = MSG_ENCH_NO_AMMO
         Exit Function
     End If
     If ObjData(AmmoObjIndex).OBJType <> e_OBJType.otArrows Then
-        outMsg = "Solo se pueden encantar flechas."
+        outMsgId = MSG_ENCH_ONLY_ARROWS
         Exit Function
     End If
     ' Exclusividad (CP2): no encantar flechas con veneno propio (nativo).
     If ObjData(AmmoObjIndex).FlechaVenenoFamilia > 0 Then
-        outMsg = "Esas flechas ya tienen veneno propio."
+        outMsgId = MSG_ENCH_AMMO_OWN_POISON
         Exit Function
     End If
     ' Exclusividad (CP2): no encantar flechas ya untadas con veneno (untado activo).
     If UserList(UserIndex).flags.PoisonedAmmoObjIndex = AmmoObjIndex And UserList(UserIndex).flags.PoisonedAmmoCargas > 0 Then
-        outMsg = "Esas flechas ya estan untadas con veneno."
+        outMsgId = MSG_ENCH_AMMO_POISONED
         Exit Function
     End If
     Dim csv As String
     csv = ObjData(AmmoObjIndex).TiposElementalCompatibles
     If LenB(csv) > 0 Then
         If InStr("," & csv & ",", "," & CStr(PrimaryElementalType(src)) & ",") = 0 Then
-            outMsg = "Esas flechas no aceptan este tipo de encantamiento."
+            outMsgId = MSG_ENCH_AMMO_TYPE
             Exit Function
         End If
     End If
@@ -998,7 +1066,7 @@ Public Sub OnEnchantedAmmoSwing(ByVal UserIndex As Integer, ByVal AmmoObjIndex A
         If .EnchantedAmmoPermanent = 1 Then Exit Sub
         If .EnchantedAmmoDeadline <> 0 Then
             If DeadlinePassed(GetTickCountRaw(), .EnchantedAmmoDeadline) Then
-                Call ClearEnchantedAmmo(UserIndex, "El encantamiento de tus flechas se ha disipado.")
+                Call ClearEnchantedAmmo(UserIndex, MSG_ENCH_AMMO_DISPELLED)
                 Exit Sub
             End If
         End If
@@ -1007,7 +1075,7 @@ Public Sub OnEnchantedAmmoSwing(ByVal UserIndex As Integer, ByVal AmmoObjIndex A
             ' plan 10.001 Ola 5: charge_spent, unico evento nuevo en el hot path (un disparo).
             If ElementalPlayerTelemetryEnabled() Then Call LogElementalBalance("charge_spent", ElementalBalanceActorId(False, UserIndex), ElementalBalanceActorClass(False, UserIndex), "0", "none", .EnchantedAmmoObjIndex, ElementalBalanceCatalogTier(.EnchantedAmmoObjIndex), 0, .EnchantedAmmoCargas, 0, ElementalBalanceMap(False, UserIndex), ElementalBalanceCharId(False, UserIndex), ElementalBalanceAccountId(False, UserIndex), 0, .EnchantedAmmoSrcItemObjIndex, 0)
             If .EnchantedAmmoCargas <= 0 Then
-                Call ClearEnchantedAmmo(UserIndex, "El encantamiento de tus flechas se ha agotado.")
+                Call ClearEnchantedAmmo(UserIndex, MSG_ENCH_AMMO_SPENT)
             Else
                 Call WriteUpdatePoisonStacks(UserIndex, .EnchantedAmmoObjIndex, .EnchantedAmmoCargas)
             End If
@@ -1027,7 +1095,7 @@ Public Sub CheckEnchantedAmmoTick(ByVal UserIndex As Integer)
         If .EnchantedAmmoPermanent = 1 Then Exit Sub
         If .EnchantedAmmoDeadline = 0 Then Exit Sub
         If DeadlinePassed(GetTickCountRaw(), .EnchantedAmmoDeadline) Then
-            Call ClearEnchantedAmmo(UserIndex, "El encantamiento de tus flechas se ha disipado.")
+            Call ClearEnchantedAmmo(UserIndex, MSG_ENCH_AMMO_DISPELLED)
         End If
     End With
     Exit Sub
@@ -1035,7 +1103,7 @@ ErrHandler:
     Call TraceError(Err.Number, Err.Description, "modElementalCombat.CheckEnchantedAmmoTick", Erl)
 End Sub
 
-Public Sub ClearEnchantedAmmo(ByVal UserIndex As Integer, Optional ByVal msg As String = "")
+Public Sub ClearEnchantedAmmo(ByVal UserIndex As Integer, Optional ByVal msgId As Integer = 0)
     On Error GoTo ErrHandler
     If UserIndex <= 0 Then Exit Sub
     Dim oldObj As Integer
@@ -1051,7 +1119,7 @@ Public Sub ClearEnchantedAmmo(ByVal UserIndex As Integer, Optional ByVal msg As 
     End With
     ' Apaga el icono de estado del tirador (Effect57).
     If oldObj > 0 Then Call WriteSendSkillCdUpdate(UserIndex, CLIENT_EFFECT_ENCHANTED_AMMO, CLng(oldObj), 0, 0, eDebuff, 0)
-    If LenB(msg) > 0 Then Call WriteConsoleMsg(UserIndex, msg, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+    If msgId > 0 Then Call WriteLocaleMsg(UserIndex, msgId, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
     Exit Sub
 ErrHandler:
     Call TraceError(Err.Number, Err.Description, "modElementalCombat.ClearEnchantedAmmo", Erl)
@@ -1117,6 +1185,9 @@ End Function
 ' ============================================================================
 Public Sub ElementalLog(ByVal msg As String)
     On Error GoTo ErrHandler
+    ' E1: toggle propio (elemental_debug_log, default 0). Antes abria/escribia/cerraba el archivo en
+    ' cada componente, proc, espina y tick con solo tener el motor encendido.
+    If Not mElementalDebugLogOn Then Exit Sub
     If Not ElementalSystemEnabled() Then Exit Sub
     Dim fname As String
     fname = App.Path & "\Logs\Elemental_" & Format$(Date, "yyyy-mm-dd") & ".log"

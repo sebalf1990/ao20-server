@@ -158,6 +158,24 @@ Private Sub NotifyTimerRefresh()
     End If
 End Sub
 
+' D7: foto de los parametros reales para persistir al desloguear (ver EffectsOverTime.BuildPoisonSnapshot).
+' Campos: H,eot,tick,restante,total,modo,min,max,psModo,psMin,psMax,stacks,stacksMax,golpes,decayMs,refresca,pvp,pve
+Public Function SnapshotString() As String
+    SnapshotString = "H," & DotInfo.EotId & "," & TickTime & "," & DurationLeft & "," & DurationTotalMs & "," & DanoModo & "," & DanoMin & "," & DanoMax & "," & _
+            DanoPorStackModo & "," & DanoPorStackMin & "," & DanoPorStackMax & "," & StacksActuales & "," & StacksMax & "," & GolpesQueSumanStacks & "," & _
+            IntervaloDecayStackMs & "," & RefrescaTimerAlStackear & "," & EffectsOverTime.SnapNum(FactorPvP) & "," & EffectsOverTime.SnapNum(FactorPvE)
+End Function
+
+' D7: tras recrear el efecto con los parametros guardados, devuelve el tiempo restante real.
+Public Sub RestoreProgress(ByVal pDurationLeft As Long)
+    If pDurationLeft <= 0 Or pDurationLeft > DurationTotalMs Then Exit Sub
+    DurationLeft = pDurationLeft
+    If DotInfo.TargetRef.RefType = eUser And EffectOverTime(DotInfo.EotId).ClientEffectTypeId > 0 Then
+        Call WriteSendSkillCdUpdate(DotInfo.TargetRef.ArrayIndex, EffectOverTime(DotInfo.EotId).ClientEffectTypeId, DotInfo.UniqueId, DurationLeft, DurationTotalMs, _
+                EffectOverTime(DotInfo.EotId).buffType, StacksActuales)
+    End If
+End Sub
+
 ' --- IBaseEffectOverTime impl ---
 Public Property Get IBaseEffectOverTime_TypeId() As Integer
     IBaseEffectOverTime_TypeId = e_EffectOverTimeType.ePoisonHemo
@@ -371,7 +389,7 @@ Private Sub PerformTick()
                         UserList(DotInfo.TargetRef.ArrayIndex).pos.x, UserList(DotInfo.TargetRef.ArrayIndex).pos.y))
             End If
         End If
-        If IsValidRef(Source) Then
+        If EffectsOverTime.DotSourceCanCredit(Source, UserList(DotInfo.TargetRef.ArrayIndex).pos.Map) Then
             Call UserMod.DoDamageOrHeal(DotInfo.TargetRef.ArrayIndex, Source.ArrayIndex, Source.RefType, -TickDmg, e_dot, DotInfo.EotId, DamageColor:=vbGreen)
         Else
             Call UserMod.DoDamageOrHeal(DotInfo.TargetRef.ArrayIndex, 0, e_ReferenceType.eNone, -TickDmg, e_dot, DotInfo.EotId, DamageColor:=vbGreen)
@@ -385,7 +403,7 @@ Private Sub PerformTick()
                 PrepareMessageParticleFX(NpcList(DotInfo.TargetRef.ArrayIndex).Char.charindex, 339, 30, False, , _
                     NpcList(DotInfo.TargetRef.ArrayIndex).pos.x, NpcList(DotInfo.TargetRef.ArrayIndex).pos.y))
         End If
-        If IsValidRef(Source) Then
+        If EffectsOverTime.DotSourceCanCredit(Source, NpcList(DotInfo.TargetRef.ArrayIndex).pos.Map) Then
             Call NPCs.DoDamageOrHeal(DotInfo.TargetRef.ArrayIndex, Source.ArrayIndex, Source.RefType, -TickDmg, e_dot, DotInfo.EotId, DamageColor:=vbGreen)
         Else
             Call NPCs.DoDamageOrHeal(DotInfo.TargetRef.ArrayIndex, 0, e_ReferenceType.eNone, -TickDmg, e_dot, DotInfo.EotId, DamageColor:=vbGreen)

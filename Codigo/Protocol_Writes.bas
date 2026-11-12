@@ -1462,6 +1462,10 @@ Public Sub WriteUpdateDM(ByVal UserIndex As Integer)
         If .EquippedWeaponObjIndex > 0 Then
             Valor = Valor + ObjData(.EquippedWeaponObjIndex).MagicDamageBonus
         End If
+        ' % daño mágico del amuleto (el combate lo suma igual en modHechizos; solo el %, no el absoluto)
+        If .EquippedAmuletAccesoryObjIndex > 0 Then
+            Valor = Valor + ObjData(.EquippedAmuletAccesoryObjIndex).MagicDamageBonus
+        End If
         ' % daño mágico del anillo
         If .EquippedRingAccesoryObjIndex > 0 Then
             Valor = Valor + ObjData(.EquippedRingAccesoryObjIndex).MagicDamageBonus

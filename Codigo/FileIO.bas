@@ -778,6 +778,9 @@ Public Sub LoadEffectOverTime()
         EffectOverTime(i).OnHitWav = val(Leer.GetValue("EOT" & i, "OnHitWav"))
         EffectOverTime(i).Override = val(Leer.GetValue("EOT" & i, "Override"))
         EffectOverTime(i).Limit = val(Leer.GetValue("EOT" & i, "Limit"))
+        ' D8: familia y nivel del efecto (opcionales; ausente = 0 = sin regla de familia).
+        EffectOverTime(i).Family = val(Leer.GetValue("EOT" & i, "Familia"))
+        EffectOverTime(i).Level = val(Leer.GetValue("EOT" & i, "Nivel"))
         Call ReadRadarProfile(Leer, "EOT" & i, EffectOverTime(i).Radar)
         EffectOverTime(i).PhysicalDamageReduction = val(Leer.GetValue("EOT" & i, "PhysicalDamageReduction"))
         EffectOverTime(i).MagicDamageReduction = val(Leer.GetValue("EOT" & i, "MagicDamageReduction"))
@@ -793,7 +796,7 @@ Public Sub LoadEffectOverTime()
         ' M6 (plan 02.001): tipo de dano del tick (e_ElementalDamageType). Clave opcional;
         ' ausente = 0 = comportamiento previo (el tick no consulta resist/inmunidad).
         EffectOverTime(i).DamageType = val(Leer.GetValue("EOT" & i, "DamageType"))
-        EffectOverTime(i).ApplyMsg = Leer.GetValue("EOT" & i, "ApplyMsg")
+        EffectOverTime(i).ApplyMsgId = val(Leer.GetValue("EOT" & i, "ApplyMsgId"))
         EffectOverTime(i).DanoModo = val(Leer.GetValue("EOT" & i, "DanoModo"))
         EffectOverTime(i).FactorPvP = val(Leer.GetValue("EOT" & i, "FactorPvP"))
         EffectOverTime(i).FactorPvE = val(Leer.GetValue("EOT" & i, "FactorPvE"))
@@ -2449,6 +2452,7 @@ Sub LoadFeatureToggles()
     Dim Temporal As Long
     Set FeatureToggles = New Dictionary
     Call WorkFatigue_ResetToggleCache
+    Call ElementalToggleCache_Reset
     ' 06.002 Ola 3: el check de existencia era relativo al CWD pero la carga usa IniPath;
     ' arrancado desde otra carpeta los toggles no cargaban y TODO quedaba apagado en silencio.
     If Not FileExist(IniPath & "feature_toggle.ini") Then
@@ -3325,6 +3329,7 @@ Public Sub SetFeatureToggle(ByVal name As String, ByVal State As Boolean)
     End If
     Call FeatureToggles.Add(name, State)
     Call WorkFatigue_OnToggleChanged(name, State)
+    Call ElementalToggleCache_OnChanged(name, State)
     If name = NPC_CROSS_MAP_PURSUIT_FEATURE Then
         If State Then
             Call LoadAdjacentTopology

@@ -79,6 +79,23 @@ Public Sub Setup(ByVal SourceIndex As Integer, _
     End If
 End Sub
 
+' D7: foto de los parametros reales para persistir al desloguear (ver EffectsOverTime.BuildPoisonSnapshot).
+' Campos: N,eot,tick,restante,total,punteria,evasion,bloqueoEscudo,pifia,regenPct,regenFija,bloqueaRegen
+Public Function SnapshotString() As String
+    SnapshotString = "N," & DotInfo.EotId & "," & TickTime & "," & DurationLeft & "," & DurationTotalMs & "," & PenalidadPunteriaPct & "," & PenalidadEvasionPct & "," & _
+            PenalidadBloqueoEscudoPct & "," & ChancePifiaHechizoPct & "," & RegenManaReduccionPct & "," & RegenManaReduccionFija & "," & BloqueaRegenManaTotal
+End Function
+
+' D7: tras recrear el efecto con los parametros guardados, devuelve el tiempo restante real.
+Public Sub RestoreProgress(ByVal pDurationLeft As Long)
+    If pDurationLeft <= 0 Or pDurationLeft > DurationTotalMs Then Exit Sub
+    DurationLeft = pDurationLeft
+    If DotInfo.TargetRef.RefType = eUser And EffectOverTime(DotInfo.EotId).ClientEffectTypeId > 0 Then
+        Call WriteSendSkillCdUpdate(DotInfo.TargetRef.ArrayIndex, EffectOverTime(DotInfo.EotId).ClientEffectTypeId, DotInfo.UniqueId, DurationLeft, DurationTotalMs, _
+                EffectOverTime(DotInfo.EotId).buffType)
+    End If
+End Sub
+
 ' --- IBaseEffectOverTime impl ---
 Public Property Get IBaseEffectOverTime_TypeId() As Integer
     IBaseEffectOverTime_TypeId = e_EffectOverTimeType.ePoisonNeuro

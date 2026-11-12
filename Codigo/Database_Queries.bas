@@ -134,6 +134,7 @@ Private Sub ConstruirQuery_CargarPersonaje()
     QueryBuilder.Append "poison_minor_active,"
     QueryBuilder.Append "poison_hemo_stacks,"
     QueryBuilder.Append "poison_neuro_active,"
+    QueryBuilder.Append "poison_state,"
     QueryBuilder.Append "remort_count"
     QueryBuilder.Append " FROM user WHERE id= ?"
     ' Guardo la query ensamblada
@@ -313,6 +314,7 @@ Private Sub ConstruirQuery_GuardarPersonaje()
     QueryBuilder.Append "poison_minor_active = ?, "
     QueryBuilder.Append "poison_hemo_stacks = ?, "
     QueryBuilder.Append "poison_neuro_active = ?, "
+    QueryBuilder.Append "poison_state = ?, "
     QueryBuilder.Append "remort_count = ? "
     QueryBuilder.Append "WHERE id = ?"
     ' Guardo la query ensamblada

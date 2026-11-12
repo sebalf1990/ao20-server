@@ -331,6 +331,7 @@ Public Function ConnectUser_Complete(ByVal UserIndex As Integer, ByRef name As S
 
 Dim n                           As Integer
 Dim tStr                        As String
+Dim poisonRestored              As Boolean
 
     On Error GoTo Complete_ConnectUser_Err
     
@@ -776,29 +777,36 @@ Dim tStr                        As String
         .Counters.LastSave = GetTickCountRaw()
         ' --- Sistema de venenos nuevo (TOGGLE26): recrear EOTs persistidos ---
         If IsFeatureEnabled("new_poison_system") Then
-            If .flags.PoisonMinorActive = 1 Then
-                Call CreatePoisonMinor(0, e_ReferenceType.eNone, UserIndex, eUser, 63, _
-                    EffectOverTime(63).TickTime, EffectOverTime(63).TickTime * EffectOverTime(63).Ticks, _
-                    0, EffectOverTime(63).TickPowerMin, EffectOverTime(63).TickPowerMax, _
-                    1!, 1!)
-            End If
-            If .flags.PoisonHemoStacks > 0 Then
-                ' Recrea Hemo desde persistencia. Solo se preservan stacks; numeros default.
-                ' Defaults: tick 2s, duracion 20s, dano base 0, dano/stack 3, cap=stacks persistidos, decay 4s.
-                Call CreatePoisonHemo(0, e_ReferenceType.eNone, UserIndex, eUser, 64, _
-                    2000, 20000, _
-                    0, 0, 0, _
-                    0, 3, 3, _
-                    .flags.PoisonHemoStacks, 1, 4000, 0, _
-                    1!, 1!, .flags.PoisonHemoStacks)
-            End If
-            If .flags.PoisonNeuroActive = 1 Then
-                ' Recrea Neuro desde persistencia. Las penalidades NO se persisten a DB (solo el flag),
-                ' por simetria con Menor/Hemo: defaults hardcoded coherentes con la daga test.
-                Call CreatePoisonNeuro(0, e_ReferenceType.eNone, UserIndex, eUser, 65, _
-                    2000, 20000, _
-                    100, 100, 0, _
-                    85, 100, 0, 0)
+            ' D7: si el personaje trae la foto de sus venenos (user.poison_state), se recrean con los parametros
+            ' y el tiempo restante reales. Sin foto (guardado viejo) o foto invalida: valores por defecto de abajo.
+            If LenB(.flags.PoisonState) > 0 Then poisonRestored = EffectsOverTime.RestorePoisonSnapshot(UserIndex, .flags.PoisonState)
+            .flags.PoisonState = vbNullString
+            .flags.PoisonStateTaken = False
+            If Not poisonRestored Then
+                If .flags.PoisonMinorActive = 1 Then
+                    Call CreatePoisonMinor(0, e_ReferenceType.eNone, UserIndex, eUser, 63, _
+                        EffectOverTime(63).TickTime, EffectOverTime(63).TickTime * EffectOverTime(63).Ticks, _
+                        0, EffectOverTime(63).TickPowerMin, EffectOverTime(63).TickPowerMax, _
+                        1!, 1!)
+                End If
+                If .flags.PoisonHemoStacks > 0 Then
+                    ' Recrea Hemo desde persistencia. Solo se preservan stacks; numeros default.
+                    ' Defaults: tick 2s, duracion 20s, dano base 0, dano/stack 3, cap=stacks persistidos, decay 4s.
+                    Call CreatePoisonHemo(0, e_ReferenceType.eNone, UserIndex, eUser, 64, _
+                        2000, 20000, _
+                        0, 0, 0, _
+                        0, 3, 3, _
+                        .flags.PoisonHemoStacks, 1, 4000, 0, _
+                        1!, 1!, .flags.PoisonHemoStacks)
+                End If
+                If .flags.PoisonNeuroActive = 1 Then
+                    ' Recrea Neuro desde persistencia. Las penalidades NO se persisten a DB (solo el flag),
+                    ' por simetria con Menor/Hemo: defaults hardcoded coherentes con la daga test.
+                    Call CreatePoisonNeuro(0, e_ReferenceType.eNone, UserIndex, eUser, 65, _
+                        2000, 20000, _
+                        100, 100, 0, _
+                        85, 100, 0, 0)
+                End If
             End If
         End If
         MapInfo(.pos.Map).NumUsers = MapInfo(.pos.Map).NumUsers + 1
@@ -1920,7 +1928,7 @@ Sub UserDie(ByVal UserIndex As Integer)
         ' 06.002 Ola 1: untados, encantamientos y caches de veneno mueren con el portador,
         ' sin gate de toggle (el arma dropeada no lleva el encanto: vive en UserList().flags).
         Call ClearPoisonedWeapon(UserIndex)
-        Call ClearPoisonedAmmo(UserIndex, "", "muerte")
+        Call ClearPoisonedAmmo(UserIndex, 0, "muerte")
         Call ClearEnchantedWeapon(UserIndex)
         Call ClearEnchantedAmmo(UserIndex)
         Call ClearPoisonEffectCaches(UserIndex)
@@ -3669,7 +3677,7 @@ Public Function GetUserMRForNpc(ByVal UserIndex As Integer) As Integer
         If .invent.EquippedHelmetObjIndex > 0 Then
             MR = MR + ObjData(.invent.EquippedHelmetObjIndex).ResistenciaMagica
         End If
-        If IsFeatureEnabled("mr-magic-bonus-damage") Then
+        If modElementalCombat.MagicBonusDamageEnabled() Then
             MR = MR + .Stats.UserSkills(Resistencia) * MRSkillNpcProtectionModifier
         End If
         GetUserMRForNpc = MR + 100 * ModClase(.clase).ResistenciaMagica
@@ -3695,7 +3703,7 @@ Public Function GetUserMR(ByVal UserIndex As Integer) As Integer
         If .invent.EquippedHelmetObjIndex > 0 Then
             MR = MR + ObjData(.invent.EquippedHelmetObjIndex).ResistenciaMagica
         End If
-        If IsFeatureEnabled("mr-magic-bonus-damage") Then
+        If modElementalCombat.MagicBonusDamageEnabled() Then
             MR = MR + .Stats.UserSkills(Resistencia) * MRSkillProtectionModifier
         End If
         GetUserMR = MR + 100 * ModClase(.clase).ResistenciaMagica

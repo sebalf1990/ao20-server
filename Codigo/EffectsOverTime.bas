@@ -748,7 +748,7 @@ Public Sub TryPoisonNpcWithWeapon(ByVal AtacanteIndex As Integer, ByVal NpcIndex
                 If .PoisonedAmmoCargas <= 0 Then Exit Sub
                 If .PoisonedAmmoDuracionMaxMs > 0 Then
                     If PoisonApplicationExpired(GetTickCountRaw(), .PoisonedAmmoAppliedTick, .PoisonedAmmoDuracionMaxMs) Then
-                        Call ClearPoisonedAmmo(AtacanteIndex, "El veneno de tus flechas se ha disipado.", "duracion_expirada")
+                        Call ClearPoisonedAmmo(AtacanteIndex, MSG_POISON_ARROWS_DISPELLED, "duracion_expirada")
                         Exit Sub
                     End If
                 End If
@@ -875,7 +875,7 @@ Public Sub TryPoisonNpcWithWeapon(ByVal AtacanteIndex As Integer, ByVal NpcIndex
                 chPifia, regenManaPct, regenManaFija, bloqRegenTotal)
     End Select
     If isPoisonArrow Then
-        Call WriteConsoleMsg(AtacanteIndex, "Has envenenado a " & NpcList(NpcIndex).name & " con tus flechas.", e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
+        Call WriteLocaleMsg(AtacanteIndex, MSG_POISON_ARROW_NPC, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT, NpcList(NpcIndex).name)
         If isPoisonedAmmo Then
             Call LogPoisonEvent("apply_arrow_vial_npc", UserList(AtacanteIndex).name, NpcList(NpcIndex).name, ObjInd, familia, 0, 0, 0, 0)
         Else
@@ -891,7 +891,7 @@ End Sub
 ' Limpia el estado de untado del arma del usuario y le manda un mensaje opcional.
 ' No persiste (decision del plan): se invoca al agotarse cargas, expirar duracion maxima,
 ' desequipar arma, o desconectar.
-Public Sub ClearPoisonedWeapon(ByVal UserIndex As Integer, Optional ByVal msg As String = "")
+Public Sub ClearPoisonedWeapon(ByVal UserIndex As Integer, Optional ByVal msgId As Integer = 0)
     On Error GoTo ClearPoisonedWeapon_Err
     If UserIndex <= 0 Then Exit Sub
     With UserList(UserIndex).flags
@@ -929,8 +929,8 @@ Public Sub ClearPoisonedWeapon(ByVal UserIndex As Integer, Optional ByVal msg As
         .PoisonedWeaponRegenManaReduccionFija = 0
         .PoisonedWeaponBloqueaRegenManaTotal = 0
     End With
-    If LenB(msg) > 0 Then
-        Call WriteConsoleMsg(UserIndex, msg, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+    If msgId > 0 Then
+        Call WriteLocaleMsg(UserIndex, msgId, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
     End If
     Exit Sub
 ClearPoisonedWeapon_Err:
@@ -989,14 +989,14 @@ Public Sub OnPoisonedWeaponSwing(ByVal AtacanteIndex As Integer)
         ' Chequear expiracion por duracion maxima de untado
         If .PoisonedWeaponDuracionMaxMs > 0 Then
             If PoisonApplicationExpired(GetTickCountRaw(), .PoisonedWeaponAppliedTick, .PoisonedWeaponDuracionMaxMs) Then
-                Call ClearPoisonedWeapon(AtacanteIndex, "El veneno de tu arma se ha disipado.")
+                Call ClearPoisonedWeapon(AtacanteIndex, MSG_POISON_WEAPON_DISPELLED)
                 Exit Sub
             End If
         End If
         ' Consumir 1 carga
         .PoisonedWeaponCargas = .PoisonedWeaponCargas - 1
         If .PoisonedWeaponCargas <= 0 Then
-            Call ClearPoisonedWeapon(AtacanteIndex, "El veneno de tu arma se ha agotado.")
+            Call ClearPoisonedWeapon(AtacanteIndex, MSG_POISON_WEAPON_SPENT)
         Else
             ' Actualizar contador en cliente
             Call WriteUpdatePoisonStacks(AtacanteIndex, CLng(.PoisonedWeaponObjIndex), .PoisonedWeaponCargas)
@@ -1017,7 +1017,7 @@ Public Sub CheckPoisonedWeaponTick(ByVal UserIndex As Integer)
         ' Expiracion por duracion maxima sin pegar
         If .PoisonedWeaponDuracionMaxMs > 0 Then
             If PoisonApplicationExpired(GetTickCountRaw(), .PoisonedWeaponAppliedTick, .PoisonedWeaponDuracionMaxMs) Then
-                Call ClearPoisonedWeapon(UserIndex, "El veneno de tu arma se ha disipado.")
+                Call ClearPoisonedWeapon(UserIndex, MSG_POISON_WEAPON_DISPELLED)
                 Exit Sub
             End If
         End If
@@ -1029,7 +1029,7 @@ CheckPoisonedWeaponTick_Err:
 End Sub
 
 ' === Flechas untadas (extension venenos flechas) ===
-Public Sub ClearPoisonedAmmo(ByVal UserIndex As Integer, Optional ByVal msg As String = "", Optional ByVal motivo As String = "")
+Public Sub ClearPoisonedAmmo(ByVal UserIndex As Integer, Optional ByVal msgId As Integer = 0, Optional ByVal motivo As String = "")
     On Error GoTo ClearPoisonedAmmo_Err
     If UserIndex <= 0 Then Exit Sub
     Dim oldObjIndex As Integer
@@ -1077,8 +1077,8 @@ Public Sub ClearPoisonedAmmo(ByVal UserIndex As Integer, Optional ByVal msg As S
         logMotivo = "limpieza"
     End If
     Call LogPoisonEvent("clear_poisoned_ammo_" & logMotivo, UserList(UserIndex).name, "", oldObjIndex, oldFamilia, 0, oldCargas, 0, 0)
-    If LenB(msg) > 0 Then
-        Call WriteConsoleMsg(UserIndex, msg, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+    If msgId > 0 Then
+        Call WriteLocaleMsg(UserIndex, msgId, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
     End If
     Exit Sub
 ClearPoisonedAmmo_Err:
@@ -1131,13 +1131,13 @@ Public Sub OnPoisonedAmmoSwing(ByVal UserIndex As Integer, ByVal AmmoObjIndex As
         If UserList(UserIndex).invent.EquippedMunitionObjIndex <> AmmoObjIndex Then Exit Sub
         If .PoisonedAmmoDuracionMaxMs > 0 Then
             If PoisonApplicationExpired(GetTickCountRaw(), .PoisonedAmmoAppliedTick, .PoisonedAmmoDuracionMaxMs) Then
-                Call ClearPoisonedAmmo(UserIndex, "El veneno de tus flechas se ha disipado.", "duracion_expirada")
+                Call ClearPoisonedAmmo(UserIndex, MSG_POISON_ARROWS_DISPELLED, "duracion_expirada")
                 Exit Sub
             End If
         End If
         .PoisonedAmmoCargas = .PoisonedAmmoCargas - 1
         If .PoisonedAmmoCargas <= 0 Then
-            Call ClearPoisonedAmmo(UserIndex, "El veneno de tus flechas se ha agotado.", "cargas_agotadas")
+            Call ClearPoisonedAmmo(UserIndex, MSG_POISON_ARROWS_SPENT, "cargas_agotadas")
         Else
             Call WriteUpdatePoisonStacks(UserIndex, CLng(.PoisonedAmmoObjIndex), .PoisonedAmmoCargas)
         End If
@@ -1179,13 +1179,13 @@ Public Sub ApplyPoisonProfileToUser(ByVal NpcIndex As Integer, ByVal UserIndex A
     Dim resistU As t_PoisonResist
     resistU = GetUserPoisonResist(UserIndex, p.FamiliaVeneno)
     If resistU.Inmune <> 0 Then
-        Call WriteConsoleMsg(UserIndex, "Resististe el veneno.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteLocaleMsg(UserIndex, MSG_POISON_RESISTED, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         Exit Sub
     End If
     Dim chFin As Long
     chFin = p.ChanceAplicarPct - resistU.ChancePct
     If chFin <= 0 Or RandomNumber(1, 100) > chFin Then
-        Call WriteConsoleMsg(UserIndex, "Resististe el veneno.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteLocaleMsg(UserIndex, MSG_POISON_RESISTED, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         Exit Sub
     End If
     Select Case p.FamiliaVeneno
@@ -1209,7 +1209,7 @@ Public Sub ApplyPoisonProfileToUser(ByVal NpcIndex As Integer, ByVal UserIndex A
                 p.RegenManaReduccionPct, p.RegenManaReduccionFija, _
                 p.BloqueaRegenManaTotal)
     End Select
-    Call WriteConsoleMsg(UserIndex, "¡La criatura te ha envenenado!", e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
+    Call WriteLocaleMsg(UserIndex, MSG_POISON_CREATURE_POISONED_YOU, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
     Exit Sub
 ApplyPoisonProfileToUser_Err:
     Call TraceError(Err.Number, Err.Description, "EffectsOverTime.ApplyPoisonProfileToUser", Erl)
@@ -1387,6 +1387,177 @@ Public Function FindEffectOnTarget(ByVal CasterIndex As Integer, ByRef EffectLis
     Exit Function
 FindEffectOnTarget_Err:
     Call TraceError(Err.Number, Err.Description, "EffectsOverTime.FindEffectOnTarget", Erl)
+End Function
+
+' ============================================================================
+' D8 (plan revision-motor-elemental): una instancia por familia de efecto y por caster.
+' Familia/Nivel salen de EffectsOverTime.dat (Familia=, Nivel=). Busca en la lista del blanco un
+' efecto del MISMO caster y de la MISMA familia que EffectId. Si el existente tiene nivel menor que
+' el que llega, lo remueve (el llamador crea el nuevo; devuelve Nothing). Si es igual o mayor
+' devuelve el existente para que el llamador solo lo refresque (nunca baja de nivel). Otro caster
+' no se ve afectado: cada caster mantiene su propia instancia.
+' ============================================================================
+Public Function ResolveFamilyEffect(ByVal CasterIndex As Integer, ByVal CasterType As e_ReferenceType, ByRef EffectList As t_EffectOverTimeList, ByVal EffectId As Integer) As IBaseEffectOverTime
+    On Error GoTo ResolveFamilyEffect_Err
+    Set ResolveFamilyEffect = Nothing
+    If EffectId < LBound(EffectOverTime) Or EffectId > UBound(EffectOverTime) Then Exit Function
+    Dim family As Byte
+    family = EffectOverTime(EffectId).Family
+    If family = 0 Or CasterIndex <= 0 Then Exit Function
+    Dim i As Integer
+    Dim otherId As Integer
+    Dim sameCaster As Boolean
+    For i = 0 To EffectList.EffectCount - 1
+        If Not EffectList.EffectList(i) Is Nothing Then
+            otherId = EffectList.EffectList(i).EotId
+            If otherId >= LBound(EffectOverTime) And otherId <= UBound(EffectOverTime) And Not EffectList.EffectList(i).RemoveMe Then
+                If EffectOverTime(otherId).Family = family And EffectList.EffectList(i).CasterRefType = CasterType Then
+                    sameCaster = False
+                    If CasterType = eUser Then
+                        sameCaster = (EffectList.EffectList(i).CasterUserId = UserList(CasterIndex).Id)
+                    ElseIf CasterType = eNpc Then
+                        sameCaster = (EffectList.EffectList(i).CasterIsValid And EffectList.EffectList(i).CasterArrayIndex = CasterIndex)
+                    End If
+                    If sameCaster Then
+                        If EffectOverTime(otherId).Level < EffectOverTime(EffectId).Level Then
+                            ' Llega uno mas fuerte: el viejo se va ahora (OnRemove revierte sus modificadores);
+                            ' el barrido global lo recicla despues por RemoveMe.
+                            EffectList.EffectList(i).RemoveMe = True
+                            Call RemoveEffectAtPos(EffectList, i)
+                            Exit Function
+                        Else
+                            Set ResolveFamilyEffect = EffectList.EffectList(i)
+                            Exit Function
+                        End If
+                    End If
+                End If
+            End If
+        End If
+    Next i
+    Exit Function
+ResolveFamilyEffect_Err:
+    Call TraceError(Err.Number, Err.Description, "EffectsOverTime.ResolveFamilyEffect", Erl)
+End Function
+
+' E1: un DoT solo acredita exp, kill, ContarMuerte y oro mientras su caster USUARIO siga vivo,
+' conectado y en el mismo mapa que el blanco. Si no, el tick se aplica sin fuente (eNone), igual que
+' cuando el caster ya no es resoluble. Un caster NPC se evalua como siempre (referencia valida).
+Public Function DotSourceCanCredit(ByRef Source As t_AnyReference, ByVal TargetMap As Integer) As Boolean
+    If Not IsValidRef(Source) Then Exit Function
+    If Source.RefType = eUser Then
+        If UserList(Source.ArrayIndex).flags.Muerto <> 0 Then Exit Function
+        If Not UserList(Source.ArrayIndex).flags.UserLogged Then Exit Function
+        If UserList(Source.ArrayIndex).pos.Map <> TargetMap Then Exit Function
+    End If
+    DotSourceCanCredit = True
+End Function
+
+' ============================================================================
+' D7: persistencia del veneno real. Foto de los venenos activos (Menor/Hemo/Neuro) de un usuario
+' como texto compacto "M,...;H,...;N,..." (cada clase arma su tramo en SnapshotString). Vacio = sin
+' venenos nuevos activos. Se guarda en user.poison_state y se restaura en el login.
+' ============================================================================
+Public Function SnapNum(ByVal v As Double) As String
+    SnapNum = Trim$(Str$(v))
+End Function
+
+Public Function BuildPoisonSnapshot(ByRef EffectList As t_EffectOverTimeList) As String
+    On Error GoTo BuildPoisonSnapshot_Err
+    Dim i As Integer
+    Dim part As String
+    Dim snapMinor As PoisonMinorEffect
+    Dim snapHemo As PoisonHemoEffect
+    Dim snapNeuro As PoisonNeuroEffect
+    For i = 0 To EffectList.EffectCount - 1
+        If Not EffectList.EffectList(i) Is Nothing Then
+            part = vbNullString
+            If Not EffectList.EffectList(i).RemoveMe Then
+                Select Case EffectList.EffectList(i).TypeId
+                    Case e_EffectOverTimeType.ePoisonMinor
+                        Set snapMinor = EffectList.EffectList(i)
+                        part = snapMinor.SnapshotString()
+                    Case e_EffectOverTimeType.ePoisonHemo
+                        Set snapHemo = EffectList.EffectList(i)
+                        part = snapHemo.SnapshotString()
+                    Case e_EffectOverTimeType.ePoisonNeuro
+                        Set snapNeuro = EffectList.EffectList(i)
+                        part = snapNeuro.SnapshotString()
+                End Select
+            End If
+            If LenB(part) > 0 Then
+                If LenB(BuildPoisonSnapshot) > 0 Then BuildPoisonSnapshot = BuildPoisonSnapshot & ";"
+                BuildPoisonSnapshot = BuildPoisonSnapshot & part
+            End If
+        End If
+    Next i
+    Exit Function
+BuildPoisonSnapshot_Err:
+    Call TraceError(Err.Number, Err.Description, "EffectsOverTime.BuildPoisonSnapshot", Erl)
+End Function
+
+' Recrea los venenos de una foto sobre un usuario recien logueado, con los parametros guardados y el
+' tiempo restante real. Devuelve True si recreo al menos uno (entonces la foto manda sobre los
+' valores por defecto del flag viejo). Tolerante: tramos invalidos se saltean.
+Public Function RestorePoisonSnapshot(ByVal UserIndex As Integer, ByVal Snapshot As String) As Boolean
+    On Error GoTo RestorePoisonSnapshot_Err
+    If LenB(Snapshot) = 0 Then Exit Function
+    Dim parts() As String
+    Dim f() As String
+    Dim i As Integer
+    Dim eotId As Integer
+    Dim leftMs As Long
+    Dim created As IBaseEffectOverTime
+    Dim rMinor As PoisonMinorEffect
+    Dim rHemo As PoisonHemoEffect
+    Dim rNeuro As PoisonNeuroEffect
+    parts = Split(Snapshot, ";")
+    For i = LBound(parts) To UBound(parts)
+        f = Split(parts(i), ",")
+        If UBound(f) >= 4 Then
+            eotId = CInt(val(f(1)))
+            leftMs = CLng(val(f(3)))
+            If eotId >= LBound(EffectOverTime) And eotId <= UBound(EffectOverTime) And leftMs > 0 Then
+                Select Case f(0)
+                    Case "M"
+                        If UBound(f) = 9 And EffectOverTime(eotId).Type = e_EffectOverTimeType.ePoisonMinor Then
+                            Call CreatePoisonMinor(0, e_ReferenceType.eNone, UserIndex, eUser, eotId, CLng(val(f(2))), CLng(val(f(4))), CByte(val(f(5))), CLng(val(f(6))), CLng(val(f(7))), CSng(val(f(8))), CSng(val(f(9))))
+                            Set created = FindEffectOnTarget(UserIndex, UserList(UserIndex).EffectOverTime, eotId)
+                            If Not created Is Nothing Then
+                                Set rMinor = created
+                                Call rMinor.RestoreProgress(leftMs)
+                                RestorePoisonSnapshot = True
+                            End If
+                        End If
+                    Case "H"
+                        If UBound(f) = 17 And EffectOverTime(eotId).Type = e_EffectOverTimeType.ePoisonHemo Then
+                            Call CreatePoisonHemo(0, e_ReferenceType.eNone, UserIndex, eUser, eotId, CLng(val(f(2))), CLng(val(f(4))), CByte(val(f(5))), CLng(val(f(6))), CLng(val(f(7))), _
+                                    CByte(val(f(8))), CLng(val(f(9))), CLng(val(f(10))), CInt(val(f(12))), CInt(val(f(13))), CLng(val(f(14))), CByte(val(f(15))), _
+                                    CSng(val(f(16))), CSng(val(f(17))), CInt(val(f(11))))
+                            Set created = FindEffectOnTarget(UserIndex, UserList(UserIndex).EffectOverTime, eotId)
+                            If Not created Is Nothing Then
+                                Set rHemo = created
+                                Call rHemo.RestoreProgress(leftMs)
+                                RestorePoisonSnapshot = True
+                            End If
+                        End If
+                    Case "N"
+                        If UBound(f) = 11 And EffectOverTime(eotId).Type = e_EffectOverTimeType.ePoisonNeuro Then
+                            Call CreatePoisonNeuro(0, e_ReferenceType.eNone, UserIndex, eUser, eotId, CLng(val(f(2))), CLng(val(f(4))), CLng(val(f(5))), CLng(val(f(6))), CLng(val(f(7))), _
+                                    CLng(val(f(8))), CLng(val(f(9))), CLng(val(f(10))), CByte(val(f(11))))
+                            Set created = FindEffectOnTarget(UserIndex, UserList(UserIndex).EffectOverTime, eotId)
+                            If Not created Is Nothing Then
+                                Set rNeuro = created
+                                Call rNeuro.RestoreProgress(leftMs)
+                                RestorePoisonSnapshot = True
+                            End If
+                        End If
+                End Select
+            End If
+        End If
+    Next i
+    Exit Function
+RestorePoisonSnapshot_Err:
+    Call TraceError(Err.Number, Err.Description, "EffectsOverTime.RestorePoisonSnapshot", Erl)
 End Function
 
 Public Sub ClearEffectList(ByRef EffectList As t_EffectOverTimeList, Optional ByVal Filter As e_EffectType = e_EffectType.eAny, Optional ByVal ClearForDeath As Boolean = False)

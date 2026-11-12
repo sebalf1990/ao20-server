@@ -3312,7 +3312,7 @@ Private Sub HandleWorkLeftClick(ByVal UserIndex As Integer)
                             End If
                             If consumirMunicion And Not IsConsumableFreeZone(UserIndex) Then
                                 Call QuitarUserInvItem(UserIndex, DummyInt, 1, True, "stack_agotado", _
-                                    "Te quedaste sin flechas envenenadas (el stack se agoto).")
+                                    MSG_POISON_ARROW_STACK_SPENT)
                             End If
                             If .Object(DummyInt).amount > 0 Then
                                 'QuitarUserInvItem unequipps the ammo, so we equip it again
@@ -6825,7 +6825,7 @@ Private Sub HandleMoveItem(ByVal UserIndex As Integer)
         
         If IsFeatureEnabled("new_poison_system") Then
             If .invent.EquippedMunitionSlot = SlotViejo Or .invent.EquippedMunitionSlot = SlotNuevo Then
-                Call ClearPoisonedAmmo(UserIndex, "Ya no tenes flechas envenenadas equipadas.", "mover_inventario")
+                Call ClearPoisonedAmmo(UserIndex, MSG_NO_POISONED_ARROWS_EQUIPPED, "mover_inventario")
             End If
         End If
 
