@@ -8446,7 +8446,14 @@ End Sub
 Private Sub HandleResetChar(ByVal UserIndex As Integer)
     On Error GoTo HandleResetChar_Err:
     Dim Nick As String: Nick = reader.ReadString8()
+    ' Own fork (plan 2026-11-12-deploy-beta-vm-desde-cero): release builds need the gm_test_tools toggle.
+    Dim resetAllowed As Boolean
     #If DEBUGGING = 1 Then
+        resetAllowed = True
+    #Else
+        resetAllowed = IsFeatureEnabled("gm_test_tools")
+    #End If
+    If resetAllowed Then
         If UserList(UserIndex).flags.Privilegios And e_PlayerType.Admin Then
             Dim User As t_UserReference
             User = NameIndex(Nick)
@@ -8484,8 +8491,9 @@ Private Sub HandleResetChar(ByVal UserIndex As Integer)
             Call ResetUserProfessions(User.ArrayIndex)
             'Msg1280= Personaje reseteado a nivel 1.
             Call WriteLocaleMsg(UserIndex, MSG_PERSONAJE_RESETEADO_NIVEL, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+            Call LogGM(GetUserRealName(UserIndex), "/RESET " & Nick)
         End If
-    #End If
+    End If
     Exit Sub
 HandleResetChar_Err:
     Call TraceError(Err.Number, Err.Description, "Protocol.HandleResetChar", Erl)

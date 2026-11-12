@@ -1050,8 +1050,11 @@ Public Sub HandleEditChar(ByVal UserIndex As Integer)
         ' This should have never been enabled in the first place
         ' If we require similar functionality for adhoc quests we will have to
         ' create new in-game tools focusing in TRANSPARENCY to prevent future abuse
+        ' Own fork (plan 2026-11-12-deploy-beta-vm-desde-cero): in release builds the edition is
+        ' available only with the gm_test_tools toggle on and only for Admin (logged by LogGM below).
         #If DEBUGGING = 0 Then
-            Exit Sub
+            If Not IsFeatureEnabled("gm_test_tools") Then Exit Sub
+            If (.flags.Privilegios And e_PlayerType.Admin) = 0 Then Exit Sub
         #End If
         ' Si NO sos Dios o Admin,
         If (.flags.Privilegios And e_PlayerType.Admin) = 0 Then
