@@ -335,7 +335,7 @@ End Sub
 Public Sub QuitarUserInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal Cantidad As Integer, _
                               Optional ByVal PreservePoisonedAmmo As Boolean = False, _
                               Optional ByVal PoisonedAmmoMotivo As String = "inventario_modificado", _
-                              Optional ByVal PoisonedAmmoMsg As String = "Ya no tenes flechas envenenadas equipadas.")
+                              Optional ByVal PoisonedAmmoMsg As Integer = MSG_NO_POISONED_ARROWS_EQUIPPED)
     On Error GoTo QuitarUserInvItem_Err
     If Slot < 1 Or Slot > UserList(UserIndex).CurrentInventorySlots Then Exit Sub
     With UserList(UserIndex).invent.Object(Slot)
@@ -436,7 +436,7 @@ Sub DropObj(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal num As Integer
                         ammoClearMotivo = "split_o_drop_parcial"
                     End If
                     Call QuitarUserInvItem(UserIndex, Slot, num, False, ammoClearMotivo, _
-                        "Ya no tenes flechas envenenadas equipadas.")
+                        MSG_NO_POISONED_ARROWS_EQUIPPED)
                     Call UpdateUserInv(False, UserIndex, Slot)
                     If .flags.jugando_captura = 1 Then
                         Dim ctfTira As ScenarioCaptureTheFlag
@@ -460,7 +460,7 @@ Sub DropObj(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal num As Integer
                     ammoClearMotivo = "split_o_drop_parcial"
                 End If
                 Call QuitarUserInvItem(UserIndex, Slot, num, False, ammoClearMotivo, _
-                    "Ya no tenes flechas envenenadas equipadas.")
+                    MSG_NO_POISONED_ARROWS_EQUIPPED)
                 Call UpdateUserInv(False, UserIndex, Slot)
             End If
         End With
@@ -776,11 +776,11 @@ Dim obj                         As t_ObjData
                     .invent.EquippedWeaponSlot = 0
                     ' Si el arma estaba untada, limpiar el estado (sin gate de toggle: criterio 06.002 ola 1)
                     If .flags.PoisonedWeaponObjIndex > 0 Then
-                        Call ClearPoisonedWeapon(UserIndex, "El veneno del arma se ha perdido al desequiparla.")
+                        Call ClearPoisonedWeapon(UserIndex, MSG_UNEQUIP_WEAPON_POISON_LOST)
                     End If
                     ' 06.002 (decision del dueno): el encantamiento muere al desequipar (paridad con el veneno).
                     If .flags.EnchantWeaponObjIndex > 0 Then
-                        Call ClearEnchantedWeapon(UserIndex, "El encantamiento del arma se ha perdido al desequiparla.")
+                        Call ClearEnchantedWeapon(UserIndex, MSG_UNEQUIP_WEAPON_ENCH_LOST)
                     End If
                     .Char.Arma_Aura = ""
                     Call SendData(SendTarget.ToPCAliveArea, UserIndex, PrepareMessageAuraToChar(.Char.charindex, 0, True, 1))
@@ -794,10 +794,10 @@ Dim obj                         As t_ObjData
                 Case e_OBJType.otArrows
                     If .invent.EquippedMunitionSlot = Slot Then
                         ' Sin gate de toggle (criterio 06.002 ola 1: limpiar es seguro siempre).
-                        Call ClearPoisonedAmmo(UserIndex, "Ya no tenes flechas envenenadas equipadas.", "desequipar_manual")
+                        Call ClearPoisonedAmmo(UserIndex, MSG_NO_POISONED_ARROWS_EQUIPPED, "desequipar_manual")
                         ' 06.002 (decision del dueno): el encantamiento muere al desequipar (paridad con el veneno).
                         ' El disparo normal NO pasa por aca (QuitarUserInvItem solo desequipa al agotar el stack).
-                        Call ClearEnchantedAmmo(UserIndex, "El encantamiento de tus flechas se ha perdido al desequiparlas.")
+                        Call ClearEnchantedAmmo(UserIndex, MSG_UNEQUIP_AMMO_ENCH_LOST)
                     End If
                     .invent.Object(Slot).Equipped = 0
                     .invent.EquippedMunitionObjIndex = 0
@@ -873,6 +873,8 @@ Dim obj                         As t_ObjData
                     .invent.Object(Slot).Equipped = 0
                     .invent.EquippedAmuletAccesoryObjIndex = 0
                     .invent.EquippedAmuletAccesorySlot = 0
+                    ' El indicador de daño mágico suma el amuleto: refrescarlo al desequiparlo
+                    If obj.MagicDamageBonus > 0 Then Call WriteUpdateDM(UserIndex)
                 Case e_OBJType.otArmor
                 
                     If .Invent_Skins.SlotArmourEquipped > 0 Then
@@ -1403,9 +1405,9 @@ Dim Ropaje                      As Integer
                 ' CP3 (20.002 Step 7): equipar un orbe elemental anula el encantamiento del arma (exclusividad)
                 If modElementalCombat.ElementalSystemEnabled() Then
                     If modElementalCombat.HasElementalOrbEquipped(UserIndex) Then
-                        Call modElementalCombat.ClearEnchantedWeapon(UserIndex, "El orbe anula el encantamiento de tu arma.")
-                        If .flags.PoisonedWeaponObjIndex > 0 Then Call ClearPoisonedWeapon(UserIndex, "El orbe anula el veneno de tu arma.")
-                        If .flags.PoisonedAmmoObjIndex > 0 Then Call ClearPoisonedAmmo(UserIndex, "El orbe anula el veneno de tus flechas.", "orbe")
+                        Call modElementalCombat.ClearEnchantedWeapon(UserIndex, MSG_ORB_CANCELS_WEAPON_ENCH)
+                        If .flags.PoisonedWeaponObjIndex > 0 Then Call ClearPoisonedWeapon(UserIndex, MSG_ORB_CANCELS_WEAPON_POISON)
+                        If .flags.PoisonedAmmoObjIndex > 0 Then Call ClearPoisonedAmmo(UserIndex, MSG_ORB_CANCELS_AMMO_POISON, "orbe")
                     End If
                 End If
                 Select Case obj.EfectoMagico
@@ -1452,6 +1454,8 @@ Dim Ropaje                      As Integer
                         Call WriteLocaleMsg(UserIndex, MSG_ENTRAS_AL_MUNDO_DE_LOS_MUERTOS_AHORA_PODRAS_COMUNICARTE_CON_ELLOS, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_WARNING)
                         Call CheckUpdateNeededUser(UserIndex, USER_NUEVO, True, 1)
                 End Select
+                ' El indicador de daño mágico suma el amuleto: refrescarlo al equiparlo
+                If obj.MagicDamageBonus > 0 Then Call WriteUpdateDM(UserIndex)
                 'Sonido
                 If obj.SndAura <> 0 Then
                     Call SendData(SendTarget.ToPCAliveArea, UserIndex, PrepareMessagePlayWave(obj.SndAura, .pos.x, .pos.y))
@@ -1862,26 +1866,26 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
         .flags.TargetObjInvSlot = Slot
         ' --- Encantar Arma elemental (TOGGLE32): aceite/orbe con payload encantan el arma equipada ---
         If modElementalCombat.ElementalSystemEnabled() And obj.EnchantWeaponDurationMs <> 0 Then
-            Dim ewMsg As String
+            Dim ewMsg As Integer
             If Not modElementalCombat.CanEnchantWeapon(UserIndex, .invent.EquippedWeaponObjIndex, obj.Elemental, ewMsg) Then
                 ' Aceite unificado (D-G, plan 04.003): si el mismo item tambien puede
                 ' encantar flechas y hay municion equipada, no rechazar aca -- cae a la
                 ' rama de flechas de abajo. Sin flechas equipadas, rechazo de siempre.
                 If obj.EnchantAmmoDurationMs = 0 Or .invent.EquippedMunitionObjIndex = 0 Then
-                    Call WriteConsoleMsg(UserIndex, ewMsg, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+                    Call WriteLocaleMsg(UserIndex, ewMsg, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                     Exit Sub
                 End If
             Else
                 ' CP1 fix (paridad veneno): rechazar re-encantar si el arma ya tiene encantamiento activo
                 If modElementalCombat.IsWeaponEnchantedActive(UserIndex, .invent.EquippedWeaponObjIndex) Then
-                    Call WriteConsoleMsg(UserIndex, "Tu arma ya esta encantada.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+                    Call WriteLocaleMsg(UserIndex, MSG_ENCH_WEAPON_ALREADY, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                     Exit Sub
                 End If
                 Call modElementalCombat.SetEnchantedWeapon(UserIndex, .invent.EquippedWeaponObjIndex, obj.Elemental, obj.CargasQueOtorga, obj.EnchantWeaponDurationMs, ObjIndex)
                 If obj.EnchantWeaponDurationMs < 0 Then
-                    Call WriteConsoleMsg(UserIndex, "Encantaste tu arma de forma permanente.", e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
+                    Call WriteLocaleMsg(UserIndex, MSG_ENCH_WEAPON_PERMANENT, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
                 Else
-                    Call WriteConsoleMsg(UserIndex, "Encantaste tu arma (" & (obj.EnchantWeaponDurationMs \ 1000) & "s).", e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
+                    Call WriteLocaleMsg(UserIndex, MSG_ENCH_WEAPON_TIMED, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT, CStr(obj.EnchantWeaponDurationMs \ 1000))
                 End If
                 Call QuitarUserInvItem(UserIndex, Slot, 1)
                 Call UpdateUserInv(False, UserIndex, Slot)
@@ -1891,20 +1895,20 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
 
         ' --- Encantar Flechas elemental (TOGGLE32, 20.002 CP1 ammo): aceite con payload encanta las flechas equipadas ---
         If modElementalCombat.ElementalSystemEnabled() And obj.EnchantAmmoDurationMs <> 0 Then
-            Dim eaMsg As String
+            Dim eaMsg As Integer
             If Not modElementalCombat.CanEnchantAmmo(UserIndex, .invent.EquippedMunitionObjIndex, obj.Elemental, eaMsg) Then
-                Call WriteConsoleMsg(UserIndex, eaMsg, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+                Call WriteLocaleMsg(UserIndex, eaMsg, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                 Exit Sub
             End If
             If modElementalCombat.IsAmmoEnchantedActive(UserIndex, .invent.EquippedMunitionObjIndex) Then
-                Call WriteConsoleMsg(UserIndex, "Tus flechas ya estan encantadas.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+                Call WriteLocaleMsg(UserIndex, MSG_ENCH_AMMO_ALREADY, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                 Exit Sub
             End If
             Call modElementalCombat.SetEnchantedAmmo(UserIndex, .invent.EquippedMunitionObjIndex, obj.Elemental, obj.CargasQueOtorga, obj.EnchantAmmoDurationMs, ObjIndex)
             If obj.EnchantAmmoDurationMs < 0 Then
-                Call WriteConsoleMsg(UserIndex, "Encantaste tus flechas de forma permanente.", e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
+                Call WriteLocaleMsg(UserIndex, MSG_ENCH_AMMO_PERMANENT, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
             Else
-                Call WriteConsoleMsg(UserIndex, "Encantaste tus flechas (" & (obj.EnchantAmmoDurationMs \ 1000) & "s).", e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
+                Call WriteLocaleMsg(UserIndex, MSG_ENCH_AMMO_TIMED, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT, CStr(obj.EnchantAmmoDurationMs \ 1000))
             End If
             Call QuitarUserInvItem(UserIndex, Slot, 1)
             Call UpdateUserInv(False, UserIndex, Slot)
@@ -2382,7 +2386,7 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
                             End If
 
                             If modElementalCombat.IsAmmoEnchantedActive(UserIndex, equipAmmo) Then
-                                Call WriteConsoleMsg(UserIndex, "Tus flechas ya estan encantadas.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+                                Call WriteLocaleMsg(UserIndex, MSG_ENCH_AMMO_ALREADY, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                                 Exit Sub
                             End If
                             .flags.PoisonedAmmoObjIndex = equipAmmo
@@ -2442,7 +2446,7 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
                             Exit Sub
                         End If
                         If modElementalCombat.IsWeaponEnchantedActive(UserIndex, equipWpn) Then
-                            Call WriteConsoleMsg(UserIndex, "Tu arma ya esta encantada.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+                            Call WriteLocaleMsg(UserIndex, MSG_ENCH_WEAPON_ALREADY, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                             Exit Sub
                         End If
                         ' Aplicar untado

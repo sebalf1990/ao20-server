@@ -35,7 +35,7 @@ Sub NpcLanzaSpellSobreUser(ByVal NpcIndex As Integer, ByVal UserIndex As Integer
     On Error GoTo NpcLanzaSpellSobreUser_Err
     If NpcList(NpcIndex).pos.Map <> UserList(UserIndex).pos.Map Then Exit Sub
 
-    Dim Damage    As Integer
+    Dim Damage    As Long ' E1: Long (ver HechizoPropUsuario)
     Dim DamageStr As String
     If Spell = 0 Then Exit Sub
     Dim IsAlive As Boolean
@@ -82,7 +82,7 @@ Sub NpcLanzaSpellSobreUser(ByVal NpcIndex As Integer, ByVal UserIndex As Integer
                 Dim CardDamageReduction As Single
                 CardDamageReduction = GetCardDamageReductionForNpc(UserIndex, NpcIndex)
                 If CardDamageReduction < 1# Then
-                    Damage = CInt(Damage * CardDamageReduction)
+                    Damage = CLng(Damage * CardDamageReduction)
                 End If
             End If
             ' =======================================================================
@@ -251,7 +251,7 @@ End Sub
 
 Sub NpcLanzaSpellSobreNpc(ByVal NpcIndex As Integer, ByVal TargetNPC As Integer, ByVal Spell As Integer)
     On Error GoTo NpcLanzaSpellSobreNpc_Err
-    Dim Damage    As Integer
+    Dim Damage    As Long ' E1: Long (ver HechizoPropUsuario)
     Dim DamageStr As String
     Dim IsAlive   As Boolean
     IsAlive = True
@@ -1736,22 +1736,22 @@ Sub HechizoEstadoUsuario(ByVal UserIndex As Integer, ByRef b As Boolean)
     If modElementalCombat.ElementalSystemEnabled() And Hechizos(h).EnchantWeaponDurationMs > 0 Then
         Dim ewWpn As Integer
         ewWpn = UserList(targetUserIndex).invent.EquippedWeaponObjIndex
-        Dim ewMsgH As String
+        Dim ewMsgH As Integer
         If Not modElementalCombat.CanEnchantWeapon(targetUserIndex, ewWpn, Hechizos(h).Elemental, ewMsgH) Then
-            Call WriteConsoleMsg(UserIndex, ewMsgH, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, ewMsgH, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             b = False
             Exit Sub
         End If
         ' CP1 fix (paridad veneno): rechazar si el arma del objetivo ya tiene encantamiento activo
         If modElementalCombat.IsWeaponEnchantedActive(targetUserIndex, ewWpn) Then
-            Call WriteConsoleMsg(UserIndex, "El arma del objetivo ya esta encantada.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_ENCH_TARGET_WEAPON_ALREADY, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             b = False
             Exit Sub
         End If
         Call modElementalCombat.SetEnchantedWeapon(targetUserIndex, ewWpn, Hechizos(h).Elemental, Hechizos(h).CargasQueOtorga, Hechizos(h).EnchantWeaponDurationMs)
         Call InfoHechizo(UserIndex)
-        Call WriteConsoleMsg(targetUserIndex, "Tu arma fue encantada (" & (Hechizos(h).EnchantWeaponDurationMs \ 1000) & "s).", e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
-        If targetUserIndex <> UserIndex Then Call WriteConsoleMsg(UserIndex, "Encantaste el arma de " & UserList(targetUserIndex).name & ".", e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT)
+        Call WriteLocaleMsg(targetUserIndex, MSG_ENCH_YOUR_WEAPON_ENCHANTED, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT, CStr(Hechizos(h).EnchantWeaponDurationMs \ 1000))
+        If targetUserIndex <> UserIndex Then Call WriteLocaleMsg(UserIndex, MSG_ENCH_YOU_ENCHANTED_WEAPON_OF, e_TextChannel.TEXTCHANNEL_COMBAT, e_FontTypeNames.FONTTYPE_FIGHT, UserList(targetUserIndex).name)
         b = True
         Exit Sub
     End If
@@ -1811,7 +1811,7 @@ Sub HechizoEstadoUsuario(ByVal UserIndex As Integer, ByRef b As Boolean)
             End If
 
             If modElementalCombat.IsAmmoEnchantedActive(targetUserIndex, equipAmmo) Then
-                Call WriteConsoleMsg(UserIndex, "Las flechas del objetivo ya estan encantadas.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+                Call WriteLocaleMsg(UserIndex, MSG_ENCH_TARGET_AMMO_ALREADY, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                 b = False
                 Exit Sub
             End If
@@ -1879,7 +1879,7 @@ Sub HechizoEstadoUsuario(ByVal UserIndex As Integer, ByRef b As Boolean)
             Exit Sub
         End If
         If modElementalCombat.IsWeaponEnchantedActive(targetUserIndex, equipWpn) Then
-            Call WriteConsoleMsg(UserIndex, "El arma del objetivo ya esta encantada.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_ENCH_TARGET_WEAPON_ALREADY, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             b = False
             Exit Sub
         End If
@@ -4425,7 +4425,7 @@ Private Sub AreaHechizo(UserIndex As Integer, NpcIndex As Integer, x As Byte, y 
     Dim TilesDifNpc    As Integer
     Dim tilDif         As Integer
     Dim h2             As Integer
-    Dim Hit            As Integer
+    Dim Hit            As Long ' E1: Long (los hechizos GM de 10000 + bonus desbordaban Integer)
     Dim Damage         As Long ' E1: Long (ver HechizoPropUsuario)
     Dim porcentajeDesc As Integer
     h2 = UserList(UserIndex).Stats.UserHechizos(UserList(UserIndex).flags.Hechizo)

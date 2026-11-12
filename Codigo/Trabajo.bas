@@ -329,7 +329,7 @@ End Function
 Function QuitarObjetos(ByVal ItemIndex As Integer, ByVal cant As Long, ByVal UserIndex As Integer, _
                        Optional ByVal ElementalTags As Long = e_ElementalTags.Normal, _
                        Optional ByVal PoisonedAmmoMotivo As String = "inventario_modificado", _
-                       Optional ByVal PoisonedAmmoMsg As String = "Ya no tenes flechas envenenadas equipadas.") As Boolean
+                       Optional ByVal PoisonedAmmoMsg As Integer = MSG_NO_POISONED_ARROWS_EQUIPPED) As Boolean
     On Error GoTo QuitarObjetos_Err
     With UserList(UserIndex)
         Dim i As Long

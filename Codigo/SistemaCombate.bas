@@ -2163,7 +2163,7 @@ Private Function TryApplyArrowAmmoPoisonToUser(ByVal AtacanteIndex As Integer, B
         If .PoisonedAmmoFamilia < 1 Or .PoisonedAmmoFamilia > 3 Then Exit Function
         If .PoisonedAmmoDuracionMaxMs > 0 Then
             If PoisonApplicationExpired(GetTickCountRaw(), .PoisonedAmmoAppliedTick, .PoisonedAmmoDuracionMaxMs) Then
-                Call ClearPoisonedAmmo(AtacanteIndex, "El veneno de tus flechas se ha disipado.", "duracion_expirada")
+                Call ClearPoisonedAmmo(AtacanteIndex, MSG_POISON_ARROWS_DISPELLED, "duracion_expirada")
                 Exit Function
             End If
         End If
@@ -2937,7 +2937,7 @@ Public Sub ConsumeAmunition(ByVal UserIndex As Integer)
         AmunitionSlot = .EquippedMunitionSlot
         If AmunitionSlot > 0 Then
             Call QuitarUserInvItem(UserIndex, AmunitionSlot, 1, True, "stack_agotado", _
-                "Te quedaste sin flechas envenenadas (el stack se agoto).")
+                MSG_POISON_ARROW_STACK_SPENT)
             If .Object(AmunitionSlot).amount > 0 Then
                 'QuitarUserInvItem unequipps the ammo, so we equip it again
                 .EquippedMunitionSlot = AmunitionSlot

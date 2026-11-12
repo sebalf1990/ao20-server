@@ -2064,7 +2064,7 @@ Public Type t_EffectOverTime
     SecondaryTargetModifier As Single
     RequireTransform As Integer
     DamageColor As Long          ' color del numero de dano por tick (0 = rojo default)
-    ApplyMsg As String           ' mensaje al atacante cuando el efecto se aplica (vacio = sin mensaje)
+    ApplyMsgId As Integer        ' id de LocalMsg que ve el atacante cuando el efecto se aplica (0 = sin mensaje)
     DanoModo As Byte             ' 0=fijo/rango (TickPower), 2=%HP del target (TickPower como %)
     FactorPvP As Single          ' multiplicador del tick vs jugador (0 = 1)
     FactorPvE As Single          ' multiplicador del tick vs NPC (0 = 1)

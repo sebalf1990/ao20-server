@@ -796,7 +796,7 @@ Public Sub LoadEffectOverTime()
         ' M6 (plan 02.001): tipo de dano del tick (e_ElementalDamageType). Clave opcional;
         ' ausente = 0 = comportamiento previo (el tick no consulta resist/inmunidad).
         EffectOverTime(i).DamageType = val(Leer.GetValue("EOT" & i, "DamageType"))
-        EffectOverTime(i).ApplyMsg = Leer.GetValue("EOT" & i, "ApplyMsg")
+        EffectOverTime(i).ApplyMsgId = val(Leer.GetValue("EOT" & i, "ApplyMsgId"))
         EffectOverTime(i).DanoModo = val(Leer.GetValue("EOT" & i, "DanoModo"))
         EffectOverTime(i).FactorPvP = val(Leer.GetValue("EOT" & i, "FactorPvP"))
         EffectOverTime(i).FactorPvE = val(Leer.GetValue("EOT" & i, "FactorPvE"))

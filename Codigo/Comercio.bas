@@ -154,7 +154,7 @@ Public Sub Comercio(ByVal Modo As eModoComercio, ByVal UserIndex As Integer, ByV
             Exit Sub
         End If
         Call QuitarUserInvItem(UserIndex, Slot, Cantidad, False, "venta", _
-            "Ya no tenes flechas envenenadas equipadas.")
+            MSG_NO_POISONED_ARROWS_EQUIPPED)
         Call UpdateUserInv(False, UserIndex, Slot)
         precio = Fix(SalePrice(Objeto.ObjIndex, UserIndex) * Cantidad)
         UserList(UserIndex).Stats.GLD = UserList(UserIndex).Stats.GLD + precio

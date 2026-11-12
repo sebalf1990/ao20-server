@@ -274,7 +274,7 @@ Function UserDejaObj(ByVal UserIndex As Integer, ByVal ObjIndex As Integer, ByVa
             UserList(UserIndex).BancoInvent.Object(Slot).ElementalTags = UserList(UserIndex).invent.Object(ObjIndex).ElementalTags
             UserList(UserIndex).flags.ModificoInventarioBanco = True
             Call QuitarUserInvItem(UserIndex, CByte(ObjIndex), Cantidad, False, "banco", _
-                "Ya no tenes flechas envenenadas equipadas.")
+                MSG_NO_POISONED_ARROWS_EQUIPPED)
         Else
             Call WriteLocaleMsg(UserIndex, MSG_NO_BANCO_PUEDE_CARGAR_TANTOS_OBJETOS, e_TextChannel.TEXTCHANNEL_ECONOMY, e_FontTypeNames.FONTTYPE_New_Naranja) 'Msg1602= El banco no puede cargar tantos objetos.
         End If

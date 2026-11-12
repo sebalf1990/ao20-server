@@ -1028,6 +1028,8 @@ Sub ResetUserFlags(ByVal UserIndex As Integer)
         .PoisonMinorActive = 0
         .PoisonHemoStacks = 0
         .PoisonNeuroActive = 0
+        .PoisonState = vbNullString
+        .PoisonStateTaken = False
         .PoisonNeuroPenalidadPunteriaPct = 0
         .PoisonNeuroPenalidadEvasionPct = 0
         .PoisonNeuroPenalidadBloqueoEscudoPct = 0
@@ -1204,7 +1206,7 @@ Sub ResetUserSlot(ByVal UserIndex As Integer)
         ' Admin apaga el toggle en runtime el cache quedaria vivo y lo hereda el proximo ocupante
         ' del slot reciclado). Limpiar es seguro con el sistema apagado.
         Call ClearPoisonedWeapon(UserIndex)
-        Call ClearPoisonedAmmo(UserIndex, "", "desconexion")
+        Call ClearPoisonedAmmo(UserIndex, 0, "desconexion")
         Call ClearEnchantedWeapon(UserIndex)
         Call ClearEnchantedAmmo(UserIndex)
         Call ClearPoisonEffectCaches(UserIndex)
@@ -1287,7 +1289,7 @@ Sub ClearAndSaveUser(ByVal UserIndex As Integer)
         Call ClearEffectList(.EffectOverTime, e_EffectType.eAny, False)
         ' 06.002 Ola 1: untados y encantamientos (no persisten) se limpian SIEMPRE, sin gate de toggle.
         Call ClearPoisonedWeapon(UserIndex)
-        Call ClearPoisonedAmmo(UserIndex, "", "desconexion")
+        Call ClearPoisonedAmmo(UserIndex, 0, "desconexion")
         Call ClearEnchantedWeapon(UserIndex)
         Call ClearEnchantedAmmo(UserIndex)
         errordesc = "ERROR AL LIMPIAR INVENTARIO DE CRAFTEO"
