@@ -1578,3 +1578,27 @@ Public Const MSG_ENCH_YOUR_WEAPON_ENCHANTED As Integer = 9069
 Public Const MSG_ENCH_YOU_ENCHANTED_WEAPON_OF As Integer = 9070
 Public Const MSG_ENCH_TARGET_AMMO_ALREADY As Integer = 9071
 Public Const MSG_POISON_ARROW_STACK_SPENT As Integer = 9072
+' Poison application texts (item vials and spells), 9073-9094. Params: 9079 = family name, charges; 9088 = target name, family;
+' 9089 = family name, charges; 9094 = caster name. Params are joined with the 0xAC separator.
+Public Const MSG_POISON_ORB_BLOCKS As Integer = 9073
+Public Const MSG_POISON_VIAL_MISCONFIGURED As Integer = 9074
+Public Const MSG_POISON_NO_WEAPON As Integer = 9075
+Public Const MSG_POISON_NEEDS_ARROWS As Integer = 9076
+Public Const MSG_POISON_ARROW_ALREADY As Integer = 9077
+Public Const MSG_POISON_ARROWS_COATED As Integer = 9078
+Public Const MSG_POISON_ARROWS_APPLIED As Integer = 9079
+Public Const MSG_POISON_WEAPON_NOT_POISONABLE As Integer = 9080
+Public Const MSG_POISON_WEAPON_FAMILY As Integer = 9081
+Public Const MSG_POISON_WEAPON_APPLIED As Integer = 9082
+Public Const MSG_POISON_TARGET_ORB As Integer = 9083
+Public Const MSG_POISON_SPELL_MISCONFIGURED As Integer = 9084
+Public Const MSG_POISON_TARGET_NO_WEAPON As Integer = 9085
+Public Const MSG_POISON_TARGET_NEEDS_ARROWS As Integer = 9086
+Public Const MSG_POISON_TARGET_ARROWS_ALREADY As Integer = 9087
+Public Const MSG_POISON_TARGET_ARROWS_DONE As Integer = 9088
+Public Const MSG_POISON_YOUR_ARROWS_DONE As Integer = 9089
+Public Const MSG_POISON_TARGET_WEAPON_NOT_POISONABLE As Integer = 9090
+Public Const MSG_POISON_TARGET_WEAPON_FAMILY As Integer = 9091
+Public Const MSG_POISON_TARGET_WEAPON_ALREADY As Integer = 9092
+Public Const MSG_POISON_TARGET_WEAPON_DONE As Integer = 9093
+Public Const MSG_POISON_WEAPON_APPLIED_BY As Integer = 9094

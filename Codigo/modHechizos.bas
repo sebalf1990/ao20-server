@@ -1759,14 +1759,14 @@ Sub HechizoEstadoUsuario(ByVal UserIndex As Integer, ByRef b As Boolean)
     If IsFeatureEnabled("new_poison_system") And Hechizos(h).TipoHechizoVeneno = 1 Then
         ' CP3 (20.002 Step 7): el orbe elemental equipado del target anula/bloquea el untado de veneno
         If modElementalCombat.HasElementalOrbEquipped(targetUserIndex) Then
-            Call WriteConsoleMsg(UserIndex, "El objetivo tiene un orbe equipado: no se puede untar veneno.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_POISON_TARGET_ORB, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             b = False
             Exit Sub
         End If
         ' Target debe ser un usuario valido (self o aliado). No validamos hostilidad: aceptamos cualquier user.
         ' Si queres castear self con AutoLanzar=1 ya se controla en PuedeLanzar.
         If Hechizos(h).FamiliaVeneno < 1 Or Hechizos(h).FamiliaVeneno > 3 Or Hechizos(h).CargasQueOtorga <= 0 Then
-            Call WriteConsoleMsg(UserIndex, "El hechizo de veneno no esta configurado correctamente.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_POISON_SPELL_MISCONFIGURED, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             b = False
             Exit Sub
         End If
@@ -1781,7 +1781,7 @@ Sub HechizoEstadoUsuario(ByVal UserIndex As Integer, ByRef b As Boolean)
         Dim equipWpn As Integer
         equipWpn = UserList(targetUserIndex).invent.EquippedWeaponObjIndex
         If equipWpn <= 0 Then
-            Call WriteConsoleMsg(UserIndex, "El objetivo no tiene arma equipada.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_POISON_TARGET_NO_WEAPON, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             b = False
             Exit Sub
         End If
@@ -1790,22 +1790,22 @@ Sub HechizoEstadoUsuario(ByVal UserIndex As Integer, ByRef b As Boolean)
             Dim equipAmmo As Integer
             equipAmmo = UserList(targetUserIndex).invent.EquippedMunitionObjIndex
             If equipAmmo <= 0 Or UserList(targetUserIndex).invent.EquippedMunitionSlot <= 0 Then
-                Call WriteConsoleMsg(UserIndex, "El objetivo necesita flechas equipadas para envenenar su arco.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+                Call WriteLocaleMsg(UserIndex, MSG_POISON_TARGET_NEEDS_ARROWS, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                 b = False
                 Exit Sub
             End If
             If ObjData(equipAmmo).OBJType <> e_OBJType.otArrows Then
-                Call WriteConsoleMsg(UserIndex, "El objetivo necesita flechas equipadas para envenenar su arco.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+                Call WriteLocaleMsg(UserIndex, MSG_POISON_TARGET_NEEDS_ARROWS, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                 b = False
                 Exit Sub
             End If
             If ObjData(equipAmmo).FlechaVenenoFamilia > 0 Then
-                Call WriteConsoleMsg(UserIndex, "Las flechas del objetivo ya estan envenenadas.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+                Call WriteLocaleMsg(UserIndex, MSG_POISON_TARGET_ARROWS_ALREADY, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                 b = False
                 Exit Sub
             End If
             If UserList(targetUserIndex).flags.PoisonedAmmoObjIndex > 0 And UserList(targetUserIndex).flags.PoisonedAmmoCargas > 0 Then
-                Call WriteConsoleMsg(UserIndex, "Las flechas del objetivo ya estan envenenadas.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+                Call WriteLocaleMsg(UserIndex, MSG_POISON_TARGET_ARROWS_ALREADY, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                 b = False
                 Exit Sub
             End If
@@ -1849,16 +1849,16 @@ Sub HechizoEstadoUsuario(ByVal UserIndex As Integer, ByRef b As Boolean)
             Call InfoHechizo(UserIndex)
             Call LogPoisonEvent("untar_flechas_hechizo", UserList(UserIndex).name, UserList(targetUserIndex).name, equipAmmo, Hechizos(h).FamiliaVeneno, 0, Hechizos(h).CargasQueOtorga, 0, 0)
             If targetUserIndex <> UserIndex Then
-                Call WriteConsoleMsg(UserIndex, "Envenenaste las flechas de " & UserList(targetUserIndex).name & " con " & poisonFamilyName & ".", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+                Call WriteLocaleMsg(UserIndex, MSG_POISON_TARGET_ARROWS_DONE, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO, UserList(targetUserIndex).name & "¬" & poisonFamilyName)
             End If
-            Call WriteConsoleMsg(targetUserIndex, "Tus flechas han sido envenenadas con " & poisonFamilyName & " (" & Hechizos(h).CargasQueOtorga & " cargas).", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(targetUserIndex, MSG_POISON_YOUR_ARROWS_DONE, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO, poisonFamilyName & "¬" & Hechizos(h).CargasQueOtorga)
             Call WritePoisonedAmmoIcon(targetUserIndex)
             b = True
             Exit Sub
         End If
 
         If ObjData(equipWpn).Subtipo <> 11 Then
-            Call WriteConsoleMsg(UserIndex, "El arma del objetivo no se puede envenenar.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_POISON_TARGET_WEAPON_NOT_POISONABLE, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             b = False
             Exit Sub
         End If
@@ -1867,14 +1867,14 @@ Sub HechizoEstadoUsuario(ByVal UserIndex As Integer, ByRef b As Boolean)
             Dim famHech As String
             famHech = CStr(Hechizos(h).FamiliaVeneno)
             If InStr("," & ObjData(equipWpn).FamiliasCompatibles & ",", "," & famHech & ",") = 0 Then
-                Call WriteConsoleMsg(UserIndex, "El arma del objetivo no acepta esta familia de veneno.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+                Call WriteLocaleMsg(UserIndex, MSG_POISON_TARGET_WEAPON_FAMILY, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
                 b = False
                 Exit Sub
             End If
         End If
         ' Si ya esta untada con MISMA arma activa y cargas restantes, rechazar
         If UserList(targetUserIndex).flags.PoisonedWeaponObjIndex = equipWpn And UserList(targetUserIndex).flags.PoisonedWeaponCargas > 0 Then
-            Call WriteConsoleMsg(UserIndex, "El arma del objetivo ya esta envenenada.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(UserIndex, MSG_POISON_TARGET_WEAPON_ALREADY, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
             b = False
             Exit Sub
         End If
@@ -1920,10 +1920,10 @@ Sub HechizoEstadoUsuario(ByVal UserIndex As Integer, ByRef b As Boolean)
         End With
         Call InfoHechizo(UserIndex)
         Call LogPoisonEvent("untar_arma_hechizo", UserList(UserIndex).name, UserList(targetUserIndex).name, h, Hechizos(h).FamiliaVeneno, 0, Hechizos(h).CargasQueOtorga, 0, 0)
-        Call WriteConsoleMsg(UserIndex, "Has untado el arma con veneno.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteLocaleMsg(UserIndex, MSG_POISON_TARGET_WEAPON_DONE, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
         Call WritePoisonedWeaponIcon(targetUserIndex)
         If targetUserIndex <> UserIndex Then
-            Call WriteConsoleMsg(targetUserIndex, UserList(UserIndex).name & " unto tu arma con veneno.", e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteLocaleMsg(targetUserIndex, MSG_POISON_WEAPON_APPLIED_BY, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO, UserList(UserIndex).name)
         End If
         b = True
         Exit Sub
