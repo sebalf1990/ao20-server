@@ -3252,8 +3252,11 @@ Public Function IsConsumableFreeZone(ByVal UserIndex As Integer) As Boolean
     End Select
     ' 297 - Arena de Lindos
     isArena = (currentMap = MAP_ARENA_LINDOS And isTriggerZone)
-    ' Meson Hostigado - Beneficio Patreon: mapa 172, con trigger activo y jugador con tier
-    isTrainingZone = (currentMap = MAP_MESON_HOSTIGADO And isTriggerZone And isTierUser)
+    ' Meson Hostigado - Beneficio Patreon: con trigger activo y jugador con tier. La zona de pelea con
+    ' muniecos esta en el 172 (MAP_MESON_HOSTIGADO_TRADING_ZONE); antes solo se miraba el 170, que no
+    ' tiene ninguna baldosa con trigger 6, y el beneficio nunca se activaba (plan web 2026-11-16, E3).
+    isTrainingZone = ((currentMap = MAP_MESON_HOSTIGADO Or currentMap = MAP_MESON_HOSTIGADO_TRADING_ZONE) _
+                      And isTriggerZone And isTierUser)
     ' Si esta en alguna de las zonas anteriores, no se consume la poción
     IsConsumableFreeZone = (isHouseZone Or isCastleZone Or isSpecialZone Or isTrainingZone Or isArena)
 End Function
