@@ -27,10 +27,19 @@ Attribute VB_Name = "ModShopAO20"
 '
 Option Explicit
 
+Public Enum e_DebitResult
+    DebitOk = 0
+    DebitRefused = 1     ' seguro: no se debito nada
+    DebitUnknown = 2     ' el UPDATE pudo ejecutarse y no se pudo confirmar el saldo
+End Enum
+
 Public Sub init_transaction(ByVal obj_num As Long, ByVal UserIndex As Integer)
     On Error GoTo init_transaction_Err
     Call VigiaFuente(UserIndex, "tienda")  ' E2 vigia (modVigia)
     Dim obj As t_ObjData
+    Dim debitedAccount As Long      ' cuenta debitada (0 = nada debitado)
+    Dim debitedAmount As Long
+    Dim delivered As Boolean
     obj.ObjNum = obj_num
     With UserList(UserIndex)
         'Me fijo si es un item de shop
@@ -56,25 +65,40 @@ Public Sub init_transaction(ByVal obj_num As Long, ByVal UserIndex As Integer)
             Call WriteLocaleMsg(UserIndex, MSG_ASEGURATE_TENER_ESPACIO_SUFICIENTE_INVENTARIO, e_TextChannel.TEXTCHANNEL_ECONOMY, e_FontTypeNames.FONTTYPE_SUBASTA)
             Exit Sub
         End If
-        'Descuento los créditos
-        ' Debito contra SQL (condicion de saldo en el WHERE) y relectura. Nunca se escribe un total calculado en memoria.
+        ' Flujo: espacio -> debito atomico en SQL -> entrega -> (si la entrega falla: reembolso) -> sincronizar -> avisar.
         Dim creditsLeft As Long
-        If Not DebitAccountCredits(.AccountID, obj.Valor, creditsLeft) Then
-            Call WriteLocaleMsg(UserIndex, MSG_ERROR_REALIZAR_TRANSACCION_1088, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
-            Call LogShopErrors("Debito de creditos rechazado por saldo en SQL | " & .name & " | " & ObjData(obj.ObjNum).name)
+        Select Case DebitAccountCredits(.AccountID, obj.Valor, creditsLeft)
+            Case e_DebitResult.DebitRefused
+                Call WriteLocaleMsg(UserIndex, MSG_ERROR_REALIZAR_TRANSACCION_1088, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
+                Call LogShopErrors("Debito de creditos rechazado por saldo en SQL | " & .name & " | " & ObjData(obj.ObjNum).name)
+                Exit Sub
+            Case e_DebitResult.DebitUnknown
+                ' No se sabe si se cobro: se BLOQUEA la compra (no se reembolsa a ciegas: podria regalar creditos). Queda en Auditoria.
+                Call WriteLocaleMsg(UserIndex, MSG_ERROR_REALIZAR_TRANSACCION, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
+                Call LogShopErrors("Debito de creditos con resultado DESCONOCIDO | " & .name & " | " & ObjData(obj.ObjNum).name)
+                Exit Sub
+        End Select
+        debitedAccount = .AccountID
+        debitedAmount = obj.Valor
+        Call SyncAccountCreditsInMemory(.AccountID, creditsLeft)
+        delivered = MeterItemEnInventario(UserIndex, objInventario)
+        If Not delivered Then
+            Call RefundAfterFailedDelivery(UserIndex, debitedAccount, debitedAmount, ObjData(obj.ObjNum).name)
+            debitedAccount = 0
+            Call WriteLocaleMsg(UserIndex, MSG_ERROR_REALIZAR_TRANSACCION, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
             Exit Sub
         End If
-        Call SyncAccountCreditsInMemory(.AccountID, creditsLeft)
-        'Genero un log de los créditos que gastó y cuantos le quedan luego de la transacción.
-        Call LogShopTransactions(.name & " | Compró -> " & ObjData(obj.ObjNum).name & " | Valor -> " & obj.Valor)
+        'Genero un log de los creditos que gasto y cuantos le quedan luego de la transaccion.
+        Call LogShopTransactions(.name & " | Compro -> " & ObjData(obj.ObjNum).name & " | Valor -> " & obj.Valor)
         Call writeUpdateShopClienteCredits(UserIndex)
         Call RegisterTransaction(.AccountID, .Id, obj.ObjNum, obj.Valor, .Stats.Creditos)
         Call LogCreditosPatreon(.name & " | Compro objeto " & ObjData(obj.ObjNum).name & " | Creditos usados: " & obj.Valor & " | Creditos restantes: " & .Stats.Creditos)
-        Call MeterItemEnInventario(UserIndex, objInventario)
     End With
     Exit Sub
 init_transaction_Err:
     Call TraceError(Err.Number, Err.Description, "ShopAo20.init_transaction", Erl)
+    ' Error tras un debito exitoso y antes de entregar: reembolso relativo (credits + ?) y resincronizar.
+    If debitedAccount > 0 And Not delivered Then Call RefundAfterFailedDelivery(UserIndex, debitedAccount, debitedAmount, "error en init_transaction")
 End Sub
 
 ' Lee el saldo de creditos de la cuenta directo de SQL (fuente de verdad). False si la lectura falla.
@@ -108,22 +132,63 @@ Public Sub SyncAccountCreditsInMemory(ByVal AccountID As Long, ByVal Credits As 
 End Sub
 
 ' Debita creditos de la cuenta en SQL: el UPDATE resta (no escribe un total) y lleva la condicion de saldo en el WHERE.
-' Verifica por relectura (convencion del proyecto, sin RecordsAffected): exito solo si el saldo final = saldo previo - monto.
-' CreditsLeft queda con el saldo real de SQL tras la operacion.
-Public Function DebitAccountCredits(ByVal AccountID As Long, ByVal Amount As Long, ByRef CreditsLeft As Long) As Boolean
+' Verifica por relectura (convencion del proyecto, sin RecordsAffected): final = previo - monto -> DebitOk; final = previo
+' -> DebitRefused; cualquier otra cosa o relectura fallida (reintenta una vez) -> DebitUnknown + ERROR en Auditoria con
+' cuenta y monto para conciliar. Con DebitUnknown NO se reembolsa a ciegas (podria crear creditos): se bloquea la compra.
+' CreditsLeft queda con el saldo real de SQL cuando se pudo leer.
+Public Function DebitAccountCredits(ByVal AccountID As Long, ByVal Amount As Long, ByRef CreditsLeft As Long) As e_DebitResult
     On Error GoTo DebitAccountCredits_Err
     Dim creditsBefore As Long
+    DebitAccountCredits = e_DebitResult.DebitRefused
     If Amount <= 0 Then Exit Function
     If Not ReadAccountCreditsFromDb(AccountID, creditsBefore) Then Exit Function
     CreditsLeft = creditsBefore
     If creditsBefore < Amount Then Exit Function
     Call Query("update account set offline_patron_credits = offline_patron_credits - ? where id = ? and offline_patron_credits >= ?;", Amount, AccountID, Amount)
-    If Not ReadAccountCreditsFromDb(AccountID, CreditsLeft) Then Exit Function
-    DebitAccountCredits = (CreditsLeft = creditsBefore - Amount)
+    Dim readOk As Boolean
+    readOk = ReadAccountCreditsFromDb(AccountID, CreditsLeft)
+    If Not readOk Then readOk = ReadAccountCreditsFromDb(AccountID, CreditsLeft)
+    If readOk Then
+        If CreditsLeft = creditsBefore - Amount Then
+            DebitAccountCredits = e_DebitResult.DebitOk
+            Exit Function
+        End If
+        If CreditsLeft = creditsBefore Then Exit Function
+    End If
+    DebitAccountCredits = e_DebitResult.DebitUnknown
+    Call LogCreditosPatreon("ERROR debito de creditos DESCONOCIDO | accountID: " & AccountID & " | monto: " & Amount & " | saldo previo: " & creditsBefore & " | releido: " & IIf(readOk, CStr(CreditsLeft), "sin lectura") & " | conciliar")
     Exit Function
 DebitAccountCredits_Err:
     Call TraceError(Err.Number, Err.Description, "ShopAo20.DebitAccountCredits", Erl)
+    DebitAccountCredits = e_DebitResult.DebitUnknown
+    Call LogCreditosPatreon("ERROR debito de creditos con excepcion | accountID: " & AccountID & " | monto: " & Amount & " | conciliar")
 End Function
+
+' Reembolso relativo (credits + ?) de un debito ya hecho cuya entrega fallo; resincroniza todas las sesiones y deja rastro en Auditoria.
+Public Sub RefundAfterFailedDelivery(ByVal UserIndex As Integer, ByVal AccountID As Long, ByVal Amount As Long, ByVal Reason As String)
+    On Error GoTo RefundAfterFailedDelivery_Err
+    Dim creditsNow As Long
+    Call Query("update account set offline_patron_credits = offline_patron_credits + ? where id = ?;", Amount, AccountID)
+    If ReadAccountCreditsFromDb(AccountID, creditsNow) Then
+        Call SyncAccountCreditsInMemory(AccountID, creditsNow)
+        If UserIndex > 0 Then Call writeUpdateShopClienteCredits(UserIndex)
+    End If
+    Call LogCreditosPatreon("REEMBOLSO de " & Amount & " creditos | accountID: " & AccountID & " | motivo: entrega fallida (" & Reason & ") | saldo: " & creditsNow)
+    Exit Sub
+RefundAfterFailedDelivery_Err:
+    Call TraceError(Err.Number, Err.Description, "ShopAo20.RefundAfterFailedDelivery", Erl)
+    Call LogCreditosPatreon("ERROR reembolso fallido | accountID: " & AccountID & " | monto: " & Amount & " | conciliar")
+End Sub
+
+' Avisa el saldo nuevo a TODAS las sesiones en linea de la cuenta (para que una tienda abierta se refresque).
+Public Sub NotifyAccountCreditsToSessions(ByVal AccountID As Long)
+    Dim i As Long
+    For i = 1 To LastUser
+        If UserList(i).flags.UserLogged And UserList(i).AccountID = AccountID Then
+            Call writeUpdateShopClienteCredits(i)
+        End If
+    Next i
+End Sub
 
 Private Function is_purchaseable_item(ByRef obj As t_ObjData) As Boolean
     Dim i As Long

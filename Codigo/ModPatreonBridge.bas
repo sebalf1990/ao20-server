@@ -155,8 +155,15 @@ Public Sub SyncPatreonBridgeTier(ByVal UserIndex As Integer)
     If UBound(parts) < 1 Then Exit Sub
     If UCase$(Trim$(parts(0))) <> "TIER" Then Exit Sub
 
+    ' Solo digitos explicitos: "TIER;abc" o vacio NO puede bajar la cuenta a 0 (Val() daba 0).
+    Dim tierToken As String
+    tierToken = Trim$(parts(1))
+    If LenB(tierToken) = 0 Or Len(tierToken) > 9 Or tierToken Like "*[!0-9]*" Then
+        Call LogCreditosPatreon("Bridge sync returned a non-numeric tier value accountID: " & accountID)
+        Exit Sub
+    End If
     Dim tierCode As Long
-    tierCode = CLng(Val(parts(1)))
+    tierCode = CLng(tierToken)
 
     Select Case tierCode
         Case 0, patron_tier_aventurero, patron_tier_heroe, patron_tier_leyenda, patron_tier_noble, patron_tier_emperador
@@ -306,7 +313,10 @@ Public Sub SyncPatreonBridgeCredits(ByVal UserIndex As Integer)
     Set rsUpd = Nothing
     ' Releer el saldo real de SQL y propagarlo a TODAS las sesiones en linea de la cuenta (no queda memoria vieja).
     Dim creditsNow As Long
-    If ReadAccountCreditsFromDb(accountID, creditsNow) Then Call SyncAccountCreditsInMemory(accountID, creditsNow)
+    If ReadAccountCreditsFromDb(accountID, creditsNow) Then
+        Call SyncAccountCreditsInMemory(accountID, creditsNow)
+        Call NotifyAccountCreditsToSessions(accountID)
+    End If
 
     ' Sin email: el accountID ya identifica la cuenta para auditoria y no es un dato personal.
     Call LogCreditosPatreon("Bridge applied " & totalCredits & " credits to accountID " & accountID & ". Claims: " & claimCount)
