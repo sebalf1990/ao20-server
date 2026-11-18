@@ -57,10 +57,16 @@ Public Sub init_transaction(ByVal obj_num As Long, ByVal UserIndex As Integer)
             Exit Sub
         End If
         'Descuento los créditos
-        .Stats.Creditos = .Stats.Creditos - obj.Valor
+        ' Debito contra SQL (condicion de saldo en el WHERE) y relectura. Nunca se escribe un total calculado en memoria.
+        Dim creditsLeft As Long
+        If Not DebitAccountCredits(.AccountID, obj.Valor, creditsLeft) Then
+            Call WriteLocaleMsg(UserIndex, MSG_ERROR_REALIZAR_TRANSACCION_1088, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_New_Naranja)
+            Call LogShopErrors("Debito de creditos rechazado por saldo en SQL | " & .name & " | " & ObjData(obj.ObjNum).name)
+            Exit Sub
+        End If
+        Call SyncAccountCreditsInMemory(.AccountID, creditsLeft)
         'Genero un log de los créditos que gastó y cuantos le quedan luego de la transacción.
         Call LogShopTransactions(.name & " | Compró -> " & ObjData(obj.ObjNum).name & " | Valor -> " & obj.Valor)
-        Call Query("update account set offline_patron_credits = ? where id = ?;", .Stats.Creditos, .AccountID)
         Call writeUpdateShopClienteCredits(UserIndex)
         Call RegisterTransaction(.AccountID, .Id, obj.ObjNum, obj.Valor, .Stats.Creditos)
         Call LogCreditosPatreon(.name & " | Compro objeto " & ObjData(obj.ObjNum).name & " | Creditos usados: " & obj.Valor & " | Creditos restantes: " & .Stats.Creditos)
@@ -70,6 +76,54 @@ Public Sub init_transaction(ByVal obj_num As Long, ByVal UserIndex As Integer)
 init_transaction_Err:
     Call TraceError(Err.Number, Err.Description, "ShopAo20.init_transaction", Erl)
 End Sub
+
+' Lee el saldo de creditos de la cuenta directo de SQL (fuente de verdad). False si la lectura falla.
+Public Function ReadAccountCreditsFromDb(ByVal AccountID As Long, ByRef Credits As Long) As Boolean
+    On Error GoTo ReadAccountCreditsFromDb_Err
+    Dim RS As ADODB.Recordset
+    Set RS = Query("select offline_patron_credits from account where id = ?;", AccountID)
+    If RS Is Nothing Then Exit Function
+    If RS.EOF Then
+        RS.Close
+        Exit Function
+    End If
+    Credits = CLng(RS!offline_patron_credits)
+    RS.Close
+    Set RS = Nothing
+    ReadAccountCreditsFromDb = True
+    Exit Function
+ReadAccountCreditsFromDb_Err:
+    Call TraceError(Err.Number, Err.Description, "ShopAo20.ReadAccountCreditsFromDb", Erl)
+    Set RS = Nothing
+End Function
+
+' Copia el saldo de SQL a la memoria de TODOS los personajes en linea de la cuenta.
+Public Sub SyncAccountCreditsInMemory(ByVal AccountID As Long, ByVal Credits As Long)
+    Dim i As Long
+    For i = 1 To LastUser
+        If UserList(i).flags.UserLogged And UserList(i).AccountID = AccountID Then
+            UserList(i).Stats.Creditos = Credits
+        End If
+    Next i
+End Sub
+
+' Debita creditos de la cuenta en SQL: el UPDATE resta (no escribe un total) y lleva la condicion de saldo en el WHERE.
+' Verifica por relectura (convencion del proyecto, sin RecordsAffected): exito solo si el saldo final = saldo previo - monto.
+' CreditsLeft queda con el saldo real de SQL tras la operacion.
+Public Function DebitAccountCredits(ByVal AccountID As Long, ByVal Amount As Long, ByRef CreditsLeft As Long) As Boolean
+    On Error GoTo DebitAccountCredits_Err
+    Dim creditsBefore As Long
+    If Amount <= 0 Then Exit Function
+    If Not ReadAccountCreditsFromDb(AccountID, creditsBefore) Then Exit Function
+    CreditsLeft = creditsBefore
+    If creditsBefore < Amount Then Exit Function
+    Call Query("update account set offline_patron_credits = offline_patron_credits - ? where id = ? and offline_patron_credits >= ?;", Amount, AccountID, Amount)
+    If Not ReadAccountCreditsFromDb(AccountID, CreditsLeft) Then Exit Function
+    DebitAccountCredits = (CreditsLeft = creditsBefore - Amount)
+    Exit Function
+DebitAccountCredits_Err:
+    Call TraceError(Err.Number, Err.Description, "ShopAo20.DebitAccountCredits", Erl)
+End Function
 
 Private Function is_purchaseable_item(ByRef obj As t_ObjData) As Boolean
     Dim i As Long

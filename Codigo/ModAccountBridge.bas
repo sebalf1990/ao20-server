@@ -146,7 +146,7 @@ End Function
 ' Publica la tabla de cupos por tier para que la web NO la hardcodee (plan
 ' 30.001, ola 0). Viaja como header del GET del poll que ya se hace, asi que no
 ' agrega ni una llamada ni un endpoint. Formato:
-'   "normal=4,aventurero=6,heroe=8,leyenda=10"
+'   "normal=4,aventurero=6,heroe=8,leyenda=10,noble=10,emperador=10"
 ' El server es la unica autoridad del cupo: si estos numeros cambian, la web se
 ' entera en el proximo poll sin tocar codigo web.
 Private Function BuildCharCapsHeader() As String
@@ -154,6 +154,8 @@ Private Function BuildCharCapsHeader() As String
                           ",aventurero=" & CapForTier(e_TipoUsuario.tAventurero) & _
                           ",heroe=" & CapForTier(e_TipoUsuario.tHeroe) & _
                           ",leyenda=" & CapForTier(e_TipoUsuario.tLeyenda) & _
+                          ",noble=" & CapForTier(e_TipoUsuario.tNoble) & _
+                          ",emperador=" & CapForTier(e_TipoUsuario.tEmperador) & _
                           ",max=" & MAX_PERSONAJES
 End Function
 
