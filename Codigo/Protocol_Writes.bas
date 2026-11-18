@@ -1549,6 +1549,9 @@ Public Sub WriteInventoryUnlockSlots(ByVal UserIndex As Integer)
                     Call Writer.WriteInt8(2)
                 Case tAventurero
                     Call Writer.WriteInt8(1)
+                Case Else
+                    ' Resguardo: un tier nuevo sin rama nunca deja el paquete sin payload (desincroniza al cliente).
+                    Call Writer.WriteInt8(0)
             End Select
             Call modSendData.SendData(ToIndex, UserIndex)
         End If

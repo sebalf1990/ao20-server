@@ -159,7 +159,7 @@ Public Sub SyncPatreonBridgeTier(ByVal UserIndex As Integer)
     tierCode = CLng(Val(parts(1)))
 
     Select Case tierCode
-        Case 0, patron_tier_aventurero, patron_tier_heroe, patron_tier_leyenda
+        Case 0, patron_tier_aventurero, patron_tier_heroe, patron_tier_leyenda, patron_tier_noble, patron_tier_emperador
             ' valid tier code
         Case Else
             Call LogCreditosPatreon("Bridge sync returned invalid tier code " & tierCode & " accountID: " & accountID)
@@ -304,6 +304,9 @@ Public Sub SyncPatreonBridgeCredits(ByVal UserIndex As Integer)
     Set rsUpd = Query("update account set offline_patron_credits = offline_patron_credits + ? where id = ?;", _
                     totalCredits, accountID)
     Set rsUpd = Nothing
+    ' Releer el saldo real de SQL y propagarlo a TODAS las sesiones en linea de la cuenta (no queda memoria vieja).
+    Dim creditsNow As Long
+    If ReadAccountCreditsFromDb(accountID, creditsNow) Then Call SyncAccountCreditsInMemory(accountID, creditsNow)
 
     ' Sin email: el accountID ya identifica la cuenta para auditoria y no es un dato personal.
     Call LogCreditosPatreon("Bridge applied " & totalCredits & " credits to accountID " & accountID & ". Claims: " & claimCount)
