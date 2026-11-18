@@ -24,7 +24,8 @@ Attribute VB_Name = "modGuardian"
 '    queda como `guardian_ausente`.
 ' 2. Valida cada eGuardianHeartbeat en el orden del diseno (4): rate limit 1 cada GuardianRateLimitMs ANTES de mirar
 '    el contenido; logueado + desafio emitido; largo <= 512 y charset [0-9a-z|,._-]; recien ahi kid, HMAC
-'    (comparacion XOR acumulada), frescura de `ms`, contador por generacion `g`, flags.
+'    (comparacion XOR acumulada), frescura de `ms`, contador por generacion `g`, flags. Formato v2 (11 campos, el campo 9
+'    es el seq del manifest firmado, 0 si el guardian no lo pudo verificar); seq < GuardianSeqMinimo -> guardian_manifest_viejo.
 ' 3. Registra todo en el log antitrampa (modAntitrampa.AntitrampaLineaAccion). Politica GuardianAccion: log (default) o
 '    avisar_gm. Nunca expulsa ni banea en E4b.
 ' 4. Ausencia: desafio emitido y sin heartbeat valido a los GuardianFactorAusencia x intervalo (contados desde el ultimo
@@ -50,6 +51,7 @@ Private Const SECRET_FILE As String = "Guardian.secret.ini"
 Private Const SECCION_CFG As String = "ANTITRAMPA"
 Private Const SECCION_SECRETO As String = "GUARDIAN"
 Private Const MAX_LINE As Long = 512
+Private Const SEQ_MAX_DIGITOS As Long = 16
 Private Const MAX_GEN As Long = 8
 Private Const MAX_KIDS As Long = 2
 Private Const TICK_MS As Long = 1000
@@ -62,7 +64,8 @@ Private Const EV_SIN_DESAFIO As Long = 1
 Private Const EV_REINICIO As Long = 2
 Private Const EV_EXCESIVO As Long = 3
 Private Const EV_INVALIDA As Long = 4
-Private Const EV_MAX As Long = 4
+Private Const EV_MANIFEST_VIEJO As Long = 5
+Private Const EV_MAX As Long = 5
 
 Private Type t_GuardianGen
     G As String
@@ -112,6 +115,7 @@ Private m_RateLimitMs As Long
 Private m_FrescuraMs As Long
 Private m_EventoCadaMs As Long
 Private m_GraciaSeg As Long
+Private m_SeqMinimo As Double
 Private m_AvisarGm As Boolean
 Private m_UltimoTick As Long
 
@@ -129,6 +133,7 @@ Private Sub CargarDefaults()
     m_FrescuraMs = 45000
     m_EventoCadaMs = 30000
     m_GraciaSeg = 90
+    m_SeqMinimo = 0
     m_AvisarGm = False
 End Sub
 
@@ -154,6 +159,7 @@ Public Sub InitGuardian()
     m_FrescuraMs = CLng(val(ini.GetValue(SECCION_CFG, "GuardianFrescuraMs", "45000")))
     m_EventoCadaMs = CLng(val(ini.GetValue(SECCION_CFG, "GuardianEventoCadaMs", "30000")))
     m_GraciaSeg = CLng(val(ini.GetValue(SECCION_CFG, "GuardianGraciaSeg", "90")))
+    m_SeqMinimo = val(ini.GetValue(SECCION_CFG, "GuardianSeqMinimo", "0"))
     m_AvisarGm = (LCase$(Trim$(ini.GetValue(SECCION_CFG, "GuardianAccion", "log"))) = "avisar_gm")
     ' Piso de cada valor: el guardian clampea el intervalo a 5 s; un 0 pararia la ausencia o el rate limit.
     If m_IntervaloSeg < 5 Then m_IntervaloSeg = 5
@@ -165,6 +171,7 @@ Public Sub InitGuardian()
     If m_FrescuraMs < 1000 Then m_FrescuraMs = 1000
     If m_EventoCadaMs < 1000 Then m_EventoCadaMs = 1000
     If m_GraciaSeg < 0 Then m_GraciaSeg = 0
+    If m_SeqMinimo < 0 Then m_SeqMinimo = 0
     ' W1: el guardian firma una linea cada intervalo/2: el rate limit nunca puede ser mayor que eso (con margen).
     topeRate = ((m_IntervaloSeg * 1000) \ 2) - 500
     If topeRate < 1000 Then topeRate = 1000
@@ -173,7 +180,7 @@ Public Sub InitGuardian()
     ' Nunca se loguea ningun secreto: solo cuantas claves hay y si el kid de prueba esta permitido.
     Call LogThis(0, "Guardian: habilitado=" & m_Habilitado & " intervalo_s=" & m_IntervaloSeg & _
             " factor_ausencia=" & m_FactorAusencia & " repetir_ausente_s=" & m_RepetirAusenteSeg & " resumen_s=" & m_ResumenSeg & _
-            " gracia_s=" & m_GraciaSeg & " rate_limit_ms=" & m_RateLimitMs & " frescura_ms=" & m_FrescuraMs & " accion=" & GuardianAccionTexto() & " kids=" & m_KidCant & _
+            " gracia_s=" & m_GraciaSeg & " rate_limit_ms=" & m_RateLimitMs & " frescura_ms=" & m_FrescuraMs & " seq_minimo=" & Format$(m_SeqMinimo, "0") & " accion=" & GuardianAccionTexto() & " kids=" & m_KidCant & _
             " permitir_dev=" & m_PermitirDev & " slots=" & m_Max, vbLogEventTypeInformation)
     Exit Sub
 InitGuardian_Err:
@@ -607,7 +614,7 @@ Private Sub ValidarLinea(ByVal UserIndex As Integer, ByVal linea As String, ByVa
     On Error GoTo ValidarLinea_Err
     Dim campos() As String, kid As Long, kidIdx As Long, ctr As Double, ms As Double, flagsVal As Long
     Dim gs() As Byte, n() As Byte, ks() As Byte, cuerpo() As Byte, esperado() As Byte
-    Dim i As Long, gi As Long, esperadoMs As Double, limiteMs As Double, g As String, bit As Long
+    Dim i As Long, gi As Long, esperadoMs As Double, limiteMs As Double, g As String, bit As Long, seq As Double
     ' (3) Largo y charset, antes de cualquier cripto.
     If Len(linea) > MAX_LINE Then
         Call LineaInvalida(UserIndex, "largo", nowRaw)
@@ -618,13 +625,13 @@ Private Sub ValidarLinea(ByVal UserIndex As Integer, ByVal linea As String, ByVa
         Exit Sub
     End If
     campos = Split(linea, "|")
-    If UBound(campos) <> 9 Then
+    If UBound(campos) <> 10 Then
         Call LineaInvalida(UserIndex, "formato_campos", nowRaw)
         Exit Sub
     End If
-    If campos(0) <> "v1" Or Not EsDecimal(campos(1), 3) Or Not EsHex(campos(2), 8) Or Not EsDecimal(campos(3), 10) Or _
+    If campos(0) <> "v2" Or Not EsDecimal(campos(1), 3) Or Not EsHex(campos(2), 8) Or Not EsDecimal(campos(3), 10) Or _
        Not EsDecimal(campos(4), 13) Or Not EsDecimal(campos(5), 5) Or Not EsHex(campos(6), 16) Or Not EsHex(campos(7), 32) Or _
-       Not EsHex(campos(9), 64) Then
+       Not EsDecimal(campos(9), SEQ_MAX_DIGITOS) Or Not EsHex(campos(10), 64) Then
         Call LineaInvalida(UserIndex, "formato_valores", nowRaw)
         Exit Sub
     End If
@@ -632,6 +639,7 @@ Private Sub ValidarLinea(ByVal UserIndex As Integer, ByVal linea As String, ByVa
     ctr = val(campos(3))
     ms = val(campos(4))
     flagsVal = CLng(campos(5))
+    seq = val(campos(9))
     g = campos(2)
     If kid > 255 Or ctr > 4294967295# Then
         Call LineaInvalida(UserIndex, "formato_rango", nowRaw)
@@ -661,7 +669,7 @@ Private Sub ValidarLinea(ByVal UserIndex As Integer, ByVal linea As String, ByVa
     ks = DerivarKs(gs, n, m_U(UserIndex).CharId)
     cuerpo = TextoABytes(Left$(linea, Len(linea) - 64))
     esperado = Hmac256(ks, cuerpo)
-    If Not MacIgual(esperado, campos(9)) Then
+    If Not MacIgual(esperado, campos(10)) Then
         Call ContarInvalido(UserIndex)
         Call Emitir(UserIndex, "guardian_firma_invalida", "motivo=mac kid=" & kid & " g=" & g, True)
         Exit Sub
@@ -719,6 +727,15 @@ Private Sub ValidarLinea(ByVal UserIndex As Integer, ByVal linea As String, ByVa
             End If
         End If
     End If
+    ' (4e) Manifest viejo: seq del .sig verificado por el guardian contra el piso GuardianSeqMinimo (0 = apagado). Solo
+    ' registra (un evento por jugador cada m_EventoCadaMs): no corta el procesamiento de los flags.
+    If m_SeqMinimo > 0 Then
+        If seq < m_SeqMinimo Then
+            If EventoPermitido(UserIndex, EV_MANIFEST_VIEJO, nowRaw) Then
+                Call Emitir(UserIndex, "guardian_manifest_viejo", "seq=" & Format$(seq, "0") & " minimo=" & Format$(m_SeqMinimo, "0"), True)
+            End If
+        End If
+    End If
     ' Valido.
     With m_U(UserIndex)
         .Gen(gi).UltimoCtr = ctr
@@ -728,7 +745,7 @@ Private Sub ValidarLinea(ByVal UserIndex As Integer, ByVal linea As String, ByVa
         If .HbValidos = 1 Then
             ' E4e: id de PC de la sesion (crudo, 32 hex); solo se compara en memoria, nunca se loguea sin re-hashear.
             .MidPc = LCase$(campos(7))
-            Call Emitir(UserIndex, "guardian_ok", "kid=" & kid & " g=" & g & " exe=" & campos(6) & " mid=" & MidReHasheado(campos(7)), False)
+            Call Emitir(UserIndex, "guardian_ok", "kid=" & kid & " g=" & g & " exe=" & campos(6) & " seq=" & Format$(seq, "0") & " mid=" & MidReHasheado(campos(7)), False)
         End If
     End With
     ' (5) Un evento por cada bit de flags nuevo en la sesion.
