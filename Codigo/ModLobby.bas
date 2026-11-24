@@ -142,14 +142,6 @@ Public GlobalLobbyIndex         As Integer
 ' went stale (CTF stomp, ghost lobby, /PARTICIPAR misrouted). The active public event
 ' type is now DERIVED from the live structures (see ActiveEventType).
 Public Const NO_ACTIVE_EVENT As Integer = -1
-' Plan 05.002 wave 8: this used to be 'AlreadyDidAutoEventToday As Boolean', reset with a
-' 1 hour stopwatch over LastAutoEventAttempt. It never compared days anywhere: the name said
-' "Today" but it worked by accident, because the calendar's time window is exactly 1 hour long,
-' same as the reset threshold. Now it holds the DATE of the last auto event that REALLY opened,
-' which is what the name always promised.
-' LastAutoEventAttempt stays, with another role: retry brake inside the time window.
-Public LastAutoEventAttempt     As Long
-Public LastAutoEventDate        As Date
 Const LobbyCount = 200
 Public LobbyList(0 To LobbyCount) As t_Lobby
 Private AvailableLobby            As t_IndexHeap
@@ -191,6 +183,8 @@ Public Sub ReleaseLobby(ByVal LobbyIndex As Integer)
         GlobalLobbyIndex = -1
     End If
     Call LogLobbyPool("release", LobbyIndex)
+    ' Automatic events calendar: closes the row of the event it opened (single exit of every way an event ends).
+    Call CalendarioEventos_LobbyLiberado(LobbyIndex)
 End Sub
 
 Public Function LobbiesDisponibles() As Integer
@@ -1483,6 +1477,11 @@ End Sub
 Public Sub ReabrirEventosTrasCierreFallido()
     m_Cerrando = False
 End Sub
+
+' True while the server is closing (see CancelarEventoActivoPorApagado): the calendar must not open events then.
+Public Function ServidorCerrandoEventos() As Boolean
+    ServidorCerrandoEventos = m_Cerrando
+End Function
 
 ' "FORZAR CIERRE" saves nothing, so nothing can be refunded in memory. Leave in the audit log the data
 ' needed for a manual refund of every open lobby that still holds gold.

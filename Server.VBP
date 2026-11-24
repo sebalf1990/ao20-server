@@ -146,6 +146,7 @@ Module=Unit_Calendario; Codigo\Tests\Unit_Calendario.bas
 Module=ModCaptura; Codigo\ModCaptura.bas
 Module=ModLobby; Codigo\ModLobby.bas
 Module=ModCalendarioConfig; Codigo\ModCalendarioConfig.bas
+Module=ModCalendarioEventos; Codigo\ModCalendarioEventos.bas
 Module=CustomScenarios; Codigo\CustomScenarios.bas
 Class=IBaseScenario; Codigo\IBaseScenario.cls
 Class=ScenarioHunt; Codigo\ScenarioHuntNpc.cls

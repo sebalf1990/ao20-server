@@ -2047,6 +2047,7 @@ Private Sub HandleTalk(ByVal UserIndex As Integer)
                 If HandleProfesionChatCommand(UserIndex, chat) Then Exit Sub
                 If HandleLogLevelChatCommand(UserIndex, chat) Then Exit Sub
                 If HandleAntitrampaChatCommand(UserIndex, chat) Then Exit Sub
+                If HandleCalendarioChatCommand(UserIndex, chat) Then Exit Sub
             End If
         End If
         '[Consejeros & GMs]
