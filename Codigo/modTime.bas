@@ -107,9 +107,10 @@ End Sub
 
 Public Function UpdateTime(ByRef timer As t_Timer, ByVal DeltaTime As Long) As Boolean
     timer.ElapsedTime = timer.ElapsedTime + DeltaTime
-    UpdateTime = timer.ElapsedTime - timer.Interval > 0
-    timer.ElapsedTime = timer.ElapsedTime Mod timer.Interval
+    ' >= : with a fixed frame (UNLOCK_CPU=1, 40 ms) the accumulator lands EXACTLY on the interval; a strict > lost that tick forever.
+    UpdateTime = timer.ElapsedTime - timer.Interval >= 0
     If UpdateTime Then
+        timer.ElapsedTime = timer.ElapsedTime Mod timer.Interval
         timer.Occurrences = timer.Occurrences + 1
     End If
 End Function
