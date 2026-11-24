@@ -55,6 +55,10 @@ Public Const MAX_SALA_ESPERA_X     As Byte = 56
 Public Const MAX_SALA_ESPERA_Y     As Byte = 73
 Public Const OBJ_CAPTURA_BANDERA_1 As Integer = 3674 'Estandarte Azul
 Public Const OBJ_CAPTURA_BANDERA_2 As Integer = 3675 'Estandarte Rojo
+' B1: round time limit bounds (seconds), see CtfClampRoundSeconds
+Public Const CAPTURA_TIEMPO_MAX_RONDA_DEFAULT As Long = 600
+Public Const CAPTURA_TIEMPO_MAX_RONDA_MIN     As Long = 60
+Public Const CAPTURA_TIEMPO_MAX_RONDA_MAX     As Long = 3600
 ' Plan 27.001 (05.002 wave 4): the InstanciaCaptura singleton is gone. The CTF is an engine
 ' scenario (ScenarioCaptureTheFlag) that lives inside its lobby and is resolved through the map
 ' where the player stands, like every other scenario.
@@ -72,4 +76,34 @@ Public Function GetCapturaEscenario(ByVal UserIndex As Integer) As ScenarioCaptu
 ErrHandler:
     Call TraceError(Err.Number, Err.Description, "ModCaptura.GetCapturaEscenario", Erl)
     Set GetCapturaEscenario = Nothing
+End Function
+
+' ---------------------------------------------------------------------------
+' B1 (plan 2026-11-24-revision-eventos-automaticos): round time limit of the CTF.
+' Pure helpers (no globals) so UnitTesting can cover them.
+' ---------------------------------------------------------------------------
+' Value read from Scenarios/CaptureTheFlag.ini [INIT] TiempoMaxRondaSeg. 0 (missing key, empty or
+' not a number) means "use the default"; anything else is clamped to 60..3600.
+Public Function CtfClampRoundSeconds(ByVal rawValue As Long) As Long
+    If rawValue <= 0 Then
+        CtfClampRoundSeconds = CAPTURA_TIEMPO_MAX_RONDA_DEFAULT
+    ElseIf rawValue < CAPTURA_TIEMPO_MAX_RONDA_MIN Then
+        CtfClampRoundSeconds = CAPTURA_TIEMPO_MAX_RONDA_MIN
+    ElseIf rawValue > CAPTURA_TIEMPO_MAX_RONDA_MAX Then
+        CtfClampRoundSeconds = CAPTURA_TIEMPO_MAX_RONDA_MAX
+    Else
+        CtfClampRoundSeconds = rawValue
+    End If
+End Function
+
+' Who wins the event when the LAST round expires without a winner: the team with more rounds won.
+' Returns 1 or 2, or 0 for a tie (the caller refunds everybody through the draw path).
+Public Function CtfTimeoutWinner(ByVal roundsWonTeam1 As Integer, ByVal roundsWonTeam2 As Integer) As Integer
+    If roundsWonTeam1 > roundsWonTeam2 Then
+        CtfTimeoutWinner = 1
+    ElseIf roundsWonTeam2 > roundsWonTeam1 Then
+        CtfTimeoutWinner = 2
+    Else
+        CtfTimeoutWinner = 0
+    End If
 End Function

@@ -12,6 +12,7 @@ Public Function test_suite_timer() As Boolean
     Call UnitTesting.RunTest("test_update_time_not_fired", test_update_time_not_fired())
     Call UnitTesting.RunTest("test_update_time_fired", test_update_time_fired())
     Call UnitTesting.RunTest("test_update_time_occurrences", test_update_time_occurrences())
+    Call UnitTesting.RunTest("test_update_time_fires_when_elapsed_equals_interval", test_update_time_fires_when_elapsed_equals_interval())
     Call UnitTesting.RunTest("test_get_time_string_mins_and_secs", test_get_time_string_mins_and_secs())
     Call UnitTesting.RunTest("test_get_time_string_only_seconds", test_get_time_string_only_seconds())
     Call UnitTesting.RunTest("test_get_time_string_only_minutes", test_get_time_string_only_minutes())
@@ -87,6 +88,31 @@ Private Function test_update_time_occurrences() As Boolean
     Exit Function
 Err_Handler:
     test_update_time_occurrences = False
+End Function
+
+' Regression (plan 2026-11-24): with 40 ms frames the accumulator hits exactly 1000 ms. The old strict > lost
+' that tick forever (CTF countdown frozen). 25 x 40 ms must fire exactly once, 50 x 40 ms exactly twice.
+Private Function test_update_time_fires_when_elapsed_equals_interval() As Boolean
+    On Error GoTo Err_Handler
+    test_update_time_fires_when_elapsed_equals_interval = True
+    Dim t As t_Timer
+    Dim i As Long
+    Dim fired As Long
+    Call SetTimer(t, 1000)
+    For i = 1 To 25
+        If UpdateTime(t, 40) Then fired = fired + 1
+    Next i
+    If fired <> 1 Then test_update_time_fires_when_elapsed_equals_interval = False: Exit Function
+    If t.Occurrences <> 1 Then test_update_time_fires_when_elapsed_equals_interval = False: Exit Function
+    Call SetTimer(t, 1000)
+    fired = 0
+    For i = 1 To 50
+        If UpdateTime(t, 40) Then fired = fired + 1
+    Next i
+    If fired <> 2 Then test_update_time_fires_when_elapsed_equals_interval = False: Exit Function
+    Exit Function
+Err_Handler:
+    test_update_time_fires_when_elapsed_equals_interval = False
 End Function
 
 ' Verifies GetTimeString() formats both minutes and seconds together.

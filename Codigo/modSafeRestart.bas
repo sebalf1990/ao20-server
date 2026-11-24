@@ -101,6 +101,7 @@ Public Sub ReinicioSeguro(Optional ByVal Motivo As String = vbNullString, Option
 
     Call LogSafeRestart("reinicio", Motivo, Modo)
     Call MensajeGlobal("Servidor > El servidor se va a reiniciar. Guardando personajes...", e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_SERVER)
+    Call CancelarEventoActivoPorApagado
     Call GuardarUsuarios
     Call EcharPjsNoPrivilegiados
 
@@ -115,6 +116,7 @@ Public Sub ReinicioSeguro(Optional ByVal Motivo As String = vbNullString, Option
 
     If shellErrNum <> 0 Or shellResult = 0 Then
         m_ReinicioEnCurso = False
+        Call ReabrirEventosTrasCierreFallido
         Call LogSafeRestart("shell_fallo", Motivo, Modo)
         Call TraceError(shellErrNum, shellErrDesc, "modSafeRestart.ReinicioSeguro (Shell)", Erl)
         Exit Sub
@@ -125,6 +127,7 @@ Public Sub ReinicioSeguro(Optional ByVal Motivo As String = vbNullString, Option
     Exit Sub
 ReinicioSeguro_Err:
     m_ReinicioEnCurso = False
+    Call ReabrirEventosTrasCierreFallido
     Call TraceError(Err.Number, Err.Description, "modSafeRestart.ReinicioSeguro", Erl)
 End Sub
 
@@ -142,6 +145,7 @@ Public Sub ApagadoSeguro(Optional ByVal Motivo As String = vbNullString)
 
     Call LogSafeRestart("apagado", Motivo, "apagado")
     Call MensajeGlobal("Servidor > El servidor se va a apagar. Guardando personajes...", e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_SERVER)
+    Call CancelarEventoActivoPorApagado
     Call GuardarUsuarios
     Call EcharPjsNoPrivilegiados
 
@@ -150,6 +154,7 @@ Public Sub ApagadoSeguro(Optional ByVal Motivo As String = vbNullString)
     Exit Sub
 ApagadoSeguro_Err:
     m_ReinicioEnCurso = False
+    Call ReabrirEventosTrasCierreFallido
     Call TraceError(Err.Number, Err.Description, "modSafeRestart.ApagadoSeguro", Erl)
 End Sub
 

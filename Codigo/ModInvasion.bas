@@ -65,7 +65,7 @@ Type t_Invasion
     IntervaloSpawn As Integer
     TimerSpawn As Integer
     ' Duracion e intervalos
-    TimerInvasion As Integer
+    TimerInvasion As Long
     Intervalo As Integer
     Duracion As Integer
     ' Mostrar info en pantalla
@@ -77,8 +77,34 @@ Type t_Invasion
 End Type
 
 Public Invasiones() As t_Invasion
+' B17: ceiling of the minute counter (about 1.9 years); it only has to stay far above any Intervalo.
+Public Const INVASION_TIMER_MAX As Long = 1000000
+Private m_InvasionesCargadas As Boolean
+
+' B16: true if any invasion is running. CargarInfoEventos rebuilds the whole array, which would
+' orphan the NPCs of a running invasion.
+Public Function HayInvasionActiva() As Boolean
+    Dim i As Integer
+    If Not m_InvasionesCargadas Then Exit Function
+    For i = 1 To UBound(Invasiones)
+        If Invasiones(i).Activa Then
+            HayInvasionActiva = True
+            Exit Function
+        End If
+    Next i
+End Function
+
+' B15: an invasion section needs at least one NPC and one spawn box to be playable.
+Private Function InvasionValida(ByRef File As clsIniManager, ByVal nombre As String) As Boolean
+    If LenB(nombre) = 0 Then Exit Function
+    InvasionValida = (val(File.GetValue(nombre, "MaxNPCs")) > 0 And val(File.GetValue(nombre, "SpawnBoxes")) > 0)
+End Function
 
 Sub CargarInfoEventos()
+    If HayInvasionActiva() Then
+        Call LogError("CargarInfoEventos: there is an active invasion, the invasion data is NOT reloaded.")
+        Exit Sub
+    End If
     Dim File As clsIniManager
     Set File = New clsIniManager
     Call File.Initialize(DatPath & "Eventos.dat")
@@ -86,77 +112,85 @@ Sub CargarInfoEventos()
     CantInvasiones = val(File.GetValue("Invasiones", "Cantidad"))
     If CantInvasiones <= 0 Then
         ReDim Invasiones(0)
+        m_InvasionesCargadas = True
         frmMain.Invasion.Enabled = False
         Exit Sub
     End If
     ReDim Invasiones(1 To CantInvasiones)
+    m_InvasionesCargadas = True
     Dim i As Integer, j As Integer, nombre As String, tmpStr As String, Fields() As String
     For i = 1 To CantInvasiones
         nombre = File.GetValue("Invasiones", "Invasion" & i)
-        With Invasiones(i)
-            .MaxVidaMuralla = val(File.GetValue(nombre, "MaxVidaMuralla"))
-            .MaxNPCs = val(File.GetValue(nombre, "MaxNPCs"))
-            .aviso = File.GetValue(nombre, "Aviso")
-            .AvisarTiempo = val(File.GetValue(nombre, "AvisarTiempo"))
-            .RepetirAviso = val(File.GetValue(nombre, "RepetirAviso"))
-            .Desc = File.GetValue(nombre, "Desc")
-            .RepetirDesc = val(File.GetValue(nombre, "RepetirDesc"))
-            .IntervaloSpawn = val(File.GetValue(nombre, "IntervaloSpawn"))
-            .Duracion = val(File.GetValue(nombre, "Duracion"))
-            .Intervalo = val(File.GetValue(nombre, "Intervalo"))
-            .TimerInvasion = val(File.GetValue(nombre, "Offset"))
-            .MensajeGanaron = File.GetValue(nombre, "MensajeGanaron")
-            .MensajePerdieron = File.GetValue(nombre, "MensajePerdieron")
-            If .MaxNPCs <= 0 Then Exit Sub
-            ReDim .NPCsVivos(1 To .MaxNPCs)
-            tmpStr = File.GetValue(nombre, "NPCs")
-            If LenB(tmpStr) > 0 Then
-                Fields = Split(tmpStr, "-")
-                ReDim .NumNPCsSpawn(1 To UBound(Fields) + 1)
-                For j = 1 To UBound(.NumNPCsSpawn)
-                    .NumNPCsSpawn(j) = val(Fields(j - 1))
-                Next
-            Else
-                ReDim .NumNPCsSpawn(0)
-            End If
-            Dim SpawnBoxes As Integer
-            SpawnBoxes = val(File.GetValue(nombre, "SpawnBoxes"))
-            If SpawnBoxes <= 0 Then Exit Sub
-            ReDim .SpawnBoxes(1 To SpawnBoxes)
-            For j = 1 To SpawnBoxes
-                tmpStr = File.GetValue(nombre, "SpawnBox" & j)
+        If Not InvasionValida(File, nombre) Then
+            Call LogError("CargarInfoEventos: invasion " & i & " (" & nombre & ") needs MaxNPCs > 0 and SpawnBoxes > 0: skipped.")
+            Invasiones(i).MaxNPCs = 0
+            Invasiones(i).Intervalo = 0
+            ReDim Invasiones(i).NPCsVivos(0 To 0)
+            ReDim Invasiones(i).NumNPCsSpawn(0)
+        Else
+            With Invasiones(i)
+                .MaxVidaMuralla = val(File.GetValue(nombre, "MaxVidaMuralla"))
+                .MaxNPCs = val(File.GetValue(nombre, "MaxNPCs"))
+                .aviso = File.GetValue(nombre, "Aviso")
+                .AvisarTiempo = val(File.GetValue(nombre, "AvisarTiempo"))
+                .RepetirAviso = val(File.GetValue(nombre, "RepetirAviso"))
+                .Desc = File.GetValue(nombre, "Desc")
+                .RepetirDesc = val(File.GetValue(nombre, "RepetirDesc"))
+                .IntervaloSpawn = val(File.GetValue(nombre, "IntervaloSpawn"))
+                .Duracion = val(File.GetValue(nombre, "Duracion"))
+                .Intervalo = val(File.GetValue(nombre, "Intervalo"))
+                .TimerInvasion = val(File.GetValue(nombre, "Offset"))
+                .MensajeGanaron = File.GetValue(nombre, "MensajeGanaron")
+                .MensajePerdieron = File.GetValue(nombre, "MensajePerdieron")
+                ReDim .NPCsVivos(1 To .MaxNPCs)
+                tmpStr = File.GetValue(nombre, "NPCs")
                 If LenB(tmpStr) > 0 Then
-                    Fields = Split(tmpStr, "-", 7)
-                    If UBound(Fields) = 6 Then
-                        With .SpawnBoxes(j)
-                            ' Mapa
-                            .TopLeft.Map = val(Fields(0))
-                            .BottomRight.Map = .TopLeft.Map
-                            ' TopLeft
-                            .TopLeft.x = val(Fields(1))
-                            .TopLeft.y = val(Fields(2))
-                            ' BottomRight
-                            .BottomRight.x = val(Fields(3))
-                            .BottomRight.y = val(Fields(4))
-                            ' Dirección de ataque
-                            .Heading = String2Heading(Fields(5))
-                            .CoordMuralla = val(Fields(6))
-                            ' Calculamos las posiciones válidas de los NPCs
-                            .LegalBox.X1 = .TopLeft.x
-                            .LegalBox.Y1 = .TopLeft.y
-                            .LegalBox.X2 = .BottomRight.x
-                            .LegalBox.Y2 = .BottomRight.y
-                            Select Case .Heading
-                                Case e_Heading.NORTH: .LegalBox.Y1 = .CoordMuralla
-                                Case e_Heading.SOUTH: .LegalBox.Y2 = .CoordMuralla
-                                Case e_Heading.EAST: .LegalBox.X2 = .CoordMuralla
-                                Case e_Heading.WEST: .LegalBox.X1 = .CoordMuralla
-                            End Select
-                        End With
-                    End If
+                    Fields = Split(tmpStr, "-")
+                    ReDim .NumNPCsSpawn(1 To UBound(Fields) + 1)
+                    For j = 1 To UBound(.NumNPCsSpawn)
+                        .NumNPCsSpawn(j) = val(Fields(j - 1))
+                    Next
+                Else
+                    ReDim .NumNPCsSpawn(0)
                 End If
-            Next
-        End With
+                Dim SpawnBoxes As Integer
+                SpawnBoxes = val(File.GetValue(nombre, "SpawnBoxes"))
+                ReDim .SpawnBoxes(1 To SpawnBoxes)
+                For j = 1 To SpawnBoxes
+                    tmpStr = File.GetValue(nombre, "SpawnBox" & j)
+                    If LenB(tmpStr) > 0 Then
+                        Fields = Split(tmpStr, "-", 7)
+                        If UBound(Fields) = 6 Then
+                            With .SpawnBoxes(j)
+                                ' Mapa
+                                .TopLeft.Map = val(Fields(0))
+                                .BottomRight.Map = .TopLeft.Map
+                                ' TopLeft
+                                .TopLeft.x = val(Fields(1))
+                                .TopLeft.y = val(Fields(2))
+                                ' BottomRight
+                                .BottomRight.x = val(Fields(3))
+                                .BottomRight.y = val(Fields(4))
+                                ' Dirección de ataque
+                                .Heading = String2Heading(Fields(5))
+                                .CoordMuralla = val(Fields(6))
+                                ' Calculamos las posiciones válidas de los NPCs
+                                .LegalBox.X1 = .TopLeft.x
+                                .LegalBox.Y1 = .TopLeft.y
+                                .LegalBox.X2 = .BottomRight.x
+                                .LegalBox.Y2 = .BottomRight.y
+                                Select Case .Heading
+                                    Case e_Heading.NORTH: .LegalBox.Y1 = .CoordMuralla
+                                    Case e_Heading.SOUTH: .LegalBox.Y2 = .CoordMuralla
+                                    Case e_Heading.EAST: .LegalBox.X2 = .CoordMuralla
+                                    Case e_Heading.WEST: .LegalBox.X1 = .CoordMuralla
+                                End Select
+                            End With
+                        End If
+                    End If
+                Next
+            End With
+        End If
     Next
     frmMain.Invasion.Enabled = True
     Set File = Nothing
@@ -165,7 +199,11 @@ End Sub
 Sub IniciarInvasion(ByVal Index As Integer)
     If UBound(Invasiones) = 0 Then Exit Sub
     With Invasiones(Index)
+        ' B15: a section that failed validation at load time has no NPC table.
+        If .MaxNPCs <= 0 Then Exit Sub
         .Activa = True
+        ' B17: the duration is counted from the start (it used to inherit the Intervalo count).
+        .TimerInvasion = 0
         .VidaMuralla = .MaxVidaMuralla
         .TiempoDeInicio = GetTickCountRaw()
         ' Enviamos info sobre la invasión a los usuarios en estos mapas

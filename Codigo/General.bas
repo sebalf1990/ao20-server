@@ -626,6 +626,7 @@ Sub Main()
     frmCargando.Label1(2).Caption = "Cargando informacion de eventos"
     Call CargarInfoRetos
     Call CargarInfoEventos
+    Call CalendarioEventos_Cargar
     frmCargando.Label1(2).Caption = "Cargando Baneos Temporales"
     Call LoadBans
     frmCargando.Label1(2).Caption = "Cargando Quests"

@@ -675,12 +675,14 @@ Private Sub Command23_Click()
         'WorldSave
         '   Call DoBackUp
         'Guardar Pjs
+        Call CancelarEventoActivoPorApagado
         Call GuardarUsuarios
         'Chauuu
         Unload frmMain
     End If
     Exit Sub
 Command23_Click_Err:
+    Call ReabrirEventosTrasCierreFallido
     Call TraceError(Err.Number, Err.Description, "frmServidor.Command23_Click", Erl)
 End Sub
 
