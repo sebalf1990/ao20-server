@@ -127,6 +127,7 @@ Public Sub ReinicioSeguro(Optional ByVal Motivo As String = vbNullString, Option
     Exit Sub
 ReinicioSeguro_Err:
     m_ReinicioEnCurso = False
+    Call ReabrirEventosTrasCierreFallido
     Call TraceError(Err.Number, Err.Description, "modSafeRestart.ReinicioSeguro", Erl)
 End Sub
 
@@ -153,6 +154,7 @@ Public Sub ApagadoSeguro(Optional ByVal Motivo As String = vbNullString)
     Exit Sub
 ApagadoSeguro_Err:
     m_ReinicioEnCurso = False
+    Call ReabrirEventosTrasCierreFallido
     Call TraceError(Err.Number, Err.Description, "modSafeRestart.ApagadoSeguro", Erl)
 End Sub
 

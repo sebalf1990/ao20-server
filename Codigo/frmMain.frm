@@ -776,6 +776,7 @@ Private Sub CerrarYForzarActualizar_Click()
     Unload frmMain
     Exit Sub
 Command4_Click_Err:
+    Call ReabrirEventosTrasCierreFallido
     Call TraceError(Err.Number, Err.Description, "frmMain.CerrarYForzarActualizar", Erl)
 End Sub
 
@@ -1013,6 +1014,7 @@ Private Sub Command4_Click()
     Unload frmMain
     Exit Sub
 Command4_Click_Err:
+    Call ReabrirEventosTrasCierreFallido
     Call TraceError(Err.Number, Err.Description, "frmMain.Command4_Click", Erl)
 End Sub
 
@@ -1331,6 +1333,8 @@ Private Sub Form_QueryUnload(Cancel As Integer, UnloadMode As Integer)
     If GuardarYCerrar Then Exit Sub
     If MsgBox("¿Deseas FORZAR el CIERRE del servidor?" & vbNewLine & vbNewLine & "Ten en cuenta que ES POSIBLE PIERDAS DATOS!", vbYesNo, "¡FORZAR CIERRE!") = vbNo Then
         Cancel = True
+        ' The close was cancelled (Command23_Click path cancels events before this prompt): events may be created again.
+        Call ReabrirEventosTrasCierreFallido
     Else
         ' Forced close: nothing is saved, so leave the data for manual refunds of open events.
         Call LogEventosAbiertosAlCerrar

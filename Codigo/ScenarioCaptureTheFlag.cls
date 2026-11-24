@@ -660,7 +660,7 @@ Private Sub FinalizarRondaPorTiempo()
     On Error GoTo ErrHandler
     Dim winner As Integer
     Call LogInfoServidor("[Evento] CTF round " & ronda_actual & "/" & cantidad_rondas & " expired after " & m_TiempoMaxRondaSeg & "s without a winner (rounds won " & rondasGanadas(1) & "-" & rondasGanadas(2) & ").")
-    Call SendData(SendTarget.ToJugadoresCaptura, 0, PrepareMessageConsoleMsg("Captura de la Bandera: se acabo el tiempo de la ronda " & ronda_actual & ", nadie la gano.", e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos))
+    Call SendData(SendTarget.ToJugadoresCaptura, 0, PrepareMessageConsoleMsg("Captura de la Bandera: se acabó el tiempo de la ronda " & ronda_actual & ", nadie la ganó.", e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos))
     contadorBandera(1) = 0
     contadorBandera(2) = 0
     If ronda_actual >= cantidad_rondas Then
