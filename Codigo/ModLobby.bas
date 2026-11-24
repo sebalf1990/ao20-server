@@ -154,6 +154,10 @@ Const LobbyCount = 200
 Public LobbyList(0 To LobbyCount) As t_Lobby
 Private AvailableLobby            As t_IndexHeap
 Private ActiveLobby               As t_IndexHeap
+' B3 (plan 2026-11-24): set when the server starts closing (CancelarEventoActivoPorApagado). From then on
+' no new public event is created (the fee would be charged after the save) and offline refunds are
+' written synchronously. Cleared only if the close is aborted (ReabrirEventosTrasCierreFallido).
+Private m_Cerrando                As Boolean
 
 Public Sub InitializeLobbyList()
     ReDim AvailableLobby.IndexInfo(0 To LobbyCount) As Integer
@@ -405,6 +409,9 @@ Public Function AddPlayer(ByRef instance As t_Lobby, ByVal UserIndex As Integer,
                 Exit Function
             Else
                 instance.AvailableInscriptionMoney = instance.AvailableInscriptionMoney + instance.InscriptionPrice
+                ' B3: one audit line per paid inscription. The lobby lives only in RAM, so after a crash
+                ' this line is the only evidence for a manual refund (UserId is stable, slots are not).
+                Call LogAudit("EVENTO_INSCRIPCION", "UserId=" & .Id & " fee=" & instance.InscriptionPrice & " type=" & instance.ScenearioType & " lobbyOpenedAt=" & instance.MapOpenTime & " pot=" & instance.AvailableInscriptionMoney)
             End If
         End If
         Dim playerPos As Integer: playerPos = instance.RegisteredPlayers
@@ -618,7 +625,7 @@ Private Function PayOutGold(ByRef instance As t_Lobby, ByVal UserSlotIndex As In
     ElseIf instance.Players(UserSlotIndex).UserId > 0 Then
         ' Offline: written to the database. Safe precisely because the user is NOT logged in;
         ' if they were, the logout save would overwrite the value with the in-memory one.
-        If Execute("UPDATE user SET gold = gold + ? WHERE id = ?;", amount, instance.Players(UserSlotIndex).UserId) Then
+        If AcreditarOroOffline(instance.Players(UserSlotIndex).UserId, amount) Then
             instance.AvailableInscriptionMoney = instance.AvailableInscriptionMoney - amount
             Call LogInfoServidor("[Evento] Oro acreditado offline: user_id=" & instance.Players(UserSlotIndex).UserId & " monto=" & amount)
             PayOutGold = True
@@ -627,6 +634,23 @@ Private Function PayOutGold(ByRef instance As t_Lobby, ByVal UserSlotIndex As In
     Exit Function
 GiveMoneyToPlayer_Err:
     Call TraceError(Err.Number, Err.Description, "ModLobby.GiveGoldToPlayer", Erl)
+End Function
+
+Private Function AcreditarOroOffline(ByVal UserId As Long, ByVal amount As Long) As Boolean
+    ' Offline credit by UserId. Normal operation: Execute (asynchronous ADO, fine while the process
+    ' lives). While the server is closing the process dies right after the save, so the write must be
+    ' complete before returning: Query is the synchronous door (Nothing = it failed).
+    On Error GoTo AcreditarOroOffline_Err
+    If m_Cerrando Then
+        Dim rsClose As ADODB.Recordset
+        Set rsClose = Query("UPDATE user SET gold = gold + ? WHERE id = ?;", amount, UserId)
+        AcreditarOroOffline = Not (rsClose Is Nothing)
+    Else
+        AcreditarOroOffline = Execute("UPDATE user SET gold = gold + ? WHERE id = ?;", amount, UserId)
+    End If
+    Exit Function
+AcreditarOroOffline_Err:
+    Call TraceError(Err.Number, Err.Description, "ModLobby.AcreditarOroOffline", Erl)
 End Function
 
 Public Sub RefundPlayer(ByRef instance As t_Lobby, ByVal UserSlotIndex As Integer)
@@ -1353,6 +1377,10 @@ Public Function CreatePublicEvent(ByRef LobbySettings As t_NewScenearioSettings,
     ' 'Call CreatePublicEvent(LobbySettings)'. VB6 discards the return value of a Function
     ' called with Call, and the second parameter is Optional.
     ' R3: validar ANTES de reservar el lobby (GetAvailableLobby lo consume); si no, fuga de lobby
+    If m_Cerrando Then
+        FailReason = "the server is closing, no events are created."
+        Exit Function
+    End If
     If Not ValidateLobbySettings(LobbySettings) Then
         FailReason = "invalid settings for type " & LobbySettings.ScenearioType & " (levels " & LobbySettings.MinLevel & "-" & LobbySettings.MaxLevel & ", players " & LobbySettings.MinPlayers & "-" & LobbySettings.MaxPlayers & ")."
         Exit Function
@@ -1419,4 +1447,62 @@ Public Sub initEventLobby(ByVal UserIndex As Integer, ByVal eventType As Integer
     ' scenario, so it enters through CreatePublicEvent and inherits the lobby (participants,
     ' charge, refund, state, disconnections).
     Call CreatePublicEvent(LobbySettings)
+End Sub
+
+' B3 (plan 2026-11-24): called by every path that saves the users and then closes the process, BEFORE
+' GuardarUsuarios, so refunded gold of online players is part of the save. The lobby only exists in RAM:
+' without this, a restart with an open event lost every fee already charged.
+' Walks ALL active lobbies (GM lobbies too), not only GlobalLobbyIndex. Same rule as ForceReset:
+' the pool is refunded only if no prize was paid yet (PrizesAlreadyPaid); otherwise the players are just
+' returned, so the leftover of a paid pool is never handed out twice. Iterates backwards because a
+' scenario may release its slot (swap-remove in ActiveLobby) during the cancel.
+Public Sub CancelarEventoActivoPorApagado()
+    On Error GoTo CancelarEventoActivoPorApagado_Err
+    Dim k   As Integer
+    Dim idx As Integer
+    m_Cerrando = True
+    For k = ActiveLobby.currentIndex To 0 Step -1
+        idx = ActiveLobby.IndexInfo(k)
+        If LobbyList(idx).State >= e_LobbyState.AcceptingPlayers Then
+            If LobbyList(idx).State <= e_LobbyState.InProgress And Not PrizesAlreadyPaid(LobbyList(idx)) Then
+                Call LogAudit("EVENTO_CIERRE_SERVER", "lobby=" & idx & " type=" & LobbyList(idx).ScenearioType & " players=" & LobbyList(idx).RegisteredPlayers & " pot=" & LobbyList(idx).AvailableInscriptionMoney & " accion=cancelado_con_reembolso")
+                Call CancelLobby(LobbyList(idx))
+            ElseIf LobbyList(idx).RegisteredPlayers > 0 Then
+                Call LogAudit("EVENTO_CIERRE_SERVER", "lobby=" & idx & " type=" & LobbyList(idx).ScenearioType & " players=" & LobbyList(idx).RegisteredPlayers & " pot=" & LobbyList(idx).AvailableInscriptionMoney & " accion=devueltos_sin_reembolso_premios_pagados")
+                Call ReturnAllPlayers(LobbyList(idx))
+            End If
+        End If
+    Next k
+    Exit Sub
+CancelarEventoActivoPorApagado_Err:
+    Call TraceError(Err.Number, Err.Description, "ModLobby.CancelarEventoActivoPorApagado", Erl)
+End Sub
+
+' If the close is aborted (ReinicioSeguro could not launch the relauncher) the server keeps running:
+' events may be created again.
+Public Sub ReabrirEventosTrasCierreFallido()
+    m_Cerrando = False
+End Sub
+
+' "FORZAR CIERRE" saves nothing, so nothing can be refunded in memory. Leave in the audit log the data
+' needed for a manual refund of every open lobby that still holds gold.
+Public Sub LogEventosAbiertosAlCerrar()
+    On Error GoTo LogEventosAbiertosAlCerrar_Err
+    Dim k   As Integer
+    Dim idx As Integer
+    Dim p   As Integer
+    Dim ids As String
+    For k = ActiveLobby.currentIndex To 0 Step -1
+        idx = ActiveLobby.IndexInfo(k)
+        If LobbyList(idx).AvailableInscriptionMoney > 0 Then
+            ids = vbNullString
+            For p = 0 To LobbyList(idx).RegisteredPlayers - 1
+                ids = ids & LobbyList(idx).Players(p).UserId & ","
+            Next p
+            Call LogAudit("EVENTO_CIERRE_FORZADO", "lobby=" & idx & " type=" & LobbyList(idx).ScenearioType & " fee=" & LobbyList(idx).InscriptionPrice & " pot=" & LobbyList(idx).AvailableInscriptionMoney & " userIds=" & ids)
+        End If
+    Next k
+    Exit Sub
+LogEventosAbiertosAlCerrar_Err:
+    Call TraceError(Err.Number, Err.Description, "ModLobby.LogEventosAbiertosAlCerrar", Erl)
 End Sub

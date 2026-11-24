@@ -675,6 +675,7 @@ Private Sub Command23_Click()
         'WorldSave
         '   Call DoBackUp
         'Guardar Pjs
+        Call CancelarEventoActivoPorApagado
         Call GuardarUsuarios
         'Chauuu
         Unload frmMain

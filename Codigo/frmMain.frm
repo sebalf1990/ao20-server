@@ -769,6 +769,7 @@ Private Sub CerrarYForzarActualizar_Click()
     On Error GoTo Command4_Click_Err
     If MsgBox("¿Está seguro que desea guardar, forzar actualización a los usuarios y cerrar?", vbYesNo, "Confirmación") = vbNo Then Exit Sub
     Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_SERVIDOR_CERRANDO_SERVIDOR_LANZANDO_NUEVO_PARCHE, vbNullString, e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_SERVER)) 'Msg1659=Servidor » Cerrando servidor y lanzando nuevo parche.
+    Call CancelarEventoActivoPorApagado
     Call GuardarUsuarios
     Call EcharPjsNoPrivilegiados
     GuardarYCerrar = True
@@ -788,7 +789,11 @@ Private Sub Invasion_Timer()
         With Invasiones(i)
             ' Aumentamos el contador para controlar cuando
             ' inicia la invasión o cuando debe terminar
-            .TimerInvasion = .TimerInvasion + 1
+            ' B17 (plan 2026-11-24): an invasion with Intervalo = 0 that is not active has nothing to
+            ' count; the Integer counter used to overflow after 22.7 days and abort the whole loop.
+            If .Activa Or .Intervalo > 0 Then
+                If .TimerInvasion < INVASION_TIMER_MAX Then .TimerInvasion = .TimerInvasion + 1
+            End If
             If .Activa Then
                 ' Chequeamos si el evento debe terminar
                 If .TimerInvasion >= .Duracion Then
@@ -1001,6 +1006,7 @@ Private Sub Command4_Click()
     On Error GoTo Command4_Click_Err
     If MsgBox("¿Está seguro que desea guardar y cerrar?", vbYesNo, "Confirmación") = vbNo Then Exit Sub
     Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_SERVIDOR_CERRANDO_SERVIDOR, vbNullString, e_TextChannel.TEXTCHANNEL_SERVER_STAFF, e_FontTypeNames.FONTTYPE_SERVER)) 'Msg1661=Servidor » Cerrando servidor.
+    Call CancelarEventoActivoPorApagado
     Call GuardarUsuarios
     Call EcharPjsNoPrivilegiados
     GuardarYCerrar = True
@@ -1325,6 +1331,9 @@ Private Sub Form_QueryUnload(Cancel As Integer, UnloadMode As Integer)
     If GuardarYCerrar Then Exit Sub
     If MsgBox("¿Deseas FORZAR el CIERRE del servidor?" & vbNewLine & vbNewLine & "Ten en cuenta que ES POSIBLE PIERDAS DATOS!", vbYesNo, "¡FORZAR CIERRE!") = vbNo Then
         Cancel = True
+    Else
+        ' Forced close: nothing is saved, so leave the data for manual refunds of open events.
+        Call LogEventosAbiertosAlCerrar
     End If
     Exit Sub
 Form_QueryUnload_Err:
