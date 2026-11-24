@@ -100,6 +100,13 @@ Private SegundosSinJugadores                 As Integer
 ' and RoundState never left EsperandoInicio.
 Private Const CAPTURA_SEGUNDOS_ARRANQUE_MAX  As Integer = 60
 Private SegundosEsperandoInicio              As Integer
+' B1 (plan 2026-11-24): time limit per round, read from Scenarios/CaptureTheFlag.ini. Without it a
+' round with a flag nobody captures never ended and the public event slot stayed blocked.
+' A round that expires has NO winner; see FinalizarRondaPorTiempo.
+Private Const CAPTURA_AVISO_RONDA_1          As Long = 120
+Private Const CAPTURA_AVISO_RONDA_2          As Long = 60
+Private m_TiempoMaxRondaSeg                  As Long
+Private m_SegundosRondaEnJuego               As Long
 
 Private Sub Class_Initialize()
     colorEquipo(1) = "azul"
@@ -129,6 +136,7 @@ Private Sub IBaseScenario_SetLobbyIndex(ByVal value As Integer)
     LobbyIndex = value
     cantidad_rondas = LobbyList(LobbyIndex).RoundCount
     If cantidad_rondas < 1 Then cantidad_rondas = 1
+    m_TiempoMaxRondaSeg = LeerTiempoMaxRonda()
     ' The three maps are the route by which deaths and flags reach the scenario
     ' (CustomScenarios.GetMap(pos.Map)).
     allOk = True
@@ -156,12 +164,9 @@ Private Function IBaseScenario_GetScenarioName() As String
 End Function
 
 Private Sub IBaseScenario_BroadcastOpenScenario()
-    On Error GoTo ErrHandler
-    'Msg1688: same text clsCaptura.inicializar announced.
-    Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_EVENTOS_INICIADO_CAPTURA_BANDERA_PARTICIPANTES_PRECIO_INSCRIPCION, LobbyList(LobbyIndex).MaxPlayers & "¬" & PonerPuntos(LobbyList(LobbyIndex).InscriptionPrice) & "¬" & LobbyList(LobbyIndex).MinLevel & "¬" & LobbyList(LobbyIndex).MaxLevel, e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos))
-    Exit Sub
-ErrHandler:
-    Call TraceError(Err.Number, Err.Description, "ScenarioCaptureTheFlag.BroadcastOpenScenario", Erl)
+    ' B5 (plan 2026-11-24): intentionally empty. ModLobby.BroadcastOpenLobby already announces the
+    ' event (Msg463: name, slots, levels, fee and /PARTICIPAR). The old Msg1688 was a second
+    ' announcement of the same thing and said "3 minutos" when the wait is 5.
 End Sub
 
 Private Sub IBaseScenario_SendRules(ByVal UserIndex As Integer)
@@ -301,6 +306,9 @@ Private Sub IBaseScenario_Update()
         Call TickCuentaRegresivaRonda
     ElseIf RoundState = EnJuego Then
         Call TickEnJuego
+        ' TickEnJuego may have ended the round (flag captured) or the event: only count time while
+        ' the round is still being played.
+        If RoundState = EnJuego Then Call TickTopeRonda
     End If
     Exit Sub
 ErrHandler:
@@ -515,6 +523,7 @@ Private Sub IniciarRondaNueva()
     RoundState = IniciaRonda
     ronda_actual = ronda_actual + 1
     tiempo_ronda = CAPTURA_TIEMPO_INICIO_RONDA
+    m_SegundosRondaEnJuego = 0
     contadorBandera(1) = 0
     contadorBandera(2) = 0
     'Msg1720
@@ -606,6 +615,65 @@ ErrHandler:
     Call TraceError(Err.Number, Err.Description, "ScenarioCaptureTheFlag.TickEnJuego", Erl)
 End Sub
 
+Private Function LeerTiempoMaxRonda() As Long
+    ' Scenarios/CaptureTheFlag.ini [INIT] TiempoMaxRondaSeg, clamped 60..3600, default 600. A missing
+    ' file is logged ONCE per event and the default applies: the event must never run without a limit.
+    On Error GoTo ErrHandler
+    Dim iniPath     As String
+    Dim ScenarioIni As clsIniManager
+    LeerTiempoMaxRonda = CtfClampRoundSeconds(0)
+    iniPath = DatPath & "../dat/Scenarios/CaptureTheFlag.ini"
+    If Not FileExist(iniPath) Then
+        Call LogError("ScenarioCaptureTheFlag.LeerTiempoMaxRonda: missing " & iniPath & ", using the default of " & LeerTiempoMaxRonda & "s per round.")
+        Exit Function
+    End If
+    Set ScenarioIni = New clsIniManager
+    Call ScenarioIni.Initialize(iniPath)
+    LeerTiempoMaxRonda = CtfClampRoundSeconds(val(ScenarioIni.GetValue("INIT", "TiempoMaxRondaSeg")))
+    Exit Function
+ErrHandler:
+    Call TraceError(Err.Number, Err.Description, "ScenarioCaptureTheFlag.LeerTiempoMaxRonda", Erl)
+    LeerTiempoMaxRonda = CtfClampRoundSeconds(0)
+End Function
+
+Private Sub TickTopeRonda()
+    ' Once per second while a round is being played. Warns at 120 s and 60 s left and, at 0, ends the
+    ' round without a winner.
+    On Error GoTo ErrHandler
+    Dim restante As Long
+    m_SegundosRondaEnJuego = m_SegundosRondaEnJuego + 1
+    restante = m_TiempoMaxRondaSeg - m_SegundosRondaEnJuego
+    If restante = CAPTURA_AVISO_RONDA_1 Or restante = CAPTURA_AVISO_RONDA_2 Then
+        Call SendData(SendTarget.ToJugadoresCaptura, 0, PrepareMessageConsoleMsg("Captura de la Bandera: quedan " & restante & " segundos para terminar la ronda " & ronda_actual & ".", e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos))
+    ElseIf restante <= 0 Then
+        Call FinalizarRondaPorTiempo
+    End If
+    Exit Sub
+ErrHandler:
+    Call TraceError(Err.Number, Err.Description, "ScenarioCaptureTheFlag.TickTopeRonda", Erl)
+End Sub
+
+Private Sub FinalizarRondaPorTiempo()
+    ' A round that expires has NO winner: nobody gets a round point. If rounds are left the next one
+    ' starts; if it was the LAST round the event goes to the team with more rounds won, and a tie
+    ' (including 0-0) takes the draw path of TerminarEvento(0): full refund and the slot is released.
+    On Error GoTo ErrHandler
+    Dim winner As Integer
+    Call LogInfoServidor("[Evento] CTF round " & ronda_actual & "/" & cantidad_rondas & " expired after " & m_TiempoMaxRondaSeg & "s without a winner (rounds won " & rondasGanadas(1) & "-" & rondasGanadas(2) & ").")
+    Call SendData(SendTarget.ToJugadoresCaptura, 0, PrepareMessageConsoleMsg("Captura de la Bandera: se acabo el tiempo de la ronda " & ronda_actual & ", nadie la gano.", e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos))
+    contadorBandera(1) = 0
+    contadorBandera(2) = 0
+    If ronda_actual >= cantidad_rondas Then
+        winner = CtfTimeoutWinner(rondasGanadas(1), rondasGanadas(2))
+        Call TerminarEvento(winner)
+    Else
+        Call IniciarRondaNueva
+    End If
+    Exit Sub
+ErrHandler:
+    Call TraceError(Err.Number, Err.Description, "ScenarioCaptureTheFlag.FinalizarRondaPorTiempo", Erl)
+End Sub
+
 Private Sub FinalizarRonda(ByVal team As Byte)
     On Error GoTo ErrHandler
     Dim rondasParaGanar As Integer
@@ -652,8 +720,8 @@ Private Sub TerminarEvento(ByVal team As Integer)
         'Msg1687
         Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_EVENTOS_EVENTO_CAPTURA_BANDERA_TERMINADO_GANADOR_EQUIPO, colorEquipo(team), e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos))
     Else
-        ' Draw (not reachable today: FinalizarRonda always passes a team). Nobody wins, so the
-        ' pool goes back to everybody instead of being lost.
+        ' Draw (reachable since B1: the last round expired with the same rounds won by both teams,
+        ' 0-0 included). Nobody wins, so the pool goes back to everybody instead of being lost.
         For i = 0 To LobbyList(LobbyIndex).RegisteredPlayers - 1
             Call RefundPlayer(LobbyList(LobbyIndex), i)
         Next i

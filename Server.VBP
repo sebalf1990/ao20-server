@@ -141,6 +141,7 @@ Module=Unit_ClanExp; Codigo\Tests\Unit_ClanExp.bas
 Module=Unit_Venenos; Codigo\Tests\Unit_Venenos.bas
 Module=Unit_TickWrap; Codigo\Tests\Unit_TickWrap.bas
 Module=Unit_WorkFatigue; Codigo\Tests\Unit_WorkFatigue.bas
+Module=Unit_CtfRound; Codigo\Tests\Unit_CtfRound.bas
 Module=ModCaptura; Codigo\ModCaptura.bas
 Module=ModLobby; Codigo\ModLobby.bas
 Module=CustomScenarios; Codigo\CustomScenarios.bas
