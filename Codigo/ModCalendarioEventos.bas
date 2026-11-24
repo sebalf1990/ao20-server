@@ -211,6 +211,10 @@ End Function
 ' The hourly multiplier event (EventoActivo) does NOT block any more.
 Private Function CalMotivoBloqueo(ByVal varIdx As Long) As String
     Dim online As Long
+    If m_SegActivo Then
+        CalMotivoBloqueo = "another calendar event is still being followed"
+        Exit Function
+    End If
     If ServidorCerrandoEventos() Then
         CalMotivoBloqueo = "the server is closing"
         Exit Function
@@ -241,16 +245,20 @@ Public Sub CalendarioEventos_Tick()
     If Not m_Cargado Then Exit Sub
     ' Peak of registered players of the event being followed (the hook only sees it after the lobby is emptied).
     If m_SegActivo Then
-        If LobbyList(m_SegLobby).RegisteredPlayers > m_SegPico Then m_SegPico = LobbyList(m_SegLobby).RegisteredPlayers
+        If m_SegLobby < LBound(LobbyList) Or m_SegLobby > UBound(LobbyList) Then
+            Call LogError("[Calendario] followed lobby index out of range (" & m_SegLobby & "): tracking dropped.")
+            m_SegActivo = False
+        ElseIf LobbyList(m_SegLobby).RegisteredPlayers > m_SegPico Then
+            m_SegPico = LobbyList(m_SegLobby).RegisteredPlayers
+        End If
     End If
     If m_NumTurnos <= 0 Then Exit Sub
     ahora = CalAhora()
     ahoraMin = CalMinutosDesdeEpoca(ahora)
     For i = 1 To m_NumTurnos
         If TurnoDebeDisparar(m_Turnos(i).DiasMask, m_Turnos(i).MinutoDelDia, m_Turnos(i).VentanaMin, ahora, m_FechaProcesada(i), fechaInicio) Then
+            ' Every turno in its window is evaluated: while another event is followed it is blocked and registered as postponed.
             Call CalEvaluarTurno(i, ahoraMin, fechaInicio)
-            ' One public event at a time: if this turno opened, the rest have nothing to do this minute.
-            If m_SegActivo Then Exit For
         ElseIf LenB(m_PendienteFecha(i)) <> 0 Then
             Call CalMarcarOmitido(i)
         End If
@@ -299,6 +307,12 @@ Private Sub CalEvaluarTurno(ByVal i As Long, ByVal ahoraMin As Long, ByVal fecha
     End If
     m_FechaProcesada(i) = fechaInicio
     m_PendienteFecha(i) = vbNullString
+    If GlobalLobbyIndex < LBound(LobbyList) Or GlobalLobbyIndex > UBound(LobbyList) Then
+        ' Opened but the lobby is unknown: it cannot be followed. Leave the row and ONE log line, no tracking.
+        Call LogError("[Calendario] " & m_Turnos(i).Texto & " opened but GlobalLobbyIndex is " & GlobalLobbyIndex & ": the event is not tracked.")
+        Call CalPersistirFila(m_Turnos(i).Clave, fechaInicio, m_Variantes(varIdx).Nombre, "ABIERTO", m_Intentos(i), "lobby not tracked")
+        Exit Sub
+    End If
     m_SegActivo = True
     m_SegLobby = GlobalLobbyIndex
     m_SegClave = m_Turnos(i).Clave

@@ -392,8 +392,8 @@ Public Function CalendarioConfig_Cargar(ByVal archivo As String, ByRef cfg As t_
     Dim vacio As t_CalResumen
     numTurnos = 0
     numVariantes = 0
-    ReDim turnos(1 To CAL_MAX_TURNOS) As t_CalTurno
-    ReDim variantes(1 To CAL_MAX_TURNOS) As t_CalVariante
+    ReDim turnos(1 To CAL_MAX_TURNOS)
+    ReDim variantes(1 To CAL_MAX_TURNOS)
     resumen = vacio
     cfg.Version = 1
     cfg.VentanaMin = CAL_VENTANA_MIN_DEFAULT
