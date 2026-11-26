@@ -777,6 +777,31 @@ Public Sub ModifyCastleEntryWhiteList(ByVal UserIndex As Integer, ByVal Characte
     End With
 End Sub
 
+' Plan borrar-personaje: la base ya quedo actualizada (transaccion de ModAccountBridge: castillo sin dueno y
+' fuera de la whitelist). Aca se sincroniza la copia en memoria. NO se marcan los flags dirty: guardar un dueno 0
+' violaria la clave foranea de castle.owner_character_id.
+Public Sub CastleForgetCharacter(ByVal CharId As Long, ByVal CharName As String)
+    On Error GoTo CastleForgetCharacter_Err
+    Dim i As Integer
+    Dim lowerName As String
+    lowerName = LCase$(CharName)
+    For i = LBound(CastleData) To UBound(CastleData)
+        With CastleData(i)
+            If CharId > 0 And .owner_char_id = CharId Then
+                .owner_char_id = 0
+                .owner_account_id = 0
+                .owner_char_name = vbNullString
+            End If
+            If Not .castleWhiteList Is Nothing Then
+                If .castleWhiteList.Exists(lowerName) Then .castleWhiteList.Remove lowerName
+            End If
+        End With
+    Next i
+    Exit Sub
+CastleForgetCharacter_Err:
+    Call TraceError(Err.Number, Err.Description, "ModCastle.CastleForgetCharacter", Erl)
+End Sub
+
 Public Sub SaveCastleWhiteListToDb()
     Dim i As Integer
     Dim RS As ADODB.Recordset

@@ -2871,6 +2871,9 @@ Public Type t_UserFlags
     EnTorneo As Boolean
     stepToggle As Boolean
     SpouseId As Long
+    ' Plan borrar-personaje: se prende al cargar un personaje con pedido de borrado pendiente (entrar lo
+    ' cancela) y ConnectUser_Complete avisa al jugador y lo apaga.
+    DeleteCancelNotice As Boolean
     Casado As Byte
     Candidato As t_UserReference
     pregunta As Byte

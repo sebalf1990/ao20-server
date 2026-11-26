@@ -143,6 +143,7 @@ Module=Unit_TickWrap; Codigo\Tests\Unit_TickWrap.bas
 Module=Unit_WorkFatigue; Codigo\Tests\Unit_WorkFatigue.bas
 Module=Unit_CtfRound; Codigo\Tests\Unit_CtfRound.bas
 Module=Unit_Calendario; Codigo\Tests\Unit_Calendario.bas
+Module=Unit_CharOps; Codigo\Tests\Unit_CharOps.bas
 Module=ModCaptura; Codigo\ModCaptura.bas
 Module=ModLobby; Codigo\ModLobby.bas
 Module=ModCalendarioConfig; Codigo\ModCalendarioConfig.bas

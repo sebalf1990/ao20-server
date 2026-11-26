@@ -924,6 +924,7 @@ Private Sub Minuto_Timer()
     Call dump_stats
     Call AccountBridge_Poll
     Call MaoBridge_Poll
+    Call CharOpsBridge_Poll
     Call PerformTimeLimitCheck(PerformanceTimer, "Minuto_Timer", 500)
     Exit Sub
 ErrHandler:

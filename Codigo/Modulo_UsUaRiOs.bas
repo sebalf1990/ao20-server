@@ -880,6 +880,10 @@ Dim poisonRestored              As Boolean
             Next
             .MENSAJEINFORMACION = vbNullString
         End If
+        If .flags.DeleteCancelNotice Then
+            .flags.DeleteCancelNotice = False
+            Call WriteLocaleMsg(UserIndex, MSG_CHARACTER_DELETE_CANCELLED, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFOBOLD)
+        End If
         If EventoActivo Then
             Call WriteLocaleMsg(UserIndex, MSG_TIEMPO_RESTANTE_MINUTO_1625, e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos, PublicidadEvento & "¬" & TiempoRestanteEvento) 'Msg1625=¬1. Tiempo restante: ¬2 minuto(s).
         End If

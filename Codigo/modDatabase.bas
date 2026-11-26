@@ -336,7 +336,13 @@ End Function
 
 Public Function GetUserValue(CharName As String, Columna As String) As Variant
     On Error GoTo GetUserValue_Err
-    GetUserValue = GetDBValue("user", Columna, "name", CharName)
+    ' Plan borrar-personaje: por nombre solo se ve el personaje vivo (deleted = 0), asi un nombre
+    ' reusado nunca cae en la fila borrada.
+    Dim RS As ADODB.Recordset
+    Set RS = Query("SELECT " & Columna & " FROM user WHERE LOWER(name) = ? AND deleted = 0;", CharName)
+    If RS Is Nothing Then Exit Function
+    If RS.BOF Or RS.EOF Then Exit Function
+    GetUserValue = RS.Fields(Columna).value
     Exit Function
 GetUserValue_Err:
     Call TraceError(Err.Number, Err.Description, "modDatabase.GetUserValue", Erl)
@@ -366,7 +372,7 @@ End Sub
 
 Private Sub SetUserValue(CharName As String, Columna As String, value As Variant)
     On Error GoTo SetUserValue_Err
-    Call SetDBValue("user", Columna, value, "UPPER(name)", UCase(CharName))
+    Call Execute("UPDATE user SET " & Columna & " = ? WHERE UPPER(name) = ? AND deleted = 0;", value, UCase$(CharName))
     Exit Sub
 SetUserValue_Err:
     Call TraceError(Err.Number, Err.Description, "modDatabase.SetUserValue", Erl)
@@ -413,7 +419,7 @@ End Function
 Public Function GetPersonajesCountByIDDatabase(ByVal AccountID As Long) As Byte
     On Error GoTo ErrorHandler
     Dim RS As ADODB.Recordset
-    Set RS = Query("SELECT COUNT(*) FROM user WHERE account_id = ?", AccountID)
+    Set RS = Query("SELECT COUNT(*) FROM user WHERE account_id = ? AND deleted = 0", AccountID)
     If RS Is Nothing Then Exit Function
     GetPersonajesCountByIDDatabase = RS.Fields(0).value
     Exit Function
@@ -425,7 +431,7 @@ Public Function GetPersonajesCuentaDatabase(ByVal AccountID As Long, Personaje()
     On Error GoTo GetPersonajesCuentaDatabase_Err
     Dim RS As ADODB.Recordset
     Set RS = Query( _
-            "SELECT id,name, head_id, class_id, body_id, pos_map, pos_x, pos_y, level, status, helmet_id, shield_id, weapon_id, guild_index,backpack_id, is_dead, is_sailing FROM user WHERE account_id = ?;", _
+            "SELECT id,name, head_id, class_id, body_id, pos_map, pos_x, pos_y, level, status, helmet_id, shield_id, weapon_id, guild_index,backpack_id, is_dead, is_sailing FROM user WHERE account_id = ? AND deleted = 0;", _
             AccountID)
     If RS Is Nothing Then Exit Function
     GetPersonajesCuentaDatabase = RS.RecordCount
@@ -486,7 +492,7 @@ End Sub
 
 Public Sub SaveUserSkillDatabase(username As String, ByVal Skill As Integer, ByVal value As Integer)
     On Error GoTo SaveUserSkillDatabase_Err
-    Call Execute("UPDATE skillpoints SET value = ? WHERE number = ? AND user_id = (SELECT id FROM user WHERE UPPER(name) = ?)", value, Skill, UCase$(username))
+    Call Execute("UPDATE skillpoints SET value = ? WHERE number = ? AND user_id = (SELECT id FROM user WHERE UPPER(name) = ? AND deleted = 0)", value, Skill, UCase$(username))
     Exit Sub
 SaveUserSkillDatabase_Err:
     Call TraceError(Err.Number, Err.Description, "modDatabase.SaveUserSkillDatabase", Erl)
@@ -502,7 +508,7 @@ End Sub
 
 Public Sub SaveBanDatabase(username As String, Reason As String, BannedBy As String)
     On Error GoTo ErrorHandler
-    Call Execute("UPDATE user SET is_banned = TRUE, banned_by = ?, ban_reason = ? WHERE UPPER(name) = ?;", BannedBy, Reason, UCase$(username))
+    Call Execute("UPDATE user SET is_banned = TRUE, banned_by = ?, ban_reason = ? WHERE UPPER(name) = ? AND deleted = 0;", BannedBy, Reason, UCase$(username))
     Call SavePenaDatabase(username, "Baneado por: " & BannedBy & " debido a " & Reason)
     Exit Sub
 ErrorHandler:
@@ -511,7 +517,7 @@ End Sub
 
 Public Sub SaveWarnDatabase(username As String, Reason As String, WarnedBy As String)
     On Error GoTo ErrorHandler
-    Call Execute("UPDATE user SET warnings = warnings + 1 WHERE UPPER(name) = ?;", UCase$(username))
+    Call Execute("UPDATE user SET warnings = warnings + 1 WHERE UPPER(name) = ? AND deleted = 0;", UCase$(username))
     Call SavePenaDatabase(username, "Advertencia de: " & WarnedBy & " debido a " & Reason)
     Exit Sub
 ErrorHandler:
@@ -522,7 +528,7 @@ Public Sub SavePenaDatabase(username As String, Reason As String)
     On Error GoTo ErrorHandler
     Dim Query As String
     Query = "INSERT INTO punishment(user_id, NUMBER, reason)"
-    Query = Query & " SELECT u.id, COUNT(p.number) + 1, ? FROM user u LEFT JOIN punishment p ON p.user_id = u.id WHERE UPPER(u.name) = ?;"
+    Query = Query & " SELECT u.id, COUNT(p.number) + 1, ? FROM user u LEFT JOIN punishment p ON p.user_id = u.id WHERE UPPER(u.name) = ? AND u.deleted = 0;"
     Call Execute(Query, Reason, UCase$(username))
     Exit Sub
 ErrorHandler:
@@ -531,7 +537,7 @@ End Sub
 
 Public Sub SilenciarUserDatabase(username As String, ByVal Tiempo As Integer)
     On Error GoTo ErrorHandler
-    Call Execute("UPDATE user SET is_silenced = 1, silence_minutes_left = ?, silence_elapsed_seconds = 0 WHERE UPPER(name) = ?;", Tiempo, UCase$(username))
+    Call Execute("UPDATE user SET is_silenced = 1, silence_minutes_left = ?, silence_elapsed_seconds = 0 WHERE UPPER(name) = ? AND deleted = 0;", Tiempo, UCase$(username))
     Exit Sub
 ErrorHandler:
     Call LogDatabaseError("Error in SilenciarUserDatabase: " & username & ". " & Err.Number & " - " & Err.Description)
@@ -547,7 +553,7 @@ End Sub
 
 Public Sub UnBanDatabase(username As String)
     On Error GoTo ErrorHandler
-    Call Execute("UPDATE user SET is_banned = FALSE, banned_by = '', ban_reason = '' WHERE UPPER(name) = ?;", UCase$(username))
+    Call Execute("UPDATE user SET is_banned = FALSE, banned_by = '', ban_reason = '' WHERE UPPER(name) = ? AND deleted = 0;", UCase$(username))
     Exit Sub
 ErrorHandler:
     Call LogDatabaseError("Error in UnBanDatabase: " & username & ". " & Err.Number & " - " & Err.Description)
@@ -563,7 +569,7 @@ End Sub
 
 Public Sub EcharConsejoDatabase(username As String, ByVal newStatus As Integer)
     On Error GoTo EcharConsejoDatabase_Err
-    Call Execute("UPDATE user SET status = ? WHERE UPPER(name) = ?;", _
+    Call Execute("UPDATE user SET status = ? WHERE UPPER(name) = ? AND deleted = 0;", _
         newStatus, UCase$(username))
     Exit Sub
 EcharConsejoDatabase_Err:
@@ -572,7 +578,7 @@ End Sub
 
 Public Sub EcharLegionDatabase(username As String)
     On Error GoTo EcharLegionDatabase_Err
-    Call Execute("UPDATE user SET status = ?, reenlistadas = ?,faction_score = ? WHERE UPPER(name) = ?;", e_Facciones.Criminal, MAX_FACTION_ENLISTMENTS + 1, 0, UCase$(username))
+    Call Execute("UPDATE user SET status = ?, reenlistadas = ?,faction_score = ? WHERE UPPER(name) = ? AND deleted = 0;", e_Facciones.Criminal, MAX_FACTION_ENLISTMENTS + 1, 0, UCase$(username))
     Exit Sub
 EcharLegionDatabase_Err:
     Call TraceError(Err.Number, Err.Description, "modDatabase.EcharLegionDatabase", Erl)
@@ -580,7 +586,7 @@ End Sub
 
 Public Sub EcharArmadaDatabase(username As String)
     On Error GoTo EcharArmadaDatabase_Err
-    Call Execute("UPDATE user SET status = ?, reenlistadas = ?,faction_score = ? WHERE UPPER(name) = ?;", e_Facciones.Ciudadano, MAX_FACTION_ENLISTMENTS + 1, 0, UCase$(username))
+    Call Execute("UPDATE user SET status = ?, reenlistadas = ?,faction_score = ? WHERE UPPER(name) = ? AND deleted = 0;", e_Facciones.Ciudadano, MAX_FACTION_ENLISTMENTS + 1, 0, UCase$(username))
     Exit Sub
 EcharArmadaDatabase_Err:
     Call TraceError(Err.Number, Err.Description, "modDatabase.EcharArmadaDatabase", Erl)
@@ -588,7 +594,7 @@ End Sub
 
 Public Sub CambiarPenaDatabase(username As String, ByVal Numero As Integer, Pena As String)
     On Error GoTo CambiarPenaDatabase_Err
-    Call Execute("UPDATE punishment SET reason = ? WHERE number = ? AND user_id = (SELECT id from user WHERE UPPER(name) = ?);", Pena, Numero, UCase$(username))
+    Call Execute("UPDATE punishment SET reason = ? WHERE number = ? AND user_id = (SELECT id from user WHERE UPPER(name) = ? AND deleted = 0);", Pena, Numero, UCase$(username))
     Exit Sub
 CambiarPenaDatabase_Err:
     Call TraceError(Err.Number, Err.Description, "modDatabase.CambiarPenaDatabase", Erl)
@@ -597,7 +603,7 @@ End Sub
 Public Function GetUserAmountOfPunishmentsDatabase(ByVal username As String) As Integer
     On Error GoTo ErrorHandler
     Dim RS As ADODB.Recordset
-    Set RS = Query("SELECT COUNT(*) as punishments FROM `punishment` INNER JOIN `user` ON punishment.user_id = user.id WHERE UPPER(user.name) = ?;", UCase$(username))
+    Set RS = Query("SELECT COUNT(*) as punishments FROM `punishment` INNER JOIN `user` ON punishment.user_id = user.id WHERE UPPER(user.name) = ? AND user.deleted = 0;", UCase$(username))
     If RS Is Nothing Then Exit Function
     GetUserAmountOfPunishmentsDatabase = RS!punishments
     Exit Function
@@ -608,7 +614,7 @@ End Function
 Public Sub SendUserPunishmentsDatabase(ByVal UserIndex As Integer, ByVal username As String)
     On Error GoTo ErrorHandler
     Dim RS As ADODB.Recordset
-    Set RS = Query("SELECT user_id, number, reason FROM `punishment` INNER JOIN `user` ON punishment.user_id = user.id WHERE UPPER(user.name) = ?;", UCase$(username))
+    Set RS = Query("SELECT user_id, number, reason FROM `punishment` INNER JOIN `user` ON punishment.user_id = user.id WHERE UPPER(user.name) = ? AND user.deleted = 0;", UCase$(username))
     If RS Is Nothing Then Exit Sub
     If Not RS.RecordCount = 0 Then
         While Not RS.EOF
@@ -736,7 +742,7 @@ Public Sub SendCharacterInfoDatabase(ByVal UserIndex As Integer, ByVal username 
     Dim Miembro     As String
     Dim GuildActual As Integer
     Dim RS          As ADODB.Recordset
-    Set RS = Query("SELECT race_id, class_id, genre_id, level, gold, bank_gold, guild_index, status, ciudadanos_matados, criminales_matados FROM user WHERE UPPER(name) = ?;", _
+    Set RS = Query("SELECT race_id, class_id, genre_id, level, gold, bank_gold, guild_index, status, ciudadanos_matados, criminales_matados FROM user WHERE UPPER(name) = ? AND deleted = 0;", _
             UCase$(username))
     Dim GuildRequestHistory As String
     Dim GuildHistory        As String
@@ -796,12 +802,13 @@ End Function
 
 Public Function PersonajePerteneceID(ByVal username As String, ByVal AccountID As Long) As Boolean
     Dim RS As ADODB.Recordset
-    Set RS = Query("SELECT id FROM user WHERE name = ? AND account_id = ?;", username, AccountID)
+    Set RS = Query("SELECT id FROM user WHERE name = ? AND account_id = ? AND deleted = 0;", username, AccountID)
     If RS Is Nothing Then
         PersonajePerteneceID = False
         Exit Function
     End If
-    PersonajePerteneceID = True
+    ' Antes devolvia True aunque no hubiera fila (faltaba mirar EOF).
+    PersonajePerteneceID = Not RS.EOF
 End Function
 
 Public Function GetCharacterIdWithName(ByVal username As String) As Long
@@ -812,7 +819,7 @@ Public Function GetCharacterIdWithName(ByVal username As String) As Long
         Exit Function
     End If
     Dim RS As ADODB.Recordset
-    Set RS = Query("SELECT id FROM user WHERE name = ? COLLATE NOCASE;", username)
+    Set RS = Query("SELECT id FROM user WHERE name = ? COLLATE NOCASE AND deleted = 0;", username)
     If Not RS Is Nothing Then
         If RS.EOF Then Exit Function
         GetCharacterIdWithName = RS!Id
@@ -823,7 +830,7 @@ End Function
 
 Public Function SetPositionDatabase(username As String, ByVal Map As Integer, ByVal x As Integer, ByVal y As Integer) As Boolean
     On Error GoTo ErrorHandler
-    SetPositionDatabase = Execute("UPDATE user SET pos_map = ?, pos_x = ?, pos_y = ? WHERE UPPER(name) = ?;", Map, x, y, UCase$(username))
+    SetPositionDatabase = Execute("UPDATE user SET pos_map = ?, pos_x = ?, pos_y = ? WHERE UPPER(name) = ? AND deleted = 0;", Map, x, y, UCase$(username))
     Exit Function
 ErrorHandler:
     Call LogDatabaseError("Error in SetPositionDatabase. UserName: " & username & ". " & Err.Number & " - " & Err.Description)
@@ -839,7 +846,7 @@ End Function
 
 Public Function AddOroBancoDatabase(username As String, ByVal OroGanado As Long) As Boolean
     On Error GoTo ErrorHandler
-    AddOroBancoDatabase = Execute("UPDATE user SET bank_gold = bank_gold + ? WHERE UPPER(name) = ?;", OroGanado, UCase$(username))
+    AddOroBancoDatabase = Execute("UPDATE user SET bank_gold = bank_gold + ? WHERE UPPER(name) = ? AND deleted = 0;", OroGanado, UCase$(username))
     Exit Function
 ErrorHandler:
     Call LogDatabaseError("Error in AddOroBancoDatabase. UserName: " & username & ". " & Err.Number & " - " & Err.Description)
@@ -854,7 +861,7 @@ SanitizeNullValue_Err:
 End Function
 
 Public Sub SetMessageInfoDatabase(ByVal name As String, ByVal Message As String)
-    Call Execute("update user set message_info = concat(message_info, ?) where upper(name) = ?;", Message, UCase$(name))
+    Call Execute("update user set message_info = concat(message_info, ?) where upper(name) = ? and deleted = 0;", Message, UCase$(name))
 End Sub
 
 Public Sub ChangeNameDatabase(ByVal CurName As String, ByVal NewName As String)

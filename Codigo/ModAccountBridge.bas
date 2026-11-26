@@ -74,6 +74,11 @@ Private Const MAO_BRIDGE_POLL_MIN_INTERVAL_MS As Double = 5000
 Private m_LastMaoPollTick  As Long
 Private m_HasPolledMaoOnce As Boolean
 
+' ---- Char-ops bridge (borrar personaje, plan 2026-11-26): toggle borrar_personaje e intervalo propios ----
+Private Const CHAR_OPS_POLL_MIN_INTERVAL_MS As Double = 5000
+Private m_LastCharOpsPollTick  As Long
+Private m_HasPolledCharOpsOnce As Boolean
+
 ' ---------------------------------------------------------------------------
 ' LoadAccountBridgeConfig
 ' Reads [AccountBridge] section from Server.ini into module-level cache.
@@ -798,13 +803,23 @@ Private Function ApplyMaoLock(ByVal charId As Long, ByVal sellerAcc As Long) As 
     ' del lock. La web, al recibir este detail code en el ack, cancela el
     ' listing automaticamente (auto-cancel del driver del bridge).
     Dim rsPre As ADODB.Recordset
-    Set rsPre = Query("SELECT name FROM user WHERE id = ?;", charId)
+    Set rsPre = Query("SELECT name, deleted, delete_requested_at FROM user WHERE id = ?;", charId)
     If rsPre Is Nothing Then
         ApplyMaoLock = "error;unknown_error"
         Exit Function
     End If
     If rsPre.EOF Then
         ApplyMaoLock = "error;char_not_found"
+        Exit Function
+    End If
+    ' Plan borrar-personaje: un personaje borrado no existe para el mercado, y uno con pedido de
+    ' borrado pendiente no se puede publicar (hay que cancelar el borrado entrando al juego).
+    If CBool(SanitizeNullValue(rsPre!deleted, 0)) Then
+        ApplyMaoLock = "error;char_not_found"
+        Exit Function
+    End If
+    If Not IsNull(rsPre!delete_requested_at) Then
+        ApplyMaoLock = "error;delete_pending"
         Exit Function
     End If
     If EsGmChar(CStr(rsPre!name)) Then
@@ -937,7 +952,7 @@ Private Function ApplyMaoTransfer(ByVal charId As Long, ByVal fromAcc As Long, B
     End If
 
     Dim rsName As ADODB.Recordset
-    Set rsName = Query("SELECT 1 FROM user WHERE account_id = ? AND name = ? COLLATE NOCASE AND id <> ?;", toAcc, charName, charId)
+    Set rsName = Query("SELECT 1 FROM user WHERE account_id = ? AND name = ? COLLATE NOCASE AND id <> ? AND deleted = 0;", toAcc, charName, charId)
     If rsName Is Nothing Then
         ApplyMaoTransfer = "error;unknown_error"
         Exit Function
@@ -994,6 +1009,531 @@ Private Sub AckMaoOps(ByVal Body As String)
     Exit Sub
 AckMaoOps_Err:
     Call LogError("AckMaoOps error: " & Err.Description)
+End Sub
+
+' ===========================================================================
+' Char-ops bridge (borrar personaje, plan 2026-11-26-borrar-personaje)
+' Tercer canal de ops sobre el mismo [AccountBridge] (BaseUrl/ServiceToken), con su propio toggle
+' (feature_toggle.ini, borrar_personaje; apagado = no se consulta). Mismo molde que mao-ops: el server
+' es el UNICO escritor de su SQLite; este canal solo aplica (pull) y confirma (ack).
+' Contrato del endpoint web:
+'   GET  /api/bridge/char-ops   X-Service-Token
+'        -> 200 text/plain: linea 1 "OPS;<n>", luego una op por linea (hasta 50):
+'           <op_id>;<tipo>;<char_id>;<email>
+'           tipos: mark_char_delete | set_char_deleted
+'   POST /api/bridge/char-ops/ack   X-Service-Token, Content-Type: text/plain
+'        body: una linea por op -> "<op_id>;ok" | "<op_id>;error;<detalle>"
+' Toda op con id legible recibe una linea de resultado (tipo desconocido -> error;unknown_type), asi
+' una op rara nunca traba la cola. Una consulta que falla devuelve error, nunca ok.
+' ===========================================================================
+
+' ---------------------------------------------------------------------------
+' CharOpsBridge_Poll  (PUBLIC entry point). Llamado desde Minuto_Timer. Guard de intervalo propio.
+' Fail-silent en toda la cadena.
+' ---------------------------------------------------------------------------
+Public Sub CharOpsBridge_Poll()
+    On Error GoTo CharOpsBridge_Poll_Err
+
+    If Not IsFeatureEnabled("borrar_personaje") Then Exit Sub
+    Call LoadAccountBridgeConfig
+
+    Dim nowTick As Long
+    nowTick = GetTickCountRaw()
+    If m_HasPolledCharOpsOnce Then
+        If TicksElapsed(m_LastCharOpsPollTick, nowTick) < CHAR_OPS_POLL_MIN_INTERVAL_MS Then Exit Sub
+    End If
+    m_LastCharOpsPollTick = nowTick
+    m_HasPolledCharOpsOnce = True
+
+    Dim http As MSXML2.ServerXMLHTTP60
+    Set http = New MSXML2.ServerXMLHTTP60
+    http.setTimeouts 2000, 2000, 3000, 3000
+
+    http.Open "GET", m_BaseUrl & "/api/bridge/char-ops", False
+    http.setRequestHeader "X-Service-Token", m_ServiceToken
+    http.send
+
+    If http.Status <> 200 Then
+        Call LogError("CharOpsBridge poll GET failed. Status: " & http.Status)
+        Exit Sub
+    End If
+
+    Dim rawLines() As String
+    rawLines = Split(http.responseText, vbLf)
+    If UBound(rawLines) < 0 Then Exit Sub
+
+    Dim headerLine As String
+    headerLine = Trim$(rawLines(0))
+    If Len(headerLine) > 0 Then
+        If Right$(headerLine, 1) = vbCr Then headerLine = Left$(headerLine, Len(headerLine) - 1)
+    End If
+
+    Dim headerParts() As String
+    headerParts = Split(headerLine, ";")
+    If UBound(headerParts) < 1 Then Exit Sub
+    If UCase$(Trim$(headerParts(0))) <> "OPS" Then Exit Sub
+
+    Dim opCount As Long
+    opCount = CLng(Val(headerParts(1)))
+    If opCount <= 0 Then Exit Sub
+
+    Dim ackBody As String
+    ackBody = vbNullString
+
+    Dim i As Long
+    For i = 1 To UBound(rawLines)
+        Dim oneLine As String
+        oneLine = Trim$(rawLines(i))
+        If Len(oneLine) > 0 Then
+            If Right$(oneLine, 1) = vbCr Then oneLine = Left$(oneLine, Len(oneLine) - 1)
+        End If
+        If Len(oneLine) > 0 Then
+            Dim ackLine As String
+            ackLine = ApplyCharOp(oneLine)
+            If Len(ackLine) > 0 Then
+                If Len(ackBody) > 0 Then ackBody = ackBody & vbLf
+                ackBody = ackBody & ackLine
+            End If
+        End If
+    Next i
+
+    If Len(ackBody) > 0 Then Call AckCharOps(ackBody)
+
+    Exit Sub
+CharOpsBridge_Poll_Err:
+    Call LogError("CharOpsBridge_Poll error: " & Err.Description)
+End Sub
+
+' ---------------------------------------------------------------------------
+' CharOps_ParseLine  (PUBLIC, pura: la usan los tests). "<op_id>;<tipo>;<char_id>;<email>".
+' opId se devuelve siempre que la linea tenga un primer campo legible, aunque el resto este mal, para
+' poder confirmar la op como error en vez de dejarla trabando la cola. El email es todo lo que sigue
+' al tercer ';' (la web ya le saca los ';', pero asi una linea rara no se corta en silencio).
+' Devuelve False si la linea esta malformada.
+' ---------------------------------------------------------------------------
+Public Function CharOps_ParseLine(ByVal OpLine As String, ByRef opId As String, ByRef opType As String, ByRef charId As Long, ByRef email As String) As Boolean
+    CharOps_ParseLine = False
+    opId = vbNullString
+    opType = vbNullString
+    charId = 0
+    email = vbNullString
+
+    Dim parts() As String
+    parts = Split(OpLine, ";", 4)
+    If UBound(parts) >= 0 Then opId = Trim$(parts(0))
+    If UBound(parts) < 3 Then Exit Function
+    If LenB(opId) = 0 Then Exit Function
+
+    opType = LCase$(Trim$(parts(1)))
+
+    Dim charIdText As String
+    charIdText = Trim$(parts(2))
+    If LenB(charIdText) = 0 Or Len(charIdText) > 9 Then Exit Function
+    Dim i As Long
+    For i = 1 To Len(charIdText)
+        If Mid$(charIdText, i, 1) < "0" Or Mid$(charIdText, i, 1) > "9" Then Exit Function
+    Next i
+    charId = CLng(charIdText)
+    If charId <= 0 Then Exit Function
+
+    email = Trim$(parts(3))
+    If LenB(email) = 0 Then Exit Function
+
+    CharOps_ParseLine = True
+End Function
+
+' Quita lo que rompe el formato de linea del ack (';', CR, LF) de un codigo de detalle.
+Public Function CharOps_SanitizeDetail(ByVal Detail As String) As String
+    Detail = Replace(Detail, ";", "_")
+    Detail = Replace(Detail, vbCr, vbNullString)
+    Detail = Replace(Detail, vbLf, vbNullString)
+    Detail = Trim$(Detail)
+    If LenB(Detail) = 0 Then Detail = "unknown_error"
+    CharOps_SanitizeDetail = Detail
+End Function
+
+' Linea de ack: Result es "ok" o "error;<detalle>" (lo que devuelven las Apply*). Pura.
+Public Function CharOps_FormatAck(ByVal opId As String, ByVal Result As String) As String
+    If StrComp(Result, "ok", vbTextCompare) = 0 Then
+        CharOps_FormatAck = opId & ";ok"
+    ElseIf StrComp(Left$(Result, 6), "error;", vbTextCompare) = 0 Then
+        CharOps_FormatAck = opId & ";error;" & CharOps_SanitizeDetail(Mid$(Result, 7))
+    Else
+        CharOps_FormatAck = opId & ";error;" & CharOps_SanitizeDetail(Result)
+    End If
+End Function
+
+' ---------------------------------------------------------------------------
+' ApplyCharOp  (PRIVATE). Devuelve la linea de ack, o "" si la linea no tiene ni op_id legible (no se puede
+' confirmar: queda en la web para diagnostico).
+' ---------------------------------------------------------------------------
+Private Function ApplyCharOp(ByVal OpLine As String) As String
+    On Error GoTo ApplyCharOp_Err
+    ApplyCharOp = vbNullString
+
+    Dim opId As String
+    Dim opType As String
+    Dim charId As Long
+    Dim email As String
+    If Not CharOps_ParseLine(OpLine, opId, opType, charId, email) Then
+        ' NO se loguea la linea completa: lleva el email.
+        Call LogError("CharOpsBridge op malformada. opId=" & opId)
+        If LenB(opId) > 0 Then ApplyCharOp = CharOps_FormatAck(opId, "error;malformed")
+        Exit Function
+    End If
+
+    Select Case opType
+        Case "mark_char_delete"
+            ApplyCharOp = CharOps_FormatAck(opId, ApplyMarkCharDelete(charId, email))
+        Case "set_char_deleted"
+            ApplyCharOp = CharOps_FormatAck(opId, ApplySetCharDeleted(charId, email))
+        Case Else
+            Call LogError("CharOpsBridge op con tipo desconocido. opId=" & opId & " tipo=" & opType)
+            ApplyCharOp = CharOps_FormatAck(opId, "error;unknown_type")
+    End Select
+    Exit Function
+ApplyCharOp_Err:
+    Call LogError("ApplyCharOp error: " & Err.Description & " - opId=" & opId)
+    If LenB(opId) > 0 Then ApplyCharOp = CharOps_FormatAck(opId, "error;unknown_error")
+End Function
+
+' El personaje esta conectado ahora mismo.
+Private Function CharOps_IsOnline(ByVal charName As String) As Boolean
+    Dim uref As t_UserReference
+    uref = NameIndex(charName)
+    CharOps_IsOnline = IsValidUserRef(uref)
+End Function
+
+' vbNullString si el personaje (cuenta dueña ownerAccountId) es de la cuenta de ese email; si no, el resultado de error.
+Private Function CharOps_CheckOwner(ByVal ownerAccountId As Long, ByVal email As String) As String
+    Dim rsAcc As ADODB.Recordset
+    Set rsAcc = Query("SELECT id FROM account WHERE UPPER(email) = UPPER(?);", email)
+    If rsAcc Is Nothing Then
+        CharOps_CheckOwner = "error;unknown_error"
+        Exit Function
+    End If
+    If rsAcc.EOF Then
+        CharOps_CheckOwner = "error;not_owner"
+        Exit Function
+    End If
+    If CLng(rsAcc!id) <> ownerAccountId Then
+        CharOps_CheckOwner = "error;not_owner"
+        Exit Function
+    End If
+    CharOps_CheckOwner = vbNullString
+End Function
+
+' ---------------------------------------------------------------------------
+' ApplyMarkCharDelete  (PRIVATE)  -> "ok" | "error;<detail>". Pone user.delete_requested_at. Idempotente (ya
+' marcado = ok, sin pisar la fecha original). Escritura verificada por relectura.
+' ---------------------------------------------------------------------------
+Private Function ApplyMarkCharDelete(ByVal charId As Long, ByVal email As String) As String
+    On Error GoTo ApplyMarkCharDelete_Err
+
+    Dim rs As ADODB.Recordset
+    Set rs = Query("SELECT name, account_id, deleted, delete_requested_at, is_locked_in_mao FROM user WHERE id = ?;", charId)
+    If rs Is Nothing Then
+        ApplyMarkCharDelete = "error;unknown_error"
+        Exit Function
+    End If
+    If rs.EOF Then
+        ApplyMarkCharDelete = "error;not_found"
+        Exit Function
+    End If
+
+    Dim ownerResult As String
+    ownerResult = CharOps_CheckOwner(CLng(rs!account_id), email)
+    If LenB(ownerResult) > 0 Then
+        ApplyMarkCharDelete = ownerResult
+        Exit Function
+    End If
+    If CBool(SanitizeNullValue(rs!deleted, 0)) Then
+        ApplyMarkCharDelete = "error;already_deleted"
+        Exit Function
+    End If
+    If CharOps_IsOnline(CStr(rs!name)) Then
+        ApplyMarkCharDelete = "error;char_online"
+        Exit Function
+    End If
+    If CBool(SanitizeNullValue(rs!is_locked_in_mao, 0)) Then
+        ApplyMarkCharDelete = "error;mao_locked"
+        Exit Function
+    End If
+    If Not IsNull(rs!delete_requested_at) Then
+        ApplyMarkCharDelete = "ok"
+        Exit Function
+    End If
+
+    Set rs = Query("UPDATE user SET delete_requested_at = CAST(strftime('%s','now') AS INTEGER) WHERE id = ? AND deleted = 0 AND delete_requested_at IS NULL;", charId)
+    If rs Is Nothing Then
+        ApplyMarkCharDelete = "error;unknown_error"
+        Exit Function
+    End If
+
+    Set rs = Query("SELECT deleted, delete_requested_at FROM user WHERE id = ?;", charId)
+    If rs Is Nothing Then
+        ApplyMarkCharDelete = "error;unknown_error"
+        Exit Function
+    End If
+    If rs.EOF Then
+        ApplyMarkCharDelete = "error;unknown_error"
+        Exit Function
+    End If
+    If IsNull(rs!delete_requested_at) Or CBool(SanitizeNullValue(rs!deleted, 0)) Then
+        ApplyMarkCharDelete = "error;unknown_error"
+        Exit Function
+    End If
+
+    Call LogAudit("BORRADO_PJ", "pedido de borrado marcado: char_id=" & charId)
+    ApplyMarkCharDelete = "ok"
+    Exit Function
+ApplyMarkCharDelete_Err:
+    Call LogError("ApplyMarkCharDelete error: " & Err.Description & " - char " & charId)
+    ApplyMarkCharDelete = "error;unknown_error"
+End Function
+
+' ---------------------------------------------------------------------------
+' ApplySetCharDeleted  (PRIVATE)  -> "ok" | "error;<detail>". Aplica el borrado logico (deleted = 1) cuando
+' vence el plazo. Solo si la marca sigue puesta (si el dueno entro al juego, ya no esta: cancelled) y el
+' personaje no esta conectado. Idempotente (ya borrado = ok).
+'
+' Toda la parte de base va en UNA transaccion sobre la conexion sincronica (Query). OJO: ahi no se pueden
+' usar las rutinas que escriben con Execute (ExpulsarMiembro, SetLeader, ...): Execute rota por el pool
+' asincrono de conexiones y chocaria con la transaccion abierta. Por eso el SQL va directo. La memoria
+' (clan, castillo, pareja conectada) se sincroniza DESPUES del COMMIT.
+' Clan: lider -> pasa al miembro mas antiguo (menor guild_members.id); si estaba solo el clan queda VACIO
+' (no se borra la fila de guilds: user.guild_index es la posicion del clan en el array, borrar una fila
+' corre los indices de todos los clanes siguientes).
+' ---------------------------------------------------------------------------
+Private Function ApplySetCharDeleted(ByVal charId As Long, ByVal email As String) As String
+    On Error GoTo ApplySetCharDeleted_Err
+
+    Dim rs As ADODB.Recordset
+    Set rs = Query("SELECT name, account_id, deleted, delete_requested_at, is_locked_in_mao, guild_index, spouse FROM user WHERE id = ?;", charId)
+    If rs Is Nothing Then
+        ApplySetCharDeleted = "error;unknown_error"
+        Exit Function
+    End If
+    If rs.EOF Then
+        ApplySetCharDeleted = "error;not_found"
+        Exit Function
+    End If
+
+    Dim ownerResult As String
+    ownerResult = CharOps_CheckOwner(CLng(rs!account_id), email)
+    If LenB(ownerResult) > 0 Then
+        ApplySetCharDeleted = ownerResult
+        Exit Function
+    End If
+    If CBool(SanitizeNullValue(rs!deleted, 0)) Then
+        ApplySetCharDeleted = "ok"
+        Exit Function
+    End If
+    If IsNull(rs!delete_requested_at) Then
+        ApplySetCharDeleted = "error;cancelled"
+        Exit Function
+    End If
+
+    Dim charName As String
+    charName = CStr(rs!name)
+    If CharOps_IsOnline(charName) Then
+        ApplySetCharDeleted = "error;char_online"
+        Exit Function
+    End If
+    If CBool(SanitizeNullValue(rs!is_locked_in_mao, 0)) Then
+        ApplySetCharDeleted = "error;mao_locked"
+        Exit Function
+    End If
+
+    Dim accountId As Long
+    Dim guildNumber As Long
+    Dim spouseId As Long
+    accountId = CLng(rs!account_id)
+    guildNumber = CLng(SanitizeNullValue(rs!guild_index, 0))
+    spouseId = CLng(SanitizeNullValue(rs!spouse, 0))
+
+    ' Pareja: solo cuenta si existe y esta viva. Si esta conectada, su copia en memoria se corrige despues
+    ' del COMMIT (y se le avisa en vivo); si no, el aviso va a su message_info dentro de la transaccion.
+    Dim spouseName As String
+    Dim spouseOnline As Boolean
+    If spouseId > 0 Then
+        Dim rsSpouse As ADODB.Recordset
+        Set rsSpouse = Query("SELECT name FROM user WHERE id = ? AND deleted = 0;", spouseId)
+        If rsSpouse Is Nothing Then
+            ApplySetCharDeleted = "error;unknown_error"
+            Exit Function
+        End If
+        If rsSpouse.EOF Then
+            spouseId = 0
+        Else
+            spouseName = CStr(rsSpouse!name)
+            spouseOnline = CharOps_IsOnline(spouseName)
+        End If
+    End If
+
+    Dim newLeaderId As Long
+    Dim wasInGuild As Boolean
+    Dim txOk As Boolean
+    Dim rsTx As ADODB.Recordset
+
+    DBError = vbNullString
+    Set rsTx = Query("BEGIN TRANSACTION")
+    If rsTx Is Nothing Then
+        Call LogError("ApplySetCharDeleted: no se pudo abrir la transaccion. char " & charId & ": " & DBError)
+        ApplySetCharDeleted = "error;unknown_error"
+        Exit Function
+    End If
+
+    txOk = CharOps_DeleteInTransaction(charId, charName, spouseId, spouseOnline, newLeaderId, wasInGuild)
+    If txOk Then
+        DBError = vbNullString
+        Set rsTx = Query("COMMIT")
+        If rsTx Is Nothing Then
+            Call LogError("ApplySetCharDeleted: COMMIT fallo. char " & charId & ": " & DBError)
+            txOk = False
+        End If
+    End If
+    If Not txOk Then
+        Call Query("ROLLBACK")
+        ApplySetCharDeleted = "error;unknown_error"
+        Exit Function
+    End If
+
+    ' Verificacion por relectura: la post-condicion real es deleted = 1.
+    Set rs = Query("SELECT deleted FROM user WHERE id = ?;", charId)
+    If rs Is Nothing Then
+        ApplySetCharDeleted = "error;unknown_error"
+        Exit Function
+    End If
+    If rs.EOF Then
+        ApplySetCharDeleted = "error;unknown_error"
+        Exit Function
+    End If
+    If Not CBool(SanitizeNullValue(rs!deleted, 0)) Then
+        ApplySetCharDeleted = "error;unknown_error"
+        Exit Function
+    End If
+
+    ' ---- memoria, ya con la base confirmada ----
+    If wasInGuild Then Call m_SincronizarClanTrasBorrado(guildNumber, newLeaderId)
+    Call CastleForgetCharacter(charId, charName)
+    If spouseOnline Then
+        Dim spouseRef As t_UserReference
+        spouseRef = NameIndex(spouseName)
+        If IsValidUserRef(spouseRef) Then
+            UserList(spouseRef.ArrayIndex).flags.Casado = 0
+            UserList(spouseRef.ArrayIndex).flags.SpouseId = 0
+            Call WriteLocaleMsg(spouseRef.ArrayIndex, MSG_DIVORCE_NOTIFICATION, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFO, charName)
+        End If
+    End If
+
+    Call LogAudit("BORRADO_PJ", "personaje borrado: char_id=" & charId & " char=" & charName & " account_id=" & accountId & _
+            " clan=" & guildNumber & " nuevo_lider_id=" & newLeaderId & " pareja_id=" & spouseId)
+    ApplySetCharDeleted = "ok"
+    Exit Function
+ApplySetCharDeleted_Err:
+    Call LogError("ApplySetCharDeleted error: " & Err.Description & " - char " & charId)
+    ApplySetCharDeleted = "error;unknown_error"
+End Function
+
+' ---------------------------------------------------------------------------
+' CharOps_DeleteInTransaction  (PRIVATE). Cuerpo de la transaccion de ApplySetCharDeleted: devuelve False ante
+' cualquier consulta que falle (el llamador hace ROLLBACK) y True si todo salio bien (el llamador hace COMMIT).
+' ---------------------------------------------------------------------------
+Private Function CharOps_DeleteInTransaction(ByVal charId As Long, ByVal charName As String, ByVal spouseId As Long, ByVal spouseOnline As Boolean, ByRef newLeaderId As Long, ByRef wasInGuild As Boolean) As Boolean
+    On Error GoTo CharOps_DeleteInTransaction_Err
+    CharOps_DeleteInTransaction = False
+    newLeaderId = 0
+    wasInGuild = False
+
+    Dim rs As ADODB.Recordset
+    Dim guildId As Long
+
+    ' 1. Clan.
+    DBError = vbNullString
+    Set rs = Query("SELECT guild_id FROM guild_members WHERE user_id = ? LIMIT 1;", charId)
+    If rs Is Nothing Then GoTo QueryFailed
+    If Not rs.EOF Then
+        guildId = CLng(rs!guild_id)
+        wasInGuild = True
+        Set rs = Query("SELECT leader_id FROM guilds WHERE id = ?;", guildId)
+        If rs Is Nothing Then GoTo QueryFailed
+        If Not rs.EOF Then
+            If CLng(rs!leader_id) = charId Then
+                Set rs = Query("SELECT user_id FROM guild_members WHERE guild_id = ? AND user_id <> ? ORDER BY id ASC LIMIT 1;", guildId, charId)
+                If rs Is Nothing Then GoTo QueryFailed
+                If Not rs.EOF Then
+                    newLeaderId = CLng(rs!user_id)
+                    Set rs = Query("UPDATE guilds SET leader_id = ? WHERE id = ?;", newLeaderId, guildId)
+                    If rs Is Nothing Then GoTo QueryFailed
+                End If
+            End If
+        End If
+        Set rs = Query("DELETE FROM guild_members WHERE user_id = ? AND guild_id = ?;", charId, guildId)
+        If rs Is Nothing Then GoTo QueryFailed
+    End If
+    ' Pedidos de ingreso a clanes que el personaje tenia pendientes.
+    Set rs = Query("DELETE FROM guild_request WHERE user_id = ?;", charId)
+    If rs Is Nothing Then GoTo QueryFailed
+
+    ' 2. Castillo: queda sin dueno.
+    Set rs = Query("UPDATE castle SET owner_character_id = NULL, owner_account_id = NULL WHERE owner_character_id = ?;", charId)
+    If rs Is Nothing Then GoTo QueryFailed
+
+    ' 3. castle_whitelist (por nombre).
+    Set rs = Query("DELETE FROM castle_whitelist WHERE character_name = ? COLLATE NOCASE;", charName)
+    If rs Is Nothing Then GoTo QueryFailed
+
+    ' 4. Pareja: se limpia de los dos lados; si la pareja esta desconectada, mensaje offline.
+    If spouseId > 0 Then
+        Set rs = Query("UPDATE user SET spouse = 0 WHERE id = ? AND spouse = ?;", spouseId, charId)
+        If rs Is Nothing Then GoTo QueryFailed
+        If Not spouseOnline Then
+            Set rs = Query("UPDATE user SET message_info = COALESCE(message_info, '') || ? WHERE id = ?;", _
+                    charName & " se ha divorciado de ti porque su personaje fue borrado." & vbNewLine, spouseId)
+            If rs Is Nothing Then GoTo QueryFailed
+        End If
+    End If
+
+    ' 5. La fila: borrado logico.
+    Set rs = Query("UPDATE user SET deleted = 1, deleted_at = CAST(strftime('%s','now') AS INTEGER), delete_requested_at = NULL, spouse = 0, guild_index = 0, guild_aspirant_index = 0 WHERE id = ? AND deleted = 0;", charId)
+    If rs Is Nothing Then GoTo QueryFailed
+
+    CharOps_DeleteInTransaction = True
+    Exit Function
+
+QueryFailed:
+    Call LogError("CharOps_DeleteInTransaction: una consulta fallo. char " & charId & ": " & DBError)
+    Exit Function
+CharOps_DeleteInTransaction_Err:
+    Call LogError("CharOps_DeleteInTransaction error: " & Err.Description & " - char " & charId)
+End Function
+
+' ---------------------------------------------------------------------------
+' AckCharOps  (PRIVATE). Confirma en la web las ops procesadas. Body = una linea por op
+' ("<op_id>;ok" | "<op_id>;error;<detalle>") separadas por vbLf. Content-Type text/plain explicito
+' (sin el, express.text no parsea). Fail-silent: si el ack falla, la web reenvia la op en el proximo poll
+' y las dos ops son idempotentes.
+' ---------------------------------------------------------------------------
+Private Sub AckCharOps(ByVal Body As String)
+    On Error GoTo AckCharOps_Err
+
+    Dim http As MSXML2.ServerXMLHTTP60
+    Set http = New MSXML2.ServerXMLHTTP60
+    http.setTimeouts 2000, 2000, 3000, 3000
+
+    http.Open "POST", m_BaseUrl & "/api/bridge/char-ops/ack", False
+    http.setRequestHeader "X-Service-Token", m_ServiceToken
+    http.setRequestHeader "Content-Type", "text/plain"
+    http.send Body
+
+    If http.Status <> 200 Then
+        Call LogError("CharOpsBridge ack POST failed. Status: " & http.Status)
+    End If
+
+    Exit Sub
+AckCharOps_Err:
+    Call LogError("AckCharOps error: " & Err.Description)
 End Sub
 
 ' ---------------------------------------------------------------------------

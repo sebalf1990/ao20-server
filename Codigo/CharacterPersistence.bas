@@ -273,6 +273,12 @@ Public Function LoadCharacterFromDB(ByVal UserIndex As Integer, Optional ByRef f
             Call CloseSocket(UserIndex)
             Exit Function
         End If
+        ' Plan borrar-personaje: un personaje borrado (deleted = 1) no entra al juego.
+        If CBool(SanitizeNullValue(RS!deleted, 0)) Then
+            Call WriteShowMessageBox(UserIndex, MSG_CHARACTER_DELETED, vbNullString)
+            Call CloseSocket(UserIndex)
+            Exit Function
+        End If
 
         .name = CStr(RS!name)
 
@@ -329,6 +335,19 @@ Public Function LoadCharacterFromDB(ByVal UserIndex As Integer, Optional ByRef f
             Call db_load_house_key(UserList(UserIndex))
         End If
     End With
+    ' Plan borrar-personaje: entrar al juego es la unica forma de cancelar un pedido de borrado. Si la marca no
+    ' se puede limpiar, no se entra: dejarla pondria en riesgo un personaje que el dueno acaba de usar.
+    UserList(UserIndex).flags.DeleteCancelNotice = False
+    If Not IsNull(RS!delete_requested_at) Then
+        Dim rsCancel As ADODB.Recordset
+        Set rsCancel = Query("UPDATE user SET delete_requested_at = NULL WHERE id = ? AND deleted = 0;", UserList(UserIndex).Id)
+        If rsCancel Is Nothing Then
+            Call LogDatabaseError("LoadCharacterFromDB: no se pudo cancelar el pedido de borrado del personaje " & UserList(UserIndex).Id)
+            Exit Function
+        End If
+        UserList(UserIndex).flags.DeleteCancelNotice = True
+        Call LogAudit("BORRADO_PJ", "pedido de borrado cancelado al entrar: char_id=" & UserList(UserIndex).Id & " account_id=" & UserList(UserIndex).AccountID)
+    End If
     Call InitUserPersistSnapshot(UserIndex)
     LoadCharacterFromDB = True
     Exit Function

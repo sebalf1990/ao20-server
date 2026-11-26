@@ -1602,3 +1602,7 @@ Public Const MSG_POISON_TARGET_WEAPON_FAMILY As Integer = 9091
 Public Const MSG_POISON_TARGET_WEAPON_ALREADY As Integer = 9092
 Public Const MSG_POISON_TARGET_WEAPON_DONE As Integer = 9093
 Public Const MSG_POISON_WEAPON_APPLIED_BY As Integer = 9094
+' Plan borrar-personaje (2026-11-26): 9095 = login refused for a deleted character; 9096 = a pending deletion
+' request was cancelled because the owner entered the game.
+Public Const MSG_CHARACTER_DELETED As Integer = 9095
+Public Const MSG_CHARACTER_DELETE_CANCELLED As Integer = 9096

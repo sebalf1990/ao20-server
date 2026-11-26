@@ -93,6 +93,18 @@ LoadGuildsDB_Err:
     Call TraceError(Err.Number, Err.Description, "modGuilds.LoadGuildsDB", Erl)
 End Sub
 
+' Plan borrar-personaje: tras borrar un personaje (la base ya esta actualizada) sincroniza el clan en memoria.
+' GuildIndex es el numero de clan (user.guild_index), NewLeaderId el nuevo lider o 0 si no cambio.
+Public Sub m_SincronizarClanTrasBorrado(ByVal GuildIndex As Long, ByVal NewLeaderId As Long)
+    On Error GoTo m_SincronizarClanTrasBorrado_Err
+    If GuildIndex <= 0 Or GuildIndex > CANTIDADDECLANES Then Exit Sub
+    If guilds(GuildIndex) Is Nothing Then Exit Sub
+    Call guilds(GuildIndex).SyncAfterMemberDeleted(NewLeaderId)
+    Exit Sub
+m_SincronizarClanTrasBorrado_Err:
+    Call TraceError(Err.Number, Err.Description, "modGuilds.m_SincronizarClanTrasBorrado", Erl)
+End Sub
+
 Public Function m_ConectarMiembroAClan(ByVal UserIndex As Integer, ByVal GuildIndex As Integer) As Boolean
     On Error GoTo m_ConectarMiembroAClan_Err
     If GuildIndex > CANTIDADDECLANES Or GuildIndex <= 0 Then Exit Function 'x las dudas...

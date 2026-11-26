@@ -300,7 +300,7 @@ Function ConnectNewUser(ByVal UserIndex As Integer, _
         End If
 #End If
         'ï¿½Existe el personaje?
-        If PersonajeExiste(name) Then
+        If Not NombreDisponible(name) Then
             Call WriteShowMessageBox(UserIndex, MSG_YA_EXISTE_EL_PERSONAJE, vbNullString) 'Msg1769=Ya existe el personaje.
             Exit Function
         End If
@@ -617,7 +617,7 @@ Public Function ConnectUserByID(ByVal UserIndex As Integer, ByVal CharID As Long
 
     ' Validate char belongs to account (fast & safe)
     Dim RS As ADODB.Recordset
-    Set RS = Query("select name from user where id=" & CStr(CharID) & " and account_id=" & CStr(UserList(UserIndex).AccountID))
+    Set RS = Query("select name from user where id=" & CStr(CharID) & " and account_id=" & CStr(UserList(UserIndex).AccountID) & " and deleted=0")
 
     If RS Is Nothing Or RS.EOF Then
         Call WriteShowMessageBox(UserIndex, MSG_INVALID_SESSION_TOKEN, vbNullString)

@@ -369,6 +369,28 @@ PersonajeExiste_Err:
     PersonajeExiste = False
 End Function
 
+' Plan borrar-personaje: nombre libre para CREAR un personaje. Un nombre es libre si ningun personaje
+' vivo (deleted = 0) lo usa y no esta reservado para un GM/rol (las listas de Server.ini se resuelven por
+' NOMBRE: un nombre liberado por un borrado no puede volver a crearse si figura ahi). Ante un error de
+' base se cierra (False): mejor negar una creacion que pisar un nombre. PersonajeExiste queda como esta
+' para los comandos GM, que si tienen que poder encontrar un personaje borrado.
+Public Function NombreDisponible(ByVal name As String) As Boolean
+    On Error GoTo NombreDisponible_Err
+    NombreDisponible = False
+    Dim upperName As String
+    upperName = UCase$(Trim$(name))
+    If EsGmChar(upperName) Then Exit Function
+    If EsRolesMaster(upperName) Then Exit Function
+    Dim RS As ADODB.Recordset
+    Set RS = Query("SELECT 1 FROM user WHERE name = ? COLLATE NOCASE AND deleted = 0 LIMIT 1;", name)
+    If RS Is Nothing Then Exit Function
+    NombreDisponible = RS.EOF
+    Exit Function
+NombreDisponible_Err:
+    Call TraceError(Err.Number, Err.Description, "Admin.NombreDisponible", Erl)
+    NombreDisponible = False
+End Function
+
 Public Function IsValidUserId(ByVal UserId As Long) As Boolean
     IsValidUserId = GetUserValueById(UserId, "COUNT(*)") > 0
 End Function
