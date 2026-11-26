@@ -369,6 +369,19 @@ PersonajeExiste_Err:
     PersonajeExiste = False
 End Function
 
+' Plan borrar-personaje: existe un personaje VIVO (deleted = 0) con ese nombre. Para los flujos de clan por
+' nombre: un nombre que solo usa un personaje borrado cuenta como inexistente.
+Public Function PersonajeVivoExiste(ByVal name As String) As Boolean
+    On Error GoTo PersonajeVivoExiste_Err
+    Dim RS As ADODB.Recordset
+    Set RS = Query("SELECT 1 FROM user WHERE name = ? COLLATE NOCASE AND deleted = 0 LIMIT 1;", name)
+    If Not RS Is Nothing Then PersonajeVivoExiste = Not RS.EOF
+    Exit Function
+PersonajeVivoExiste_Err:
+    Call TraceError(Err.Number, Err.Description, "Admin.PersonajeVivoExiste", Erl)
+    PersonajeVivoExiste = False
+End Function
+
 ' Plan borrar-personaje: nombre libre para CREAR un personaje. Un nombre es libre si ningun personaje
 ' vivo (deleted = 0) lo usa y no esta reservado para un GM/rol (las listas de Server.ini se resuelven por
 ' NOMBRE: un nombre liberado por un borrado no puede volver a crearse si figura ahi). Ante un error de

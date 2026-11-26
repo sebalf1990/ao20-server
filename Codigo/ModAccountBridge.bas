@@ -1377,7 +1377,8 @@ Private Function ApplySetCharDeleted(ByVal charId As Long, ByVal email As String
     Dim rsTx As ADODB.Recordset
 
     DBError = vbNullString
-    Set rsTx = Query("BEGIN TRANSACTION")
+    ' IMMEDIATE: toma el lock de escritura de entrada y evita SQLITE_BUSY al subir de lectura a escritura.
+    Set rsTx = Query("BEGIN IMMEDIATE TRANSACTION")
     If rsTx Is Nothing Then
         Call LogError("ApplySetCharDeleted: no se pudo abrir la transaccion. char " & charId & ": " & DBError)
         ApplySetCharDeleted = "error;unknown_error"
@@ -1485,6 +1486,9 @@ Private Function CharOps_DeleteInTransaction(ByVal charId As Long, ByVal charNam
     If rs Is Nothing Then GoTo QueryFailed
 
     ' 4. Pareja: se limpia de los dos lados; si la pareja esta desconectada, mensaje offline.
+    ' Tambien se limpia cualquier referencia no reciproca al personaje borrado.
+    Set rs = Query("UPDATE user SET spouse = 0 WHERE spouse = ?;", charId)
+    If rs Is Nothing Then GoTo QueryFailed
     If spouseId > 0 Then
         Set rs = Query("UPDATE user SET spouse = 0 WHERE id = ? AND spouse = ?;", spouseId, charId)
         If rs Is Nothing Then GoTo QueryFailed

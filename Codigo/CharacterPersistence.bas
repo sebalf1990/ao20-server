@@ -343,6 +343,7 @@ Public Function LoadCharacterFromDB(ByVal UserIndex As Integer, Optional ByRef f
         Set rsCancel = Query("UPDATE user SET delete_requested_at = NULL WHERE id = ? AND deleted = 0;", UserList(UserIndex).Id)
         If rsCancel Is Nothing Then
             Call LogDatabaseError("LoadCharacterFromDB: no se pudo cancelar el pedido de borrado del personaje " & UserList(UserIndex).Id)
+            failureReason = "Could not cancel the pending deletion of this character. Please try again."
             Exit Function
         End If
         UserList(UserIndex).flags.DeleteCancelNotice = True
