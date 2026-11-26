@@ -42,7 +42,7 @@ Option Explicit
     Private TotalElapsed   As Double
 
     ' Must match the number of Case entries in RunSuite; RunAllSuites fails loudly otherwise.
-    Private Const SUITE_COUNT As Integer = 46
+    Private Const SUITE_COUNT As Integer = 47
 
     ' Per-suite report and the state RunSuite hands back to RunAllSuites
     Private SuiteNames()   As String
@@ -293,6 +293,7 @@ Private Function RunSuite(ByVal suiteIndex As Integer) As Boolean
         Case 44: CurrentSuiteName = "work_fatigue": RunSuite = Unit_WorkFatigue.test_suite_work_fatigue()
         Case 45: CurrentSuiteName = "ctf_round": RunSuite = Unit_CtfRound.test_suite_ctf_round()
         Case 46: CurrentSuiteName = "calendario": RunSuite = Unit_Calendario.test_suite_calendario()
+        Case 47: CurrentSuiteName = "charops": RunSuite = Unit_CharOps.test_suite_charops()
         Case Else
             SuiteNotRegistered = True
             RunSuite = False

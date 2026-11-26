@@ -302,6 +302,18 @@ AceptarNuevoMiembro_Err:
     Call TraceError(Err.Number, Err.Description, "clsClan.AceptarNuevoMiembro", Erl)
 End Sub
 
+' Plan borrar-personaje: la base ya quedo actualizada (en una transaccion aparte, ModAccountBridge). Aca solo se
+' sincroniza la copia en memoria: se descarta la lista de miembros cacheada (se relee de la base en el proximo
+' uso) y, si cambio el lider, se actualiza p_Leader sin volver a escribir la base.
+Public Sub SyncAfterMemberDeleted(ByVal NewLeaderId As Long)
+    On Error GoTo SyncAfterMemberDeleted_Err
+    MemberListLoaded = False
+    If NewLeaderId > 0 Then p_Leader = NewLeaderId
+    Exit Sub
+SyncAfterMemberDeleted_Err:
+    Call TraceError(Err.Number, Err.Description, "clsClan.SyncAfterMemberDeleted", Erl)
+End Sub
+
 Public Sub ExpulsarMiembro(ByVal CharId As Long)
     On Error GoTo ExpulsarMiembro_Err
     Call Execute("DELETE FROM guild_members WHERE user_id = ? AND guild_id = ?;", CharId, p_GuildId)

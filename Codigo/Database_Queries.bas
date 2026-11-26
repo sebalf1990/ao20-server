@@ -135,7 +135,9 @@ Private Sub ConstruirQuery_CargarPersonaje()
     QueryBuilder.Append "poison_hemo_stacks,"
     QueryBuilder.Append "poison_neuro_active,"
     QueryBuilder.Append "poison_state,"
-    QueryBuilder.Append "remort_count"
+    QueryBuilder.Append "remort_count,"
+    QueryBuilder.Append "deleted,"
+    QueryBuilder.Append "delete_requested_at"
     QueryBuilder.Append " FROM user WHERE id= ?"
     ' Guardo la query ensamblada
     QUERY_LOAD_MAINPJ = QueryBuilder.ToString
