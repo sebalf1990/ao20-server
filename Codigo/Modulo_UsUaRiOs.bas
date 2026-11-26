@@ -882,7 +882,9 @@ Dim poisonRestored              As Boolean
         End If
         If .flags.DeleteCancelNotice Then
             .flags.DeleteCancelNotice = False
-            Call WriteLocaleMsg(UserIndex, MSG_CHARACTER_DELETE_CANCELLED, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFOBOLD)
+            ' Literal text through the dynamic id (9096 is not in the published client init blob yet; switch back to
+            ' MSG_CHARACTER_DELETE_CANCELLED once a client cut ships it).
+            Call WriteLocaleMsg(UserIndex, MSG_DYNAMIC_MESSAGE_BOX, e_TextChannel.TEXTCHANNEL_SYSTEM, e_FontTypeNames.FONTTYPE_INFOBOLD, "Se canceló el borrado de este personaje.")
         End If
         If EventoActivo Then
             Call WriteLocaleMsg(UserIndex, MSG_TIEMPO_RESTANTE_MINUTO_1625, e_TextChannel.TEXTCHANNEL_EVENT, e_FontTypeNames.FONTTYPE_New_Eventos, PublicidadEvento & "¬" & TiempoRestanteEvento) 'Msg1625=¬1. Tiempo restante: ¬2 minuto(s).

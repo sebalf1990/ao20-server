@@ -275,7 +275,9 @@ Public Function LoadCharacterFromDB(ByVal UserIndex As Integer, Optional ByRef f
         End If
         ' Plan borrar-personaje: un personaje borrado (deleted = 1) no entra al juego.
         If CBool(SanitizeNullValue(RS!deleted, 0)) Then
-            Call WriteShowMessageBox(UserIndex, MSG_CHARACTER_DELETED, vbNullString)
+            ' Ids 9095/9096 are not in the already published client init blob: send the literal text through the dynamic id.
+            ' Switch back to MSG_CHARACTER_DELETED once a client cut ships the init blob with it.
+            Call WriteShowMessageBox(UserIndex, MSG_DYNAMIC_MESSAGE_BOX, "Este personaje fue borrado.")
             Call CloseSocket(UserIndex)
             Exit Function
         End If
