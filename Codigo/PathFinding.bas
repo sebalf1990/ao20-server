@@ -124,8 +124,8 @@ Private Function IsWalkable(ByVal NpcIndex As Integer, ByVal x As Integer, ByVal
         End If
         ' Trigger inválido para NPCs
         If .trigger = e_Trigger.POSINVALIDA Then
-            ' Si no es mascota
-            If Not IsValidNpcRef(NpcList(NpcIndex).MaestroNPC) Then Exit Function
+            ' Si no es mascota (de un NPC o de un usuario: MoveNPCChar ya deja pisarlo a las de usuario)
+            If Not IsValidNpcRef(NpcList(NpcIndex).MaestroNPC) And Not IsValidUserRef(NpcList(NpcIndex).MaestroUser) Then Exit Function
         End If
         ' Tile bloqueado
         If NpcList(NpcIndex).npcType <> e_NPCType.GuardiaReal And NpcList(NpcIndex).npcType <> e_NPCType.GuardiasCaos Then
